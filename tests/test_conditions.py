@@ -971,6 +971,24 @@ class TestEvaluateAll:
         assert "[PASS]" in msgs[0]
         assert "[FAIL]" in msgs[1]
 
+    def test_timeout_returns_false(self, temp_dir):
+        """evaluate_all timeout cuts off a slow condition."""
+        ok, msgs = evaluate_all([
+            {"shell_test": {"command": "python -c \"import time; time.sleep(5)\"",
+             "op": "exit_zero"}},
+        ], str(temp_dir), timeout=1)
+        assert not ok
+        assert any("TIMEOUT" in m for m in msgs)
+
+    def test_timeout_not_triggered_when_fast(self, temp_dir):
+        """Fast evaluation completes normally with timeout set."""
+        f1 = temp_dir / "f.txt"; f1.write_text("")
+        ok, msgs = evaluate_all([
+            {"file_exists": "f.txt"},
+        ], str(temp_dir), timeout=5)
+        assert ok
+        assert len(msgs) == 1
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Unknown condition & list_conditions

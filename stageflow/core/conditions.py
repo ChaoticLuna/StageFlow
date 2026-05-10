@@ -90,11 +90,13 @@ def evaluate(name: str, params: dict) -> Tuple[bool, str]:
 
 def evaluate_all(conditions: list[dict], base_path: str = ".",
                  cache_ttl: Optional[float] = None,
-                 variables: dict = None) -> Tuple[bool, list[str]]:
+                 variables: dict = None,
+                 timeout: Optional[float] = None) -> Tuple[bool, list[str]]:
     """Evaluate a list of conditions. Returns (all_passed, messages).
 
     Results are cached by (conditions, base_path, variables) hash for configurable TTL.
     Pass cache_ttl=0 to disable caching for this call.
+    Pass timeout (seconds) to fail gracefully if evaluation takes too long.
 
     String parameter values may contain {{var.key}} patterns that are resolved
     against the `variables` dict (e.g., from StateMachine's variable store).
@@ -118,8 +120,26 @@ def evaluate_all(conditions: list[dict], base_path: str = ".",
             if time.time() - timestamp < ttl:
                 return result
 
+    if timeout and timeout > 0:
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                _evaluate_loop, conditions, base_path, ttl, cache_key
+            )
+            try:
+                return future.result(timeout=timeout)
+            except TimeoutError:
+                result = (False, [f"[TIMEOUT] Condition evaluation exceeded {timeout}s"])
+                if cache_key:
+                    _CONDITION_CACHE[cache_key] = (result, time.time())
+                return result
+
+    return _evaluate_loop(conditions, base_path, ttl, cache_key)
+
+
+def _evaluate_loop(conditions, base_path, ttl, cache_key):
+    """Core condition evaluation loop. Extracted for timeout support."""
     messages = []
-    has_hard_fail = False
     for cond in conditions:
         severity = _get_severity(cond)
         cond_type, cond_params = _parse_condition(cond)
@@ -136,16 +156,15 @@ def evaluate_all(conditions: list[dict], base_path: str = ".",
         elif not passed:
             tag = "HARD_FAIL" if severity == "hard" else "FAIL"
             messages.append(f"[{tag}] {cond_type}: {msg}")
-            has_hard_fail = (severity == "hard")
             result = (False, messages)
-            if cache_key:
+            if ttl > 0 and cache_key:
                 _CONDITION_CACHE[cache_key] = (result, time.time())
             return result
         else:
             messages.append(f"[PASS] {cond_type}: {msg}")
 
     result = (True, messages)
-    if cache_key:
+    if ttl > 0 and cache_key:
         _CONDITION_CACHE[cache_key] = (result, time.time())
     return result
 
