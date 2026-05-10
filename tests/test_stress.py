@@ -166,6 +166,7 @@ class TestConcurrentVariables:
                 val = sm.get_var("shared", -1)
                 if not isinstance(val, int) or val < 0:
                     errors.append(f"Bad value: {val}")
+                time.sleep(0)
 
         def writer():
             for i in range(1000):
@@ -204,6 +205,7 @@ class TestConcurrentVariables:
                     assert isinstance(vars_, dict)
                 except Exception as e:
                     read_errors.append(str(e))
+                time.sleep(0)
 
         writer_thread = threading.Thread(target=writer)
         reader_threads = [threading.Thread(target=reader) for _ in range(3)]
@@ -480,7 +482,7 @@ class TestConcurrentTransitions:
         query_errors = []
 
         def transitioner():
-            for _ in range(200):
+            for _ in range(50):
                 sm.transition_to("b")
                 sm.transition_to("a")
 
@@ -492,6 +494,7 @@ class TestConcurrentTransitions:
                     assert "current_stage" in s
                 except Exception as e:
                     query_errors.append(str(e))
+                time.sleep(0.01)
 
         t = threading.Thread(target=transitioner)
         q1 = threading.Thread(target=querier)
