@@ -221,20 +221,24 @@ class StateMachine:
         for hook in hooks:
             hook_kind = next(iter(hook))
             hook_value = hook[hook_kind]
-            if hook_kind == "shell":
-                import subprocess
-                try:
-                    subprocess.run(
+            success = True
+            message = ""
+            try:
+                if hook_kind == "shell":
+                    import subprocess
+                    result = subprocess.run(
                         hook_value, shell=True, capture_output=True,
                         timeout=30, cwd=str(self.base_path)
                     )
-                except Exception:
-                    pass  # Hook failures are non-blocking
-            elif hook_kind == "python":
-                try:
+                    if result.returncode != 0:
+                        success = False
+                        message = result.stderr.decode("utf-8", errors="replace").strip()[:200]
+                elif hook_kind == "python":
                     exec(hook_value, {"base_path": str(self.base_path), "stage": stage_name, "sm": self})
-                except Exception:
-                    pass
+            except Exception as e:
+                success = False
+                message = str(e)[:200]
+            self.audit.log_hook_execution(stage_name, hook_type, hook_kind, success, message)
 
     def force_transition_to(self, target: str) -> Tuple[bool, List[str]]:
         """Force a transition without condition checks."""
@@ -252,6 +256,8 @@ class StateMachine:
             "variables": {},
         }
         self._save_state()
+        self._run_hooks(stage, "on_enter")
+        self.audit.log_stage_enter(stage)
         return True, [f"Initialized at stage: {stage}"]
 
     def reset(self):

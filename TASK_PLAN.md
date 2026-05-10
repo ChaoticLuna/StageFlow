@@ -1,7 +1,8 @@
 # StageFlow — Task Plan
 
 > **最后更新**: 2026-05-10
-> **当前阶段**: Phase 3 — 功能完善
+> **当前阶段**: Phase 4 — 测试体系
+> **Ralph 状态**: 活跃 — 读取 `.ralph/fix_plan.md` 执行任务
 
 ---
 
@@ -48,44 +49,81 @@
 | 4.1 | E2E 管道测试 | ✅ | test_e2e.py (18 tests) |
 | 4.2 | 100 阶段可扩展性验证 | ✅ | test_extensibility_quick.py |
 | 4.3 | Pytest 插件 + stageflow marker | ✅ | conftest.py 插件 |
-| 4.4 | 并发/压力测试 | ⬜ | 待实现 |
-| 4.5 | 条件缓存命中率测试 | ⬜ | 待实现 |
-| 4.6 | 性能基准测试 | ⬜ | 待实现 |
-| 4.7 | Hook 集成测试 | ⬜ | 端到端 Hook 流程验证 |
+| 4.4 | 并发/压力测试 | ✅ | test_stress.py (17) + test_concurrency.py (21) |
+| 4.5 | 条件缓存命中率测试 | ✅ | test_cache.py (31 tests) |
+| 4.6 | 性能基准测试 | ✅ | test_benchmark.py → task-003 |
+| 4.7 | Hook 集成测试 | ✅ | test_hooks_integration.py → task-004 |
 
 ## Phase 5: 文档与演示 🔄
 
 | # | 任务 | 状态 | 产出 |
 |---|------|------|------|
 | 5.1 | CLAUDE.md 完整文档 | ✅ | 架构 + API + 约束 |
-| 5.2 | REQUIREMENTS.md 需求文档 | ✅ | 本文档 |
-| 5.3 | TASK_PLAN.md 任务计划 | ✅ | 本文档 |
-| 5.4 | HANDOFF.md 交接文档 | ✅ | 本文档 |
+| 5.2 | REQUIREMENTS.md 需求文档 | ✅ | 总需求 |
+| 5.3 | TASK_PLAN.md 任务计划 | ✅ | 本文件 |
+| 5.4 | HANDOFF.md 交接文档 | ✅ | Agent 交接记录 |
 | 5.5 | Demo 脚本 | ✅ | demo/demo_workflow.py |
-| 5.6 | API 参考文档 | ⬜ | docstrings → 自动生成 |
+| 5.6 | API 参考文档 | ⬜ | docs/api_reference.md → task-005 |
 
-## Phase 6: 高级特性
-
-| # | 任务 | 状态 | 产出 |
-|---|------|------|------|
-| 6.1 | 暂停/恢复执行 | ⬜ | 引擎级 pause/resume |
-| 6.2 | Webhook 通知（Slack/企业微信） | ⬜ | on_enter/on_exit webhook |
-| 6.3 | 并行条件评估 | ⬜ | 多条件并发执行 |
-| 6.4 | 软性门控（warn 不阻止） | ⬜ | condition severity 分级 |
-| 6.5 | Web UI 状态面板 | ⬜ | Flask/FastAPI 仪表板 |
-| 6.6 | MCP Server 集成 | ⬜ | 通过 MCP 协议暴露条件评估 |
-| 6.7 | Stageflow Guard 作为 MCP Tool | ⬜ | 远程工具守卫 |
-
-## Phase 7: 生态与集成
+## Phase 6: 可视化工作流编辑器 🆕
 
 | # | 任务 | 状态 | 产出 |
 |---|------|------|------|
-| 7.1 | GitHub Actions 集成示例 | ⬜ | CI/CD YAML 模板 |
-| 7.2 | Docker 镜像 | ⬜ | 容器化部署 |
-| 7.3 | VS Code 扩展 | ⬜ | 阶段状态栏指示器 |
-| 7.4 | Linear/Notion 任务同步 | ⬜ | Issue 自动链接 |
-| 7.5 | 多项目共享配置 | ⬜ | 继承/引用机制 |
+| 6.1 | React+TS+Vite 项目初始化 | ⬜ | editor/ → task-006 |
+| 6.2 | 画布 + 拖拽节点 (React Flow) | ⬜ | Canvas.tsx + StageNode.tsx → task-007 |
+| 6.3 | 节点属性面板 | ⬜ | PropertiesPanel.tsx → task-008 |
+| 6.4 | 条件边编辑器 | ⬜ | EdgeEditor.tsx → task-009 |
+| 6.5 | YAML 导入/导出 | ⬜ | js-yaml 序列化 → task-010 |
+| 6.6 | Mermaid 预览 + 主题 + 快捷键 | ⬜ | task-011 |
+| 6.7 | FastAPI 后端桥接 | ⬜ | editor/server.py → task-012 |
+
+## Phase 7: LLM 工作流生成器 🆕
+
+| # | 任务 | 状态 | 产出 |
+|---|------|------|------|
+| 7.1 | 生成器核心 — NL → YAML via LLM | ⬜ | stageflow/generator/ → task-013 |
+| 7.2 | 提示词模板系统 (CI/CD, Review, ...) | ⬜ | generator/prompts.py → task-014 |
+| 7.3 | CLI `stageflow generate` + 测试 | ⬜ | __main__.py + tests → task-015 |
+
+## Phase 8: Agent 运行时 🆕
+
+| # | 任务 | 状态 | 产出 |
+|---|------|------|------|
+| 8.1 | Agent 循环引擎 | ⬜ | stageflow/agent/runner.py → task-016 |
+| 8.2 | LLM + StageFlow 混合工作流 | ⬜ | agent/hybrid.py → task-017 |
+| 8.3 | 多 Agent 编排器 | ⬜ | agent/orchestrator.py → task-018 |
+
+## Phase 9: 高级特性
+
+| # | 任务 | 状态 | 产出 |
+|---|------|------|------|
+| 9.1 | 暂停/恢复执行 | ⬜ | engine pause/resume → task-019 |
+| 9.2 | Webhook 通知 | ⬜ | on_enter/on_exit webhook → task-020 |
+| 9.3 | 并行条件评估 | ⬜ | 多条件并发执行 |
+| 9.4 | 软性门控（warn 不阻止） | ⬜ | condition severity 分级 |
+| 9.5 | Web UI 状态面板 | ⬜ | Flask/FastAPI 仪表板 |
+| 9.6 | MCP Server 集成 | ⬜ | 通过 MCP 协议暴露条件评估 |
+
+## Phase 10: Harness 工程调研 🆕
+
+| # | 任务 | 状态 | 产出 |
+|---|------|------|------|
+| 10.1 | 竞品调研 (Dify, n8n, LangGraph, Temporal, Prefect) | ⬜ | docs/harness_research.md → task-021 |
+| 10.2 | Agent 模式调研 | ⬜ | docs/harness_research.md → task-022 |
+| 10.3 | 集成方案设计 | ⬜ | docs/integration_blueprint.md → task-023 |
+| 10.4 | 基于调研改进实现 | ⬜ | Top 3 improvements → task-024 |
+| 10.5-LOOP | 时间检查循环 (≥21:00 → 停止，<21:00 → 搜索+迭代) | ⬜ | .ralph/harness_iterations.md → task-025-LOOP |
+
+## Phase 11: 生态与集成
+
+| # | 任务 | 状态 | 产出 |
+|---|------|------|------|
+| 11.1 | GitHub Actions 集成示例 | ⬜ | CI/CD YAML 模板 |
+| 11.2 | Docker 镜像 | ⬜ | 容器化部署 |
+| 11.3 | VS Code 扩展 | ⬜ | 阶段状态栏指示器 |
+| 11.4 | Linear/Notion 任务同步 | ⬜ | Issue 自动链接 |
+| 11.5 | 多项目共享配置 | ⬜ | 继承/引用机制 |
 
 ---
 
-**图例**: ✅ 完成 | 🔄 进行中 | ⬜ 待开始 | ❌ 阻塞
+**图例**: ✅ 完成 | 🔄 进行中 | ⬜ 待开始 | ❌ 阻塞 | 🆕 新阶段
