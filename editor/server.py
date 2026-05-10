@@ -157,6 +157,18 @@ CONDITION_DEFS = [
         {"name": "min", "label": "Min count", "kind": "number", "placeholder": "1"},
         {"name": "max", "label": "Max count", "kind": "number", "placeholder": "100"}
     ]},
+    # Runtime / system conditions
+    {"type": "port_open", "label": "Port Open", "description": "Check if a TCP port is listening", "params": [
+        {"name": "port", "label": "Port number", "kind": "number", "required": True},
+        {"name": "host", "label": "Host", "kind": "text", "placeholder": "127.0.0.1", "default": "127.0.0.1"},
+        {"name": "timeout", "label": "Timeout (s)", "kind": "number", "default": 2.0}
+    ]},
+    {"type": "process_running", "label": "Process Running", "description": "Check if a process is running by name", "params": [
+        {"name": "name", "label": "Process name", "kind": "text", "placeholder": "python", "required": True}
+    ]},
+    {"type": "docker_ps", "label": "Docker Container", "description": "Check if a Docker container is running", "params": [
+        {"name": "name", "label": "Container name", "kind": "text", "placeholder": "postgres", "required": True}
+    ]},
 ]
 
 

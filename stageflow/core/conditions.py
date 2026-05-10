@@ -892,3 +892,101 @@ def _json_count(params: dict) -> Tuple[bool, str]:
         if count > int(max_count):
             return False, f"JSON count {count} > max {max_count} for {path}"
     return True, f"JSON count {count} within bounds for {path}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Runtime / system conditions
+# ═══════════════════════════════════════════════════════════════════════════
+
+@register("port_open")
+def _port_open(params: dict) -> Tuple[bool, str]:
+    """Check if a TCP port is listening.
+
+    Params:
+        port: Port number (required).
+        host: Host to connect to (default "127.0.0.1").
+        timeout: Connection timeout in seconds (default 2.0).
+    """
+    port = int(params.get("port", params.get("value", 0)))
+    host = str(params.get("host", "127.0.0.1"))
+    timeout = float(params.get("timeout", 2.0))
+    if port <= 0:
+        return False, f"Invalid port: {port}"
+    import socket
+    try:
+        sock = socket.create_connection((host, port), timeout=timeout)
+        sock.close()
+        return True, f"Port {host}:{port} is open"
+    except (socket.timeout, ConnectionRefusedError, OSError) as e:
+        return False, f"Port {host}:{port} is closed ({e})"
+
+
+@register("process_running")
+def _process_running(params: dict) -> Tuple[bool, str]:
+    """Check if a process is running by name or command line pattern.
+
+    Params:
+        name: Process name substring to search for (required).
+    """
+    name = str(params.get("name", params.get("value", "")))
+    if not name:
+        return False, "No process name specified"
+    try:
+        import psutil
+        for proc in psutil.process_iter(["name", "cmdline"]):
+            try:
+                info = proc.info
+                if name.lower() in (info["name"] or "").lower():
+                    return True, f"Process '{name}' found (name match: {info['name']})"
+                cmdline = " ".join(info["cmdline"] or [])
+                if name.lower() in cmdline.lower():
+                    return True, f"Process '{name}' found (cmdline match)"
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        return False, f"Process '{name}' not found"
+    except ImportError:
+        # Fallback: Windows tasklist or Unix ps
+        try:
+            if os.name == "nt":
+                result = subprocess.run(
+                    ["tasklist", "/fo", "csv", "/nh"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if name.lower() in result.stdout.lower():
+                    return True, f"Process '{name}' found via tasklist"
+            else:
+                result = subprocess.run(
+                    ["ps", "aux"], capture_output=True, text=True, timeout=10,
+                )
+                if name.lower() in result.stdout.lower():
+                    return True, f"Process '{name}' found via ps"
+            return False, f"Process '{name}' not found"
+        except Exception as e:
+            return False, f"Process check failed: {e}"
+
+
+@register("docker_ps")
+def _docker_ps(params: dict) -> Tuple[bool, str]:
+    """Check if a Docker container is running by name.
+
+    Params:
+        name: Container name substring to match (required).
+    """
+    name = str(params.get("name", params.get("value", "")))
+    if not name:
+        return False, "No container name specified"
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except FileNotFoundError:
+        return False, "Docker is not installed or not in PATH"
+    except Exception as e:
+        return False, f"Docker check failed: {e}"
+
+    container_names = result.stdout.strip().split("\n")
+    for cname in container_names:
+        if name in cname.strip():
+            return True, f"Docker container '{cname.strip()}' is running"
+    return False, f"No running container matching '{name}'"

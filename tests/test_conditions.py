@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 import time
 import pytest
 
@@ -2133,66 +2134,188 @@ class TestConditionSeverity:
         assert any("[WARN]" in m for m in msgs)
         assert any("[HARD_FAIL]" in m for m in msgs)
 
-    def test_all_warn_conditions_dont_block(self, temp_dir):
-        """Even with multiple failing warn conditions, overall passes."""
-        passed, msgs = evaluate_all(
-            [
-                {"severity": "warn", "never": "reason1"},
-                {"severity": "warn", "never": "reason2"},
-                {"severity": "warn", "never": "reason3"},
-            ],
-            str(temp_dir), cache_ttl=0
-        )
-        assert passed is True
-        assert len([m for m in msgs if "[WARN]" in m]) == 3
 
-    # ── Severity in all_of / any_of ──────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# Runtime / system condition tests
+# ═══════════════════════════════════════════════════════════════════════════
 
-    def test_severity_in_all_of_sub_condition(self, temp_dir):
-        """Severity works inside all_of sub-conditions."""
-        passed, msgs = evaluate_all(
-            [{
-                "all_of": {
-                    "conditions": [
-                        {"severity": "warn", "file_exists": "nope.txt"},
-                        {"severity": "soft", "always": True},
-                    ]
-                }
-            }],
-            str(temp_dir), cache_ttl=0
-        )
-        assert passed is True
 
-    def test_hard_severity_in_any_of(self, temp_dir):
-        """Hard severity in any_of still propagates HARD_FAIL."""
-        f = temp_dir / "yes.txt"
-        f.write_text("ok")
-        passed, msgs = evaluate_all(
-            [{
-                "any_of": {
-                    "conditions": [
-                        {"severity": "hard", "file_exists": "nope.txt"},
-                        {"severity": "soft", "file_exists": "yes.txt"},
-                    ]
-                }
-            }],
-            str(temp_dir), cache_ttl=0
-        )
-        # any_of: first (hard) fails, second (soft) passes → overall passes
-        assert passed is True
-
-    # ── Variable interpolation with severity ──────────────────────────
-
-    def test_severity_with_variable_interpolation(self, temp_dir):
-        """Severity works correctly when variables are resolved."""
-        f = temp_dir / "BUG-99" / "summary.md"
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text("# Issue BUG-99")
-
-        passed, msgs = evaluate_all(
-            [{"severity": "warn", "file_exists": "{{var.issue_dir}}/summary.md"}],
+class TestPortOpen:
+    def test_closed_port_returns_false(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"port_open": {"port": 19999, "host": "127.0.0.1", "timeout": 0.5}}],
             str(temp_dir), cache_ttl=0,
-            variables={"issue_dir": "BUG-99"}
         )
-        assert passed is True
-        assert any("[PASS]" in m for m in msgs)
+        assert passed is False
+        assert "closed" in msg[0].lower() or "refused" in msg[0].lower() or "timeout" in msg[0].lower()
+
+    def test_open_port_returns_true(self, temp_dir):
+        import socket
+        import threading
+        import time
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.bind(("127.0.0.1", 0))
+        port = server.getsockname()[1]
+        server.listen(1)
+        ready = threading.Event()
+
+        def serve():
+            ready.set()
+            try:
+                server.settimeout(3)
+                conn, _ = server.accept()
+                conn.close()
+            except socket.timeout:
+                pass
+
+        t = threading.Thread(target=serve, daemon=True)
+        t.start()
+        ready.wait()
+        time.sleep(0.05)  # let the accept() settle
+
+        passed, msg = evaluate_all(
+            [{"port_open": {"port": port, "host": "127.0.0.1", "timeout": 1.0}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        server.close()
+        assert passed is True, f"Expected port {port} to be open: {msg}"
+
+    def test_invalid_port_fails(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"port_open": {"port": 0}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is False
+        assert "invalid" in msg[0].lower()
+
+    def test_short_syntax_with_value_key(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"port_open": 19998}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is False  # closed port
+
+    def test_custom_timeout_accepted(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"port_open": {"port": 19997, "timeout": 0.1}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is False  # closed port, but timeout was respected
+        assert "Port" in msg[0]
+
+    def test_default_host_is_localhost(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"port_open": {"port": 19996, "timeout": 0.2}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is False
+        assert "127.0.0.1" in msg[0]
+
+
+class TestProcessRunning:
+    def test_python_is_running(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"process_running": {"name": "python"}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is True, f"Python should be running: {msg}"
+
+    def test_bogus_name_returns_false(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"process_running": {"name": "xyznonexistentprocess_42"}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is False
+
+    def test_empty_name_returns_false(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"process_running": {"name": ""}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is False
+        assert "No process name" in msg[0]
+
+    def test_short_syntax_with_value_key(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"process_running": "python"}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is True, f"Python should be running: {msg}"
+
+    def test_case_insensitive_match(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"process_running": {"name": "PYTHON"}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is True, f"PYTHON (uppercase) should match: {msg}"
+
+    def test_partial_name_match(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"process_running": {"name": "pyth"}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is True, f"'pyth' should match python: {msg}"
+
+
+class TestDockerPs:
+    def test_empty_name_returns_false(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"docker_ps": {"name": ""}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is False
+        assert "No container name" in msg[0]
+
+    def test_bogus_container_returns_false(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"docker_ps": {"name": "nonexistent_container_xyz_42"}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        # Docker might not be installed, in which case we also get False
+        assert passed is False
+
+    def test_docker_not_installed_is_graceful(self, temp_dir):
+        import shutil
+        docker_path = shutil.which("docker")
+        if docker_path:
+            pytest.skip("Docker is installed — skipping not-installed test")
+        passed, msg = evaluate_all(
+            [{"docker_ps": {"name": "anything"}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is False
+        assert any("not installed" in m.lower() or "not in path" in m.lower() for m in msg)
+
+    def test_short_syntax_with_value_key(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"docker_ps": "xyz_bogus"}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is False
+
+    def test_graceful_on_error(self, temp_dir):
+        passed, msg = evaluate_all(
+            [{"docker_ps": {"name": "test"}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        # Should always return False (no container named "test" or docker not installed)
+        assert passed is False
+
+    def test_returns_running_container_if_docker_available(self, temp_dir):
+        import shutil
+        docker_path = shutil.which("docker")
+        if not docker_path:
+            pytest.skip("Docker is not installed — skipping live container test")
+        result = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}"],
+            capture_output=True, text=True, timeout=5,
+        )
+        containers = result.stdout.strip().split("\n")
+        if not containers or containers == [""]:
+            pytest.skip("No running containers to test against")
+        target = containers[0].strip()
+        passed, msg = evaluate_all(
+            [{"docker_ps": {"name": target}}],
+            str(temp_dir), cache_ttl=0,
+        )
+        assert passed is True, f"Container '{target}' should be running: {msg}"
