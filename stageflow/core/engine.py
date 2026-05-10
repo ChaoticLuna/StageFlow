@@ -48,7 +48,15 @@ class StateMachine:
             try:
                 return json.loads(self.state_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, IOError):
-                pass
+                bak_path = self.state_path.with_suffix(".json.bak")
+                try:
+                    bak_path.write_bytes(self.state_path.read_bytes())
+                    self.audit.log_error(
+                        "state_corruption",
+                        f"State file corrupted, saved backup to {bak_path}",
+                    )
+                except Exception:
+                    pass
         return {
             "current_stage": None,
             "history": [],

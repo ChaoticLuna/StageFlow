@@ -135,7 +135,7 @@
 ## Phase 17: CLI 增强与类型安全 (CLI & Type Safety)
 
 - [x] **task-051**: Add `--json` flag to CLI `status`, `list`, `check` commands — structured JSON output for CI/CD and scripting. ~4 subprocess tests.
-- [ ] **task-052**: State file corruption recovery — in `engine._load_state()`, save corrupted JSON as `.bak` before resetting to defaults. Log recovery via audit. ~3 tests.
+- [x] **task-052**: State file corruption recovery — in `engine._load_state()`, save corrupted JSON as `.bak` before resetting to defaults. Log recovery via audit. ~3 tests.
 - [ ] **task-053**: Fix all 25 mypy errors across 7 files — implicit Optional annotations, missing type hints, `llm_generator.py` potential None access. Add `mypy` to dev deps + `[tool.mypy]` config in pyproject.toml. Verify `mypy stageflow` passes clean.
 - [ ] **task-054**: Add `--dry-run` flag to `stageflow next` CLI — evaluate conditions for auto-selected next stage without executing transition. ~3 tests.
 - [ ] **task-055**: Add `--list` flag to `stageflow cond` CLI — list all registered condition types from terminal. Currently requires Python API. ~2 tests.

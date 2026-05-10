@@ -293,6 +293,43 @@ class TestState:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# TestStateCorruptionRecovery
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestStateCorruptionRecovery:
+    def test_corrupted_json_recovers_to_defaults(self, temp_dir, registry):
+        state_path = temp_dir / ".claude" / "current_stage.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text("this is not valid json {{{", encoding="utf-8")
+        sm = StateMachine(registry, str(temp_dir))
+        assert sm.current_stage is None
+        assert sm.history == []
+
+    def test_corrupted_json_creates_backup(self, temp_dir, registry):
+        state_path = temp_dir / ".claude" / "current_stage.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        original_content = "corrupted state file {{{"
+        state_path.write_text(original_content, encoding="utf-8")
+        StateMachine(registry, str(temp_dir))
+        bak_path = temp_dir / ".claude" / "current_stage.json.bak"
+        assert bak_path.exists()
+        assert "corrupted" in bak_path.read_text()
+
+    def test_valid_json_loads_normally(self, temp_dir, registry):
+        state_path = temp_dir / ".claude" / "current_stage.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        import json
+        state_path.write_text(json.dumps({
+            "current_stage": "analyze",
+            "history": [{"from": "pick", "to": "analyze", "at": "2026-01-01T00:00:00"}],
+            "retry_count": {}, "iterations": {}, "variables": {}, "paused": False,
+        }), encoding="utf-8")
+        sm = StateMachine(registry, str(temp_dir))
+        assert sm.current_stage == "analyze"
+        assert len(sm.history) == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # TestReset
 # ═══════════════════════════════════════════════════════════════════════════
 
