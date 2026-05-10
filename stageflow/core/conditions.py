@@ -497,10 +497,13 @@ def _git_status(params: dict) -> Tuple[bool, str]:
             ok = branch == str(expected)
             return ok, f"Git branch '{branch}' == '{expected}': {ok}"
         elif op == "has_commits":
-            r = subprocess.run("git rev-list --count HEAD..@{u} || echo 0",
+            r = subprocess.run("git rev-list --count HEAD..@{u}",
                                shell=True, capture_output=True, text=True,
                                cwd=base_path, timeout=10)
-            count = int(r.stdout.strip() or 0)
+            if r.returncode != 0:
+                count = 0
+            else:
+                count = int(r.stdout.strip() or 0)
             ok = count > 0
             return ok, f"Unpushed commits: {count}"
         else:
