@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -14,11 +14,17 @@ import ReactFlow, {
 } from "reactflow";
 import StageNode from "./StageNode";
 import EdgeEditor from "./EdgeEditor";
-import type { StageNode as StageNodeType, EdgeData } from "../types";
+import type { StageNode as StageNodeType, EdgeData, StageData } from "../types";
 
 const nodeTypes = { stageNode: StageNode };
 
 const TERMINAL_STAGES = new Set(["done", "complete", "finished", "end"]);
+
+export interface CanvasHandle {
+  updateNodeData: (nodeId: string, data: StageData) => void;
+  getNodes: () => StageNodeType[];
+  getEdges: () => Edge<EdgeData>[];
+}
 
 let _nodeCounter = 0;
 
@@ -64,11 +70,26 @@ interface CanvasProps {
   onNodeSelect: (node: StageNodeType | null) => void;
 }
 
-export default function Canvas({ onNodeSelect }: CanvasProps) {
+const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
+  { onNodeSelect },
+  ref
+) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedEdge, setSelectedEdge] = useState<Edge<EdgeData> | null>(null);
   const reactFlow = useReactFlow();
+
+  useImperativeHandle(ref, () => ({
+    updateNodeData(nodeId: string, data: StageData) {
+      setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data: { ...data } } : n)));
+    },
+    getNodes() {
+      return nodes as StageNodeType[];
+    },
+    getEdges() {
+      return edges as Edge<EdgeData>[];
+    },
+  }), [nodes, edges, setNodes]);
 
   const onConnect = useCallback(
     (connection: Connection) =>
@@ -177,4 +198,6 @@ export default function Canvas({ onNodeSelect }: CanvasProps) {
       )}
     </div>
   );
-}
+});
+
+export default Canvas;

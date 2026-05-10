@@ -71,7 +71,7 @@
 |---|------|------|------|
 | 6.1 | React+TS+Vite 项目初始化 | ✅ | editor/ → task-006 |
 | 6.2 | 画布 + 拖拽节点 (React Flow) | ✅ | Canvas.tsx + StageNode.tsx → task-007 |
-| 6.3 | 节点属性面板 | ⬜ | PropertiesPanel.tsx → task-008 |
+| 6.3 | 节点属性面板 | ✅ | PropertiesPanel.tsx → task-008 |
 | 6.4 | 条件边编辑器 | ⬜ | EdgeEditor.tsx → task-009 |
 | 6.5 | YAML 导入/导出 | ⬜ | js-yaml 序列化 → task-010 |
 | 6.6 | Mermaid 预览 + 主题 + 快捷键 | ⬜ | task-011 |
