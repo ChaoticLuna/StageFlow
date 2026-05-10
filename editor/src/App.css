@@ -275,8 +275,8 @@ html, body, #root {
   background: #fff;
   border-radius: 8px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
-  width: 480px;
-  max-height: 80vh;
+  width: 520px;
+  max-height: 85vh;
   overflow-y: auto;
 }
 
@@ -290,6 +290,7 @@ html, body, #root {
 
 .edge-editor-header h3 {
   font-size: 0.95rem;
+  font-family: "SF Mono", "Fira Code", monospace;
 }
 
 .close-btn {
@@ -311,6 +312,147 @@ html, body, #root {
   margin-bottom: 0.5rem;
 }
 
+.edge-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.edge-editor-footer {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #eee;
+}
+
+.cancel-btn {
+  background: #fff;
+  color: #666;
+  border-color: #ccc;
+}
+
+.cancel-btn:hover {
+  background: #f5f5f5;
+}
+
+/* Logic toggle */
+.logic-toggle {
+  display: inline-flex;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.logic-option {
+  border: none;
+  background: #fafafa;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #999;
+  font-family: "SF Mono", "Fira Code", monospace;
+  transition: background 0.15s, color 0.15s;
+}
+
+.logic-option:first-child {
+  border-right: 1px solid #ddd;
+}
+
+.logic-option.active {
+  background: #1565c0;
+  color: #fff;
+}
+
+.logic-hint {
+  font-size: 0.68rem;
+  color: #aaa;
+  margin-top: 0.2rem;
+  margin-bottom: 0.5rem;
+  font-style: italic;
+}
+
+/* Condition edit list */
+.condition-edit-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.condition-edit-item {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 0.5rem;
+  background: #fafafa;
+}
+
+.condition-edit-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.condition-ordinal {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #999;
+  font-family: "SF Mono", "Fira Code", monospace;
+  min-width: 1.2rem;
+}
+
+.condition-type-select {
+  flex: 1;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.75rem;
+}
+
+.condition-remove {
+  flex-shrink: 0;
+}
+
+.condition-desc {
+  font-size: 0.68rem;
+  color: #999;
+  margin: 0.25rem 0 0.35rem 0;
+}
+
+/* Param form */
+.param-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+}
+
+.param-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.param-field:has(.prop-input) {
+  min-width: 0;
+}
+
+.param-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  color: #999;
+  font-weight: 600;
+}
+
+.param-field .prop-input {
+  font-size: 0.72rem;
+  padding: 0.25rem 0.35rem;
+}
+
+.param-field textarea.prop-input {
+  grid-column: 1 / -1;
+  min-height: 2.5rem;
+}
+
+/* Old read-only condition list (keep for compat) */
 .condition-list {
   list-style: none;
 }

@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -14,6 +14,7 @@ import ReactFlow, {
 } from "reactflow";
 import StageNode from "./StageNode";
 import EdgeEditor from "./EdgeEditor";
+import { formatConditionSummary } from "./conditionDefs";
 import type { StageNode as StageNodeType, EdgeData, StageData } from "../types";
 
 const nodeTypes = { stageNode: StageNode };
@@ -22,8 +23,10 @@ const TERMINAL_STAGES = new Set(["done", "complete", "finished", "end"]);
 
 export interface CanvasHandle {
   updateNodeData: (nodeId: string, data: StageData) => void;
+  updateEdgeData: (edgeId: string, data: EdgeData) => void;
   getNodes: () => StageNodeType[];
   getEdges: () => Edge<EdgeData>[];
+  getStageNames: () => string[];
 }
 
 let _nodeCounter = 0;
@@ -83,13 +86,47 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     updateNodeData(nodeId: string, data: StageData) {
       setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data: { ...data } } : n)));
     },
+    updateEdgeData(edgeId: string, data: EdgeData) {
+      setEdges((eds) => eds.map((e) => (e.id === edgeId ? { ...e, data: { ...data } } : e)));
+    },
     getNodes() {
       return nodes as StageNodeType[];
     },
     getEdges() {
       return edges as Edge<EdgeData>[];
     },
-  }), [nodes, edges, setNodes]);
+    getStageNames() {
+      return nodes.map((n) => n.data?.name ?? n.id);
+    },
+  }), [nodes, edges, setNodes, setEdges]);
+
+  const labeledEdges = useMemo(
+    () =>
+      edges.map((e) => ({
+        ...e,
+        label: formatConditionSummary(e.data?.conditions ?? []),
+        labelStyle: { fill: "#555", fontSize: 10, fontWeight: 500 },
+        labelBgStyle: { fill: "#fff", fillOpacity: 0.9 },
+        labelBgPadding: [4, 3] as [number, number],
+        labelBgBorderRadius: 3,
+      })),
+    [edges]
+  );
+
+  const stageNames = useMemo(
+    () => nodes.map((n) => n.data?.name ?? n.id),
+    [nodes]
+  );
+
+  const handleEdgeUpdate = useCallback(
+    (edgeId: string, data: EdgeData) => {
+      setEdges((eds) =>
+        eds.map((e) => (e.id === edgeId ? { ...e, data: { ...data } } : e))
+      );
+      setSelectedEdge(null);
+    },
+    [setEdges]
+  );
 
   const onConnect = useCallback(
     (connection: Connection) =>
@@ -173,7 +210,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       </div>
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={labeledEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
@@ -194,7 +231,12 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         />
       </ReactFlow>
       {selectedEdge && (
-        <EdgeEditor edge={selectedEdge} onClose={() => setSelectedEdge(null)} />
+        <EdgeEditor
+          edge={selectedEdge}
+          stageNames={stageNames}
+          onUpdate={handleEdgeUpdate}
+          onClose={() => setSelectedEdge(null)}
+        />
       )}
     </div>
   );

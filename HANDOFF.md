@@ -2,7 +2,7 @@
 
 > **最后更新**: 2026-05-10
 > **当前 Agent**: Claude (via Claude Code)
-> **交接原因**: task-007 完成 — Canvas + StageNode 完整实现
+> **交接原因**: task-009 完成 — EdgeEditor + 条件定义 + 边标签
 
 ---
 
@@ -12,32 +12,38 @@
 Tests:           441 total
 Framework files: 7 modules (~2,000 lines)
 Editor:          editor/ — Vite 8 + React 18 + TS 6.0 + React Flow 11
-  Components:    5 files (App, Canvas, StageNode, EdgeEditor, PropertiesPanel)
-  Canvas:        toolbar with "Add Stage", draggable nodes, delete key, minimap
-  StageNode:     color-coded (blue/gray), icons, tool/hook badges
-  Build:         tsc clean, vite dev works
+  Components:    6 files (App, Canvas, StageNode, EdgeEditor, PropertiesPanel, conditionDefs)
+  Canvas:        toolbar, Add Stage, edge labels, minimap, delete key
+  EdgeEditor:    27 condition types, dynamic param forms, AND/OR toggle, on_fail selector
+  PropertiesPanel: full CRUD for stage name/desc/tools/hooks
+  Build:         tsc clean, vite build clean
 Current stage:   plan
-Ralph:           活跃 — task-008 next (PropertiesPanel 完整实现)
+Ralph:           活跃 — task-010 next (YAML import/export)
 ```
 
 ## 本次会话完成的工作
 
-1. **task-007 完成** — Canvas.tsx + StageNode.tsx 完整实现:
-   - **Canvas.tsx**: "Add Stage" 工具栏按钮，自动生成新节点并定位到视口中心
-   - **节点创建**: 唯一 ID (`stage_1`, `stage_2`...)，随机位置偏移避免重叠
-   - **Delete 键支持**: 选中节点按 Delete/Backspace 删除（同时删除关联边）
-   - **MiniMap 颜色编码**: 终端节点灰色，普通节点蓝色
-   - **工具栏信息**: 显示总节点数、普通/终端统计
-   - **StageNode.tsx 增强**:
-     - 图标区分: 普通节点 `●` 蓝色，终端节点 `✔` 绿色
-     - 5 种徽章类型: 工具计数（蓝）、terminal（灰）、all tools（紫）、空工具（灰）、hook 指示（橙）
-     - Hover 阴影效果
-     - 选中绿色边框+阴影
-     - 一键删除快捷键
+**task-009 完成** — EdgeEditor.tsx 完整条件编辑器:
+
+- **conditionDefs.ts**: 27 种条件类型的完整参数定义（`ParamDef` 接口），条件摘要格式化函数
+- **EdgeEditor.tsx** 重写:
+  - 条件类型下拉选择器（27 种，带标签和描述）
+  - 动态参数表单（根据所选类型显示 text/number/select/textarea/json 字段）
+  - 添加/删除条件按钮
+  - AND/OR 逻辑切换（ALL = 隐式 AND，ANY = 包装为 `any_of`）
+  - on_fail 目标选择器（下拉所有阶段，排除当前源和目标）
+  - 描述输入框
+  - 保存/取消按钮
+  - `any_of` 检测：加载时如果检测到 `any_of` 包装，自动扁平化为内部条件列表，保存时重新包装
+- **Canvas.tsx** 更新:
+  - `CanvasHandle` 新增 `updateEdgeData()` 和 `getStageNames()`
+  - 边标签渲染：基于条件自动生成摘要（"File Exists — artifacts/...", "3 conditions" 等）
+  - `handleEdgeUpdate` 回调传递给 EdgeEditor
+- **App.css**: 新增 ~100 行样式（逻辑切换、条件编辑列表、参数表单网格、保存/取消按钮等）
 
 ## 下一步
 
-Ralph 自动从 task-008 开始（PropertiesPanel 完整实现 — 点击节点显示属性表单，实时更新）
+Ralph 自动从 task-010 开始（YAML 导入/导出 — js-yaml 序列化 + 文件选择器）
 
 ## 已知问题
 
