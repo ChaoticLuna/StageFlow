@@ -170,3 +170,119 @@ class TestPathGuard:
         guard = StageGuard(str(registry.config_path), str(temp_dir))
         allowed, msg = guard.check("Write", {})
         assert allowed, f"Write without file_path should pass: {msg}"
+
+    def test_write_absolute_path_outside_project(self, registry, temp_dir):
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")
+        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        allowed, msg = guard.check("Write", {"file_path": "C:/Windows/evil.ps1"})
+        assert not allowed, f"Absolute path outside project should be denied: {msg}"
+        assert "outside project" in msg.lower() or "denied" in msg.lower()
+
+    def test_write_absolute_path_inside_project(self, registry, temp_dir):
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")
+        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        abs_path = str(Path(temp_dir).resolve() / "artifacts" / "ok.md")
+        allowed, msg = guard.check("Write", {"file_path": abs_path})
+        assert allowed, f"Absolute path inside project artifacts/ should be allowed: {msg}"
+
+    def test_write_dot_path_allowed(self, registry, temp_dir):
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")
+        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        allowed, msg = guard.check("Write", {"file_path": "."})
+        assert allowed, f"Write to '.' should be allowed (empty parts): {msg}"
+
+
+class TestGuardLogViolation:
+    def test_log_violation_writes_to_file(self, registry, temp_dir):
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")
+        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        guard.log_violation("Delete", "Not in tools list")
+        log_path = Path(temp_dir) / ".claude" / "guard_violations.jsonl"
+        assert log_path.exists()
+        content = log_path.read_text()
+        assert "Delete" in content
+        assert "start" in content
+
+
+class TestClaudeHookMain:
+    def test_valid_input_allows_tool(self, monkeypatch, registry, temp_dir):
+        import json
+        from stageflow.core.guard import claude_hook_main
+
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")
+
+        monkeypatch.setattr("sys.stdin", __import__("io").StringIO(
+            json.dumps({"tool_name": "Read", "tool_input": {}})
+        ))
+        output_calls = []
+
+        def capture_output(data):
+            output_calls.append(json.loads(data))
+
+        monkeypatch.setattr("builtins.print", capture_output)
+
+        monkeypatch.setattr("stageflow.core.guard.StageGuard.__init__",
+            lambda self, config_path=None, base_path=None: None)
+        monkeypatch.setattr("stageflow.core.guard.StageGuard.check",
+            lambda self, tn, ti=None: (True, "Read is allowed"))
+        monkeypatch.setattr("stageflow.core.guard.StageGuard.log_violation",
+            lambda self, tn, msg: None)
+
+        try:
+            claude_hook_main()
+        except SystemExit as e:
+            assert e.code == 0
+
+        assert output_calls[0]["decision"] == "allow"
+
+    def test_invalid_json_fallback_allows(self, monkeypatch):
+        import json
+        from stageflow.core.guard import claude_hook_main
+
+        monkeypatch.setattr("sys.stdin", __import__("io").StringIO("not valid json"))
+        output_calls = []
+
+        def capture_output(data):
+            output_calls.append(json.loads(data))
+
+        monkeypatch.setattr("builtins.print", capture_output)
+
+        claude_hook_main()
+        assert output_calls[0]["decision"] == "allow"
+        assert "error" in output_calls[0]["reason"].lower()
+
+    def test_blocked_tool_prints_block_and_logs(self, monkeypatch, registry, temp_dir):
+        import json
+        from stageflow.core.guard import claude_hook_main
+
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")
+
+        monkeypatch.setattr("sys.stdin", __import__("io").StringIO(
+            json.dumps({"tool_name": "Delete", "tool_input": {}})
+        ))
+        output_calls = []
+
+        def capture_output(data):
+            output_calls.append(json.loads(data))
+
+        monkeypatch.setattr("builtins.print", capture_output)
+
+        monkeypatch.setattr("stageflow.core.guard.StageGuard.__init__",
+            lambda self, config_path=None, base_path=None: None)
+        monkeypatch.setattr("stageflow.core.guard.StageGuard.check",
+            lambda self, tn, ti=None: (False, "Delete is NOT allowed"))
+        monkeypatch.setattr("stageflow.core.guard.StageGuard.log_violation",
+            lambda self, tn, msg: None)
+
+        try:
+            claude_hook_main()
+        except SystemExit as e:
+            assert e.code == 1
+
+        assert output_calls[0]["decision"] == "block"
