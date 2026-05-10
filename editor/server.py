@@ -208,6 +208,9 @@ class WorkflowRunResponse(BaseModel):
 class WorkflowStatusResponse(BaseModel):
     name: str
     current_stage: Optional[str] = None
+    stage_info: Optional[dict] = None
+    available_next: list[str] = []
+    total_transitions: int = 0
     history: list[dict]
     paused: bool
     variables: dict
@@ -499,9 +502,19 @@ def _find_start_stages(registry: StageRegistry) -> list[str]:
 def get_workflow_status(name: str):
     """Get the current execution status of a workflow."""
     sm = _get_engine(name)
+    stage_info = None
+    available_next = []
+    if sm.current_stage:
+        stage = sm.registry.get_stage(sm.current_stage)
+        if stage:
+            stage_info = stage.to_dict()
+        available_next = sm.registry.get_next_stages(sm.current_stage)
     return WorkflowStatusResponse(
         name=name,
         current_stage=sm.current_stage,
+        stage_info=stage_info,
+        available_next=available_next,
+        total_transitions=len(sm.history),
         history=sm.history,
         paused=sm.is_paused,
         variables=sm.get_all_vars(),

@@ -532,7 +532,12 @@ transitions:
         assert r.status_code == 200
         d = r.json()
         assert d["name"] == name
-        assert d["current_stage"] is not None  # some stage after run
+        assert d["current_stage"] is not None
+        assert d["stage_info"] is not None
+        assert "tools" in d["stage_info"]
+        assert "name" in d["stage_info"]
+        assert isinstance(d["available_next"], list)
+        assert d["total_transitions"] >= 1
         assert isinstance(d["history"], list)
         assert d["paused"] is False
         assert isinstance(d["variables"], dict)
