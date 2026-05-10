@@ -2,45 +2,46 @@
 
 > **最后更新**: 2026-05-10
 > **当前 Agent**: Claude (via Claude Code)
-> **交接原因**: task-011 完成 — Mermaid 预览 + 主题切换 + 快捷键 + 自动布局
+> **交接原因**: task-012 完成 — FastAPI 后端桥接
 
 ---
 
 ## 当前状态快照
 
 ```
-Tests:           441 total
-Framework files: 7 modules (~2,000 lines)
-Editor:          editor/ — Vite 8 + React 18 + TS 6.0 + React Flow 11
+Tests:           507 total (487 existing + 20 server API)
+Framework files: 8 modules (~2,000 lines)
+Editor:          editor/ — Vite 8 + React 18 + TS 6.0 + React Flow 11 + FastAPI
   Components:    6 files (App, Canvas, StageNode, EdgeEditor, PropertiesPanel, conditionDefs)
   Utils:         yaml.ts (export/import/validate)
+  Backend:       editor/server.py — FastAPI + uvicorn
   Canvas:        toolbar, Add Stage, Export/Import YAML, Auto Layout, Mermaid preview
-                 Ctrl+S export, Ctrl+Z undo (50-level stack), Delete node
-                 minimap, edge labels, dark/light theme
-  Theme:         38 CSS variables, light + dark modes, localStorage persistence
-  EdgeEditor:    27 condition types, dynamic param forms, AND/OR toggle, on_fail selector
+                 Ctrl+S export, Ctrl+Z undo (50-level stack), Delete node, minimap, theme
   Build:         tsc clean, vite build clean
 Current stage:   plan
-Ralph:           活跃 — task-012 next (FastAPI backend bridge)
+Ralph:           活跃 — task-013 next (LLM Workflow Generator)
 ```
 
 ## 本次会话完成的工作
 
-**task-011 完成** — Mermaid 预览 + 主题切换 + 快捷键 + 自动布局:
+**task-012 完成** — FastAPI 后端桥接:
 
-- **App.tsx**: 主题系统 — 从 localStorage 加载，`applyTheme()` 设置 `data-theme` 属性，toggle 按钮在 header（☾/☀ 图标），`prefers-color-scheme` 检测
-- **App.css**: 完整的 CSS 变量主题系统（38 个变量）：`:root` (light) + `[data-theme="dark"]` 覆盖。深色主题背景 #1e1e2e，所有组件通过变量引用颜色。Mermaid 预览 modal 样式。Undo toast 样式。工具栏分隔线。按钮 hover 变为实心。
-- **Canvas.tsx**: 
-  - **Undo 栈**: `useRef<Snapshot[]>` max 50 层，每次用户操作前 `pushUndo()`，Ctrl+Z 弹出恢复，含 toast 提示
-  - **Ctrl+S**: 阻止默认浏览器保存对话框 → 触发 YAML 导出下载
-  - **Ctrl+Z**: 恢复上一个快照（nodes + edges + _nodeCounter）
-  - **自动布局**: 拓扑排序分层算法（BFS 从入度为 0 的根节点），X_GAP=240/Y_GAP=100，按钮在工具栏
-  - **Mermaid 预览**: `flowchart LR` 生成，节点含描述，边含条件标签，modal 中含 Copy 按钮，`navigator.clipboard.writeText()`
-  - **pushUndo** 集成到所有变更点: addStage, Delete key, onConnect, handleEdgeUpdate, handleFileChange, autoLayout, updateNodeData, updateEdgeData
+- **editor/server.py**: FastAPI 应用，3 个 API 端点 + 静态文件服务:
+  - `GET /api/conditions` — 返回 27 种条件类型定义（含 param schemas: name, label, kind, options, default, placeholder, required），同时返回 `list_conditions()` 的已注册类型列表和缺失定义
+  - `POST /api/validate` — 接收 `{yaml: string}`，使用 `yaml.safe_load()` + `validate_stages_config()` 校验，返回 `{valid: bool, errors: [string]}`
+  - `POST /api/run` — 接收 `{yaml, from_stage, to_stage}`，加载配置，查找匹配的 transition，使用 `evaluate_all()` 评估条件（`cache_ttl=0`），返回 `{can_transition: bool, messages: [string]}`
+  - 生产模式：`StaticFiles` 挂载 `editor/dist/`（如果存在）
+  - 开发模式：`--dev` 标志启用 CORS（`http://localhost:5173`）
+  - CLI: `python editor/server.py [--dev] [--host HOST] [--port PORT]`
+- **pyproject.toml**: 新增 `[project.optional-dependencies] editor = ["fastapi>=0.100", "uvicorn>=0.20"]`
+- **tests/test_server.py**: 20 个 API 测试（4 类）:
+  - `TestGetConditions` (4): 27 条件, 必填字段, 全部已注册, 顺序
+  - `TestValidateEndpoint` (8): 有效 YAML, 语法错误, 空文档, 缺少 stages, 重复名称, stages 非列表, transitions 非列表, 缺少 from
+  - `TestRunEndpoint` (8): always 转移, 条件转移, 无定义转移, 无效 YAML, 空 YAML, 无效配置, 无条件转移, on_fail 报告
 
 ## 下一步
 
-Ralph 自动从 task-012 开始（FastAPI 后端桥接 — editor/server.py + API 端点）
+Ralph 自动从 task-013 开始（LLM 工作流生成器 — `stageflow/generator/llm_generator.py`）
 
 ## 已知问题
 

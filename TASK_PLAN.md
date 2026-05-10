@@ -75,7 +75,7 @@
 | 6.4 | 条件边编辑器 | ✅ | EdgeEditor.tsx → task-009 |
 | 6.5 | YAML 导入/导出 | ✅ | js-yaml 序列化 → task-010 |
 | 6.6 | Mermaid 预览 + 主题 + 快捷键 | ✅ | task-011 |
-| 6.7 | FastAPI 后端桥接 | ⬜ | editor/server.py → task-012 |
+| 6.7 | FastAPI 后端桥接 | ✅ | editor/server.py → task-012 |
 
 ## Phase 7: LLM 工作流生成器 🆕
 

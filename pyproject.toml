@@ -21,6 +21,10 @@ dev = [
     "pytest>=7.0",
     "pytest-cov",
 ]
+editor = [
+    "fastapi>=0.100",
+    "uvicorn>=0.20",
+]
 
 [project.scripts]
 stageflow = "stageflow.__main__:main"
