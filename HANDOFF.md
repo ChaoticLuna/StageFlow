@@ -1,65 +1,60 @@
 # StageFlow — Agent Handoff 文档
 
-> **最后更新**: 2026-05-10
+> **最后更新**: 2026-05-10 21:00
 > **当前 Agent**: Claude (via Claude Code)
-> **交接原因**: task-024 完成 — Top 3 improvements from research integration blueprint
+> **交接原因**: task-025-LOOP 完成 — 时间门控循环截止 (≥21:00)
 
 ---
 
 ## 当前状态快照
 
 ```
-Tests:           685 total (612 excluding timing-heavy tests)
-Framework files: 14 modules (~4,200 lines)
-Severity levels: warn (log, don't block), soft (default, blocks), hard (blocks immediately, no rollback)
-Server API:      15 endpoints (conditions, validate, run, audit, generate, workflows CRUD, execution)
-  Audit:          GET /api/audit (with filtering/limits), GET /api/audit/summary
-  Workflows:      CRUD + run/status/pause/resume
-Ralph:           活跃 — task-025-LOOP next (time-gated loop)
+Tests:           678 passing, 0 failing (excluding stress/benchmark)
+Framework:       7 core modules + 1 editor server
+Conditions:      27 types, 7 shell_test ops (exit_zero, stdout_contains, stdout_not_empty, stdout_matches, gt, lt, eq)
+Severity:        warn/soft/hard tiers, hard blocks prevent rollback
+Server API:      15 endpoints
+CONDITION_DEFS:  All 27 entries audited and synced with actual handler ops
+Ralph:           task-025-LOOP complete (8 iterations today)
 ```
 
-## 本次会话完成的工作
+## task-025-LOOP 会话总结 (8 iterations)
 
-**task-024 完成** — Top 3 improvements from `docs/integration_blueprint.md`:
+| # | Time | Work |
+|---|------|------|
+| 1 | 19:56 | max_iterations per-stage hard cap (+6 tests) |
+| 2 | 20:03 | MCP research + engine cache invalidation fix (+1 test) |
+| 3 | 20:08 | Enhanced status API (stage_info, available_next, total_transitions) |
+| 4 | 20:20 | Fixed 3 bugs: clear_cache rebinding, cache key drift, concurrency backward transitions |
+| 5 | 20:42 | Added shell_test stdout_matches regex op (+3 tests) |
+| 6 | 20:47 | Added shell_test lt/eq ops (+4 tests), fixed flaky test_no_duplicate_history_entries |
+| 7 | 20:53 | Audited all 27 CONDITION_DEFS → fixed 6 condition type op mismatches |
+| 8 | 20:58 | Research: ARF framework, 5-state model, idempotency patterns (no code) |
 
-### Improvement #1: Condition Severity Levels (Blueprint A)
-- **stageflow/core/conditions.py**: 
-  - `_parse_condition()` skips `severity` and `max_attempts` meta-keys
-  - `_get_severity(cond)` returns `"soft"` by default
-  - `evaluate_all()` handles 3 severity tiers:
-    - `warn`: always passes, logs `[WARN]` tag
-    - `soft` (default): normal — fail blocks transition with `[FAIL]`
-    - `hard`: fail blocks immediately with `[HARD_FAIL]`, stops evaluating subsequent conditions
-- **stageflow/core/engine.py**: `_handle_transition_failure()` detects `HARD_FAIL` and prevents rollback (`[HARD_BLOCK]`)
-- **tests/test_conditions.py**: 21 new tests (TestConditionSeverity class)
-- **tests/test_engine.py**: 8 new tests (TestSeverityInEngine class)
+## 最终代码变更
 
-### Improvement #2: Audit Log Query API (Blueprint C subset)
-- **editor/server.py**: `GET /api/audit` — query with limit + event_type filter, `GET /api/audit/summary` — AuditLogger summary
-- **tests/test_server.py**: 7 new tests (TestAuditEndpoints class)
-
-### Improvement #3: Workflow Run API (Blueprint C subset)
-- **editor/server.py**: 
-  - `POST /api/generate` — NL → YAML via WorkflowGenerator
-  - `GET/PUT/DELETE /api/workflows/{name}` — workflow CRUD with YAML validation
-  - `GET /api/workflows` — list saved workflows
-  - `POST /api/workflows/{name}/run` — initialize + advance stages
-  - `GET /api/workflows/{name}/status` — stage, history, paused, variables
-  - `POST /api/workflows/{name}/pause` / `resume`
-- **tests/test_server.py**: 20 new tests (TestWorkflowCRUD + TestWorkflowExecution classes)
-
-### Fixes
-- `_parse_condition` now raises `ValueError` (not `StopIteration`) for empty dicts — updated pre-existing test
-
-## 下一步
-
-Ralph 自动从 task-025-LOOP 开始（时间门控循环 — ≥21:00 停止，<21:00 搜索+迭代）
+- **stageflow/core/conditions.py**: clear_cache() .clear() fix, evaluate_all cache key computed once, any_of defensive copy, shell_test stdout_matches/lt/eq ops
+- **editor/server.py**: Filter _-prefixed internal conditions, fix 6 CONDITION_DEFS op mismatches (shell_test, env_var, git_status, compare_files, json_field, yaml_field, command_exists)
+- **tests/test_conditions.py**: +10 tests (stdout_matches x3, lt x2, eq x2 — already had gt x3)
+- **tests/test_concurrency.py**: Fix backward transition logic, fix flaky timestamp test
+- **.ralph/fix_plan.md**: task-025-LOOP marked [x]
 
 ## 已知问题
 
-1. Hook 当前已关闭
-2. test_cache.py + test_concurrency.py 预存失败（6 个，与 severity 无关）
-3. test_stress.py 超时（sleep-based 测试）
-4. Guard hook Windows 兼容性（Bash vs PowerShell）
-5. Phase 9: 9.3 并行条件评估、9.6 MCP Server 集成 未实现
-6. Phase 11: GitHub Actions、Docker、VS Code 扩展、Linear/Notion 同步 未开始
+1. test_stress.py 挂起（sleep/threading-based 测试，需调查）
+2. Guard hook Windows 兼容性（Bash vs PowerShell）
+3. Hook 当前已关闭
+
+## 未来工作建议
+
+### 短期（源自 Loop 8 调研）
+- **transition_reason 字段**: 在 engine.py transition_to() 添加可选 `reason` 参数，写入 history record
+- **http_status body_contains**: 扩展 http_status handler 支持响应体内容匹配
+- **idempotency key**: 绑定工具调用到状态迁移
+
+### 中期（Phase 9 遗留）
+- 9.3 并行条件评估（concurrent.futures 或 asyncio）
+- 9.6 MCP Server 集成 (FastMCP @mcp.tool() 暴露条件)
+
+### 长期（Phase 11）
+- GitHub Actions CI、Docker 镜像、VS Code 扩展、Linear/Notion 同步

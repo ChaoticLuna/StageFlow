@@ -67,7 +67,7 @@
 
 ## 🔄 最终迭代循环 (Time-Gated Loop)
 
-- [ ] **task-025-LOOP**:
+- [x] **task-025-LOOP**:
   1. Run `python -c "from datetime import datetime; now=datetime.now(); print(f'{now.hour:02d}:{now.minute:02d}'); exit(0 if now.hour >= 21 else 1)"`
   2. **If exit 0 (≥21:00)**: mark this task `[x]`, print "Done for today.", signal EXIT.
   3. **If exit 1 (<21:00)**:
