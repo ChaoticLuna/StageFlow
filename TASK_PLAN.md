@@ -91,7 +91,7 @@
 |---|------|------|------|
 | 8.1 | Agent 循环引擎 | ✅ | stageflow/agent/runner.py → task-016 |
 | 8.2 | LLM + StageFlow 混合工作流 | ✅ | agent/hybrid.py → task-017 |
-| 8.3 | 多 Agent 编排器 | ⬜ | agent/orchestrator.py → task-018 |
+| 8.3 | 多 Agent 编排器 | ✅ | agent/orchestrator.py → task-018 |
 
 ## Phase 9: 高级特性
 
