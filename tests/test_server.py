@@ -608,3 +608,46 @@ transitions:
         d = r.json()
         assert d["success"] is False
         assert "No available" in str(d["messages"])
+
+    def test_save_invalidates_engine_cache(self):
+        """After updating a workflow YAML, the cached engine is invalidated."""
+        name = "test_cache_inval"
+        NEW_YAML = """
+stages:
+  - name: start
+    tools: [Read]
+  - name: finish
+    tools: []
+transitions:
+  - from: start
+    to: finish
+    conditions:
+      - always: true
+"""
+
+        import shutil
+        try:
+            # Save initial workflow
+            client.put(f"/api/workflows/{name}", json={"yaml": self.SETUP_YAML})
+            # Run to init engine
+            client.post(f"/api/workflows/{name}/run?target=pick")
+
+            # Update the workflow with different stages
+            client.put(f"/api/workflows/{name}", json={"yaml": NEW_YAML})
+
+            # The engine initializes at 'start' (root), advance to 'finish'
+            r = client.post(f"/api/workflows/{name}/run")
+            assert r.status_code == 200
+            d = r.json()
+            # Should succeed with new config and land at 'finish'
+            assert d["current_stage"] == "finish"
+            assert d["success"] is True
+        finally:
+            path = WORKFLOWS_DIR / f"{name}.yaml"
+            if path.exists():
+                path.unlink()
+            engine_dir = WORKFLOWS_DIR / name
+            if engine_dir.exists():
+                shutil.rmtree(engine_dir, ignore_errors=True)
+            from editor.server import _workflow_engines
+            _workflow_engines.pop(name, None)

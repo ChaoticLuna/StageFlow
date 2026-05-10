@@ -406,6 +406,12 @@ def save_workflow(name: str, req: WorkflowSaveRequest):
 
     path = WORKFLOWS_DIR / f"{name}.yaml"
     path.write_text(req.yaml, encoding="utf-8")
+    # Invalidate cached engine + state so the new config takes effect
+    _workflow_engines.pop(name, None)
+    import shutil
+    engine_dir = WORKFLOWS_DIR / name
+    if engine_dir.exists():
+        shutil.rmtree(engine_dir, ignore_errors=True)
     return {"name": name, "saved": True, "valid": True}
 
 
@@ -416,6 +422,12 @@ def delete_workflow(name: str):
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Workflow '{name}' not found")
     path.unlink()
+    # Clean up cached engine + state
+    _workflow_engines.pop(name, None)
+    import shutil
+    engine_dir = WORKFLOWS_DIR / name
+    if engine_dir.exists():
+        shutil.rmtree(engine_dir, ignore_errors=True)
     return {"name": name, "deleted": True}
 
 

@@ -1,1 +1,2 @@
 ﻿- [2026-05-10 19:56] Loop 1: 搜索发现 2026 harness engineering 范式验证了 StageFlow 架构（HASS pattern, DAG dependency graphs）。实施 max_iterations 每阶段硬上限（+6 tests），防止无限循环。618 tests pass。
+- [2026-05-10 20:03] Loop 2: MCP Server best practices 调研（FastMCP 成为标准，Streamable HTTP 替代 SSE）。发现并修复 bug：PUT/DELETE workflow 后 engine cache 未失效导致 stale config（+1 test）。619 tests pass。
