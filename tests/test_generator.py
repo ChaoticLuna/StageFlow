@@ -289,3 +289,73 @@ class TestTemplates:
         gen = WorkflowGenerator()
         valid, _ = gen.validate(t.example_yaml)
         assert valid is True
+
+
+class TestGenerateCLI:
+    """CLI integration tests for `python -m stageflow generate`."""
+
+    CLI_BASE = [sys.executable, "-m", "stageflow", "generate"]
+
+    def _run(self, *args):
+        import subprocess
+        result = subprocess.run(
+            [*self.CLI_BASE, *args],
+            capture_output=True, text=True, cwd=str(Path(__file__).parent.parent),
+            timeout=15,
+        )
+        return result
+
+    def test_list_templates(self):
+        result = self._run("--list-templates")
+        assert result.returncode == 0, result.stderr
+        assert "GENERIC" in result.stdout
+        assert "CI_CD" in result.stdout
+        assert "CODE_REVIEW" in result.stdout
+        assert "DATA_PIPELINE" in result.stdout
+
+    def test_generate_outputs_yaml_to_stdout(self):
+        result = self._run("A test workflow")
+        assert result.returncode == 0, result.stderr
+        assert "stages:" in result.stdout
+        assert "transitions:" in result.stdout
+
+    def test_generate_with_template_ci_cd(self):
+        result = self._run("build pipeline", "--template", "CI_CD")
+        assert result.returncode == 0, result.stderr
+        assert "checkout" in result.stdout
+        assert "deploy" in result.stdout
+        assert "done" in result.stdout
+
+    def test_generate_with_template_ci_cd_short_flag(self):
+        result = self._run("build pipeline", "-t", "CI_CD")
+        assert result.returncode == 0, result.stderr
+        assert "checkout" in result.stdout
+
+    def test_generate_with_validate_passes(self):
+        result = self._run("CI/CD pipeline", "--template", "CI_CD", "--validate")
+        assert result.returncode == 0, result.stderr
+        assert "stages:" in result.stdout
+
+    def test_generate_prompt_only(self):
+        result = self._run("test desc", "--prompt-only")
+        assert result.returncode == 0, result.stderr
+        assert "Design a StageFlow workflow" in result.stdout or "stages:" in result.stdout
+
+    def test_generate_output_to_file(self, tmp_path):
+        out_file = tmp_path / "output.yaml"
+        result = self._run("data pipeline", "-t", "DATA_PIPELINE", "--output", str(out_file))
+        assert result.returncode == 0, result.stderr
+        assert out_file.exists()
+        content = out_file.read_text()
+        assert "stages:" in content
+        assert "extract" in content
+
+    def test_generate_with_case_insensitive_template(self):
+        result = self._run("review workflow", "-t", "ci_cd")
+        assert result.returncode == 0, result.stderr
+        assert "stages:" in result.stdout
+
+    def test_generate_without_description_lists_templates(self):
+        result = self._run("--list-templates")
+        assert result.returncode == 0, result.stderr
+        assert "GENERIC" in result.stdout

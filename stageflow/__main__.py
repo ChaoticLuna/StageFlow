@@ -236,6 +236,76 @@ def cmd_cond(args):
     print(f"  {msg}")
 
 
+def cmd_generate(args):
+    from stageflow.generator.llm_generator import WorkflowGenerator, CONDITION_REFERENCE
+    from stageflow.generator.prompts import get_template, list_templates
+
+    if args.list_templates:
+        for t in list_templates():
+            print(f"  {t.name:20s} | {t.label}")
+        return 0
+
+    description = args.description
+    template = args.template
+
+    if args.prompt_only:
+        gen = WorkflowGenerator()
+        prompt = gen.build_prompt(description, template)
+        print(prompt)
+        return 0
+
+    tmpl = None
+    example = None
+    if template:
+        try:
+            tmpl = get_template(template)
+            example = tmpl.example_yaml
+        except KeyError:
+            print(f"Unknown template '{template}'. Using GENERIC.", file=sys.stderr)
+            template = "GENERIC"
+            tmpl = get_template(template)
+            example = tmpl.example_yaml
+
+    if example is None:
+        try:
+            tmpl = get_template("GENERIC")
+            example = tmpl.example_yaml
+        except KeyError:
+            pass
+
+    def mock_llm(prompt: str) -> str:
+        if example:
+            return f"```yaml\n{example}\n```"
+        return f"```yaml\nstages:\n  - name: {description.replace(' ', '_').lower()[:30]}\n    tools: [Read, Grep]\ntransitions: []\n```"
+
+    gen = WorkflowGenerator(llm_call=mock_llm, template=template)
+    yaml_str, history = gen.generate(description, template=template)
+
+    if yaml_str is None:
+        print("Generation failed after retries:", file=sys.stderr)
+        for entry in history:
+            print(f"  Attempt {entry['attempt']}: {', '.join(entry['errors'])}", file=sys.stderr)
+        return 1
+
+    if args.validate:
+        valid, errors = gen.validate(yaml_str)
+        if not valid:
+            print("Generated YAML has validation errors:", file=sys.stderr)
+            for e in errors:
+                print(f"  - {e}", file=sys.stderr)
+            return 1
+
+    if args.output:
+        out_path = Path(args.output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(yaml_str, encoding="utf-8")
+        print(f"Written to {out_path.resolve()}")
+    else:
+        print(yaml_str)
+
+    return 0
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(
@@ -286,6 +356,14 @@ Examples:
     p.add_argument("type", help="Condition type name")
     p.add_argument("--params", help="JSON params for condition")
 
+    p = sub.add_parser("generate", help="Generate stages.yaml from description")
+    p.add_argument("description", nargs="?", help="Natural language workflow description")
+    p.add_argument("--template", "-t", help="Template: GENERIC, CI_CD, CODE_REVIEW, DATA_PIPELINE")
+    p.add_argument("--output", "-o", help="Write YAML to file instead of stdout")
+    p.add_argument("--validate", action="store_true", help="Validate generated YAML before output")
+    p.add_argument("--prompt-only", action="store_true", help="Print the LLM prompt instead of generating")
+    p.add_argument("--list-templates", action="store_true", help="List available templates and exit")
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -295,7 +373,7 @@ Examples:
         "status": cmd_status, "next": cmd_next, "back": cmd_back,
         "jump": cmd_jump, "reset": cmd_reset, "graph": cmd_graph,
         "list": cmd_list, "init": cmd_init, "check": cmd_check,
-        "cond": cmd_cond,
+        "cond": cmd_cond, "generate": cmd_generate,
     }
     return commands[args.command](args)
 

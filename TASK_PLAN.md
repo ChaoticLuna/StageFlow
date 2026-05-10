@@ -83,7 +83,7 @@
 |---|------|------|------|
 | 7.1 | 生成器核心 — NL → YAML via LLM | ✅ | stageflow/generator/ → task-013 |
 | 7.2 | 提示词模板系统 (CI/CD, Review, ...) | ✅ | generator/prompts.py → task-014 |
-| 7.3 | CLI `stageflow generate` + 测试 | ⬜ | __main__.py + tests → task-015 |
+| 7.3 | CLI `stageflow generate` + 测试 | ✅ | __main__.py + tests → task-015 |
 
 ## Phase 8: Agent 运行时 🆕
 
