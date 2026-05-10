@@ -344,23 +344,27 @@ def generate_workflow(req: GenerateRequest):
 
         # Use mock LLM that returns template-based YAML
         def api_llm(prompt: str) -> str:
-            from stageflow.generator.prompts import PromptTemplate, get_template
-            template = PromptTemplate(req.template) if req.template else PromptTemplate.GENERAL
-            tmpl = get_template(template)
+            from stageflow.generator.prompts import get_template
+            tmpl_name = req.template or "GENERIC"
+            tmpl = get_template(tmpl_name)
             desc = req.description
-            # Return the template example as a starting point
             return (
                 f"Based on the description '{desc}', here is a workflow:\n\n"
-                f"```yaml\n{tmpl.example}\n```"
+                f"```yaml\n{tmpl.example_yaml}\n```"
             )
 
         gen = WorkflowGenerator(llm_call=api_llm)
         yaml_str, history = gen.generate(req.description, template=req.template)
 
+        msg_strings = [
+            h["raw_response"][:200] for h in history
+            if isinstance(h, dict) and h.get("raw_response")
+        ]
+
         return GenerateResponse(
             yaml=yaml_str or "",
             success=yaml_str is not None and len(yaml_str) > 0,
-            messages=history,
+            messages=msg_strings,
         )
     except Exception as e:
         return GenerateResponse(yaml="", success=False, messages=[str(e)])

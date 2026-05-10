@@ -656,3 +656,15 @@ transitions:
                 shutil.rmtree(engine_dir, ignore_errors=True)
             from editor.server import _workflow_engines
             _workflow_engines.pop(name, None)
+
+
+class TestGenerateEndpoint:
+    def test_generate_default_template_does_not_crash(self):
+        """Regression: PromptTemplate.GENERAL (typo) crashed the endpoint."""
+        r = client.post("/api/generate", json={"description": "A simple CI pipeline"})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        if not d.get("success"):
+            pytest.fail(f"generate failed: {d}")
+        assert d["yaml"] is not None
+        assert "stages:" in d["yaml"]
