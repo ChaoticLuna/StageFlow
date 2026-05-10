@@ -21,16 +21,33 @@ from typing import Any, Dict, List, Optional
 class AuditLogger:
     """Structured audit logger for StageFlow. Writes JSONL to .claude/audit.jsonl."""
 
-    def __init__(self, base_path: str = "."):
+    def __init__(self, base_path: str = ".", max_entries: int = 0):
         self.base_path = Path(base_path)
         self.log_path = self.base_path / ".claude" / "audit.jsonl"
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self._stage_timers: Dict[str, float] = {}
+        self._max_entries = max_entries
+        self._write_count = 0
 
     def _write(self, entry: dict):
         entry["timestamp"] = datetime.now(timezone.utc).isoformat()
         with open(self.log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        if self._max_entries > 0:
+            self._write_count += 1
+            if self._write_count >= self._max_entries * 2:
+                self._truncate()
+
+    def _truncate(self):
+        if not self.log_path.exists():
+            return
+        lines = self.log_path.read_text(encoding="utf-8").strip().split("\n")
+        if len(lines) <= self._max_entries:
+            self._write_count = len(lines)
+            return
+        keep = lines[-self._max_entries:]
+        self.log_path.write_text("\n".join(keep) + "\n", encoding="utf-8")
+        self._write_count = len(keep)
 
     def log_transition(self, from_stage: Optional[str], to_stage: str,
                        success: bool, messages: List[str] = None,
