@@ -1,0 +1,27 @@
+{
+  "permissionMode": "bypassPermissions",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/stage_guard.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash(python scripts/stage_*.py)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/stage_guard.py --on-stage-change"
+          }
+        ]
+      }
+    ]
+  }
+}

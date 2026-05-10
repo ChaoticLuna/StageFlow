@@ -1,0 +1,141 @@
+Metadata-Version: 2.4
+Name: stageflow
+Version: 0.2.0
+Summary: Declarative extensible state machine for AI-driven workflows
+Author: Cyaos
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pyyaml>=6.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+
+# StageFlow — AI 驱动低风险 Issue 自动交付状态机
+
+## 项目概述
+
+本仓库实现了一套**声明式、可扩展的阶段化状态机框架**，用于约束 AI Coding Agent 按照
+固定工作周期执行任务。框架负责所有阶段判定，AI 模型不参与规则判断。
+
+## 核心设计
+
+```
+Stage (节点) + Transition (连线) + Condition (条件) = 可扩展状态机
+```
+
+- **Stage**: 工作阶段，定义当前可用的工具白名单
+- **Transition**: 阶段间连线，定义从 A→B 的条件
+- **Condition**: 插拔式条件判断，框架自动求值
+
+## 可用的操作脚本
+
+**所有阶段转移必须通过以下脚本，不能手动修改状态文件：**
+
+| 脚本 | 用途 | 示例 |
+|------|------|------|
+| `python scripts/stage_next.py` | 进入下一阶段（自动选择） | `python scripts/stage_next.py` |
+| `python scripts/stage_next.py <target>` | 进入指定阶段 | `python scripts/stage_next.py implement` |
+| `python scripts/stage_next.py --list` | 查看可进入的阶段 | `python scripts/stage_next.py -l` |
+| `python scripts/stage_next.py --dry-run` | 检查条件但不转移 | `python scripts/stage_next.py -n` |
+| `python scripts/stage_next.py --force` | 强制进入（跳过条件） | `python scripts/stage_next.py -f` |
+| `python scripts/stage_status.py` | 查看当前阶段状态 | `python scripts/stage_status.py` |
+| `python scripts/stage_reset.py` | 重置到初始阶段 | `python scripts/stage_reset.py` |
+| `python scripts/stage_jump.py <target>` | 跳转到指定阶段 | `python scripts/stage_jump.py verify` |
+| `python scripts/stage_jump.py <target> -f` | 强制跳转 | `python scripts/stage_jump.py wrap_up -f` |
+
+## 框架阶段定义 (stages.yaml)
+
+当前共 **10 个阶段**（含终端 `done`）：
+
+```
+pick → analyze → plan → implement → verify → document → mr → review → wrap_up → done
+              ↑                  ↑        ↓                      ↓
+              └── 失败回退 ──────┘        └── retry ─────────────┘
+```
+
+每个阶段的工具白名单定义在 `stageflow/config/stages.yaml`。
+Hook `PreToolUse` 会自动拦截阶段外工具调用。
+
+## 扩展新阶段
+
+**只需两步，零代码改动：**
+
+1. 在 `stageflow/config/stages.yaml` 的 `stages:` 下添加新条目：
+```yaml
+  - name: my_new_stage
+    tools: [Read, Write, Bash(python *)]
+    meta:
+      description: "我的新阶段"
+```
+
+2. 在 `transitions:` 下添加连线：
+```yaml
+  - from: existing_stage
+    to: my_new_stage
+    conditions:
+      - file_exists: artifacts/existing/output.md
+```
+
+如果要添加自定义条件类型，在 `stageflow/core/conditions.py` 使用装饰器注册：
+```python
+from stageflow.core.conditions import register
+
+@register("my_condition")
+def my_condition(params: dict) -> tuple[bool, str]:
+    # params 来自 YAML 配置
+    return True, "Condition passed"
+```
+
+## 内置条件类型（框架自动求值）
+
+| 条件类型 | 用途 | 配置示例 |
+|----------|------|----------|
+| `file_exists` | 文件存在 | `{file_exists: path/to/file.md}` |
+| `file_not_exists` | 文件不存在 | `{file_not_exists: path/to/temp.md}` |
+| `file_contains` | 文件包含模式 | `{file_contains: {path: f.md, pattern: "PASS"}}` |
+| `file_not_contains` | 文件不包含模式 | `{file_not_contains: {path: f.md, pattern: "FAIL"}}` |
+| `json_field` | JSON 字段检查 | `{json_field: {path: data.json, field: key, op: not_empty}}` |
+| `yaml_field` | YAML 字段检查 | `{yaml_field: {path: data.yaml, field: key, op: exists}}` |
+| `shell_test` | Shell 命令测试 | `{shell_test: {command: "pytest -q", op: exit_zero}}` |
+| `python_expr` | Python 表达式 | `{python_expr: {expr: "len(open('f.md').read()) > 100"}}` |
+| `env_var` | 环境变量 | `{env_var: {name: CI, op: equals, value: true}}` |
+| `all_of` | 所有条件满足 | `{all_of: {conditions: [...]}}` |
+| `any_of` | 任一条件满足 | `{any_of: {conditions: [...]}}` |
+| `not` | 取反 | `{not: {condition: {...}}}` |
+| `always` | 始终通过 | `{always: true}` |
+| `never` | 始终拒绝 | `{never: "reason"}` |
+
+## 工作约束
+
+1. **不能手动修改** `.claude/current_stage.json` — 状态由框架管理
+2. **不能跳过阶段** — 必须通过 `stage_next.py` 进入下一阶段
+3. **阶段内工具受限** — 使用未授权工具会被 Hook 拦截
+4. **条件由框架判断** — 模型不能自行决定"条件已满足"
+5. **失败自动回退** — verify 失败回退 implement，多次失败回退 plan
+
+## 目录结构
+
+```
+test/
+├── stageflow/                  # 框架核心
+│   ├── core/
+│   │   ├── conditions.py       # 条件判断系统（14 种类型）
+│   │   ├── registry.py         # 阶段注册表
+│   │   ├── engine.py           # 状态机引擎
+│   │   └── guard.py            # 工具守卫
+│   ├── config/
+│   │   └── stages.yaml         # 声明式阶段定义
+│   └── artifacts/              # 阶段产物
+├── scripts/                    # 操作脚本（模型可调用）
+│   ├── stage_next.py
+│   ├── stage_status.py
+│   ├── stage_reset.py
+│   └── stage_jump.py
+├── tests/                      # pytest 测试
+├── .claude/
+│   ├── settings.json           # Hook 配置
+│   └── hooks/
+│       └── stage_guard.py      # PreToolUse Hook
+└── CLAUDE.md                   # 本文档
+```

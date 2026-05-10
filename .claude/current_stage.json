@@ -1,0 +1,11 @@
+{
+  "current_stage": "analyze",
+  "history": [],
+  "retry_count": {
+    "analyze": 0
+  },
+  "iterations": {
+    "analyze": 1
+  },
+  "variables": {}
+}

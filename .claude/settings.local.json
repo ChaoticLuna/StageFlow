@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xxd \"C:/Users/Chaos/Documents/Obsidian_Note/test/.claude/settings.local.json\")",
+      "Bash(python *)"
+    ]
+  },
+  "permissionMode": "bypassPermissions"
+}
