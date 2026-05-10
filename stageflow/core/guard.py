@@ -26,7 +26,7 @@ class StageGuard:
     """
 
     def __init__(self, config_path: str = "stageflow/config/stages.yaml",
-                 base_path: str = ".", registry: StageRegistry = None,
+                 base_path: str = ".", registry: StageRegistry | None = None,
                  enforce_path_guard: bool = True):
         self.registry = registry if registry is not None else StageRegistry(config_path)
         self.machine = StateMachine(self.registry, base_path)
@@ -53,7 +53,7 @@ class StageGuard:
             return True, ""
         return False, f"Write denied: '{file_path}' — stage only allows writes to artifacts/ or .claude/"
 
-    def check(self, tool_name: str, tool_input: dict = None) -> tuple[bool, str]:
+    def check(self, tool_name: str, tool_input: dict | None = None) -> tuple[bool, str]:
         """Check if a tool call is allowed. Returns (allowed, message)."""
         self.machine._state = self.machine._load_state()
         base_result = self.machine.is_tool_allowed(tool_name)

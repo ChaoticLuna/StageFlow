@@ -20,6 +20,8 @@ dependencies = [
 dev = [
     "pytest>=7.0",
     "pytest-cov",
+    "mypy>=1.0",
+    "types-PyYAML",
 ]
 anthropic = [
     "anthropic>=0.18.0",
@@ -45,6 +47,12 @@ stageflow = "stageflow.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["stageflow*"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_configs = true
+disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

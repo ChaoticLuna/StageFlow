@@ -24,7 +24,7 @@ from stageflow.agent.hybrid import HybridWorkflow
 class TaskDef:
     """A task definition with optional dependencies."""
 
-    def __init__(self, task_id: str, description: str, depends_on: list[str] = None):
+    def __init__(self, task_id: str, description: str, depends_on: list[str] | None = None):
         self.task_id = task_id
         self.description = description
         self.depends_on = depends_on or []
@@ -61,7 +61,7 @@ class WorkflowOrchestrator:
     # ── Task Registration ─────────────────────────────────────────────
 
     def add_task(self, task_id: str, description: str,
-                 depends_on: list[str] = None):
+                 depends_on: list[str] | None = None):
         """Register a task. If depends_on is provided, those tasks must
         complete before this one starts."""
         self._tasks[task_id] = TaskDef(task_id, description, depends_on)
@@ -135,7 +135,7 @@ class WorkflowOrchestrator:
 
     async def _run_async(self) -> dict:
         completed: set[str] = set()
-        running: dict[str, asyncio.Task] = {}
+        running: dict[str, asyncio.Future] = {}
         all_ids = set(self._tasks.keys())
         errors: list[str] = []
 

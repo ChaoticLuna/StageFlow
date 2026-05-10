@@ -51,7 +51,7 @@ class Transition:
         self.description: str = data.get("description", "")
 
     def evaluate(self, base_path: str = ".", cache_ttl: float = 0,
-                 variables: dict = None) -> tuple[bool, list[str]]:
+                 variables: Optional[dict] = None) -> tuple[bool, list[str]]:
         """Evaluate all conditions for this transition.
 
         cache_ttl=0 by default: each transition check is a fresh evaluation.
@@ -149,7 +149,7 @@ class StageRegistry:
 
     # ── Registration API (for programmatic extension) ───────────────────
 
-    def register_stage(self, name: str, tools: List[str] = None,
+    def register_stage(self, name: str, tools: Optional[List[str]] = None,
                        description: str = "", **kwargs) -> Stage:
         """Dynamically register a new stage. Does not persist to YAML."""
         data = {"name": name, "tools": tools or [], "description": description, **kwargs}
@@ -176,8 +176,8 @@ class StageRegistry:
         return True
 
     def register_transition(self, from_stage: str, to_stage: str,
-                            conditions: List[dict] = None,
-                            on_fail: str = None, description: str = "") -> Transition:
+                            conditions: Optional[List[dict]] = None,
+                            on_fail: Optional[str] = None, description: str = "") -> Transition:
         """Dynamically register a new transition."""
         trans = Transition({
             "from": from_stage, "to": to_stage,

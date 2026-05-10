@@ -50,7 +50,7 @@ class AuditLogger:
         self._write_count = len(keep)
 
     def log_transition(self, from_stage: Optional[str], to_stage: str,
-                       success: bool, messages: List[str] = None,
+                       success: bool, messages: Optional[List[str]] = None,
                        forced: bool = False):
         """Log a stage transition attempt."""
         self._write({
@@ -112,7 +112,7 @@ class AuditLogger:
             "message": message,
         })
 
-    def log_error(self, error_type: str, message: str, context: dict = None):
+    def log_error(self, error_type: str, message: str, context: Optional[dict] = None):
         """Log a framework error."""
         self._write({
             "event": "error",
@@ -142,7 +142,7 @@ class AuditLogger:
         stages_exited = [e for e in events if e.get("event") == "stage_exit"]
 
         # Calculate per-stage durations
-        stage_durations = {}
+        stage_durations: Dict[str, float] = {}
         for e in stages_exited:
             s = e.get("stage")
             d = e.get("duration_seconds", 0)

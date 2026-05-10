@@ -46,7 +46,7 @@ def clear_cache():
     _CONDITION_CACHE.clear()
 
 
-def _cache_key(conditions: list[dict], base_path: str, variables: dict = None) -> str:
+def _cache_key(conditions: list[dict], base_path: str, variables: Optional[dict] = None) -> str:
     """Generate a cache key from conditions, base path, and optional variables."""
     raw = json.dumps(conditions, sort_keys=True, default=str) + "|" + base_path
     if variables:
@@ -90,7 +90,7 @@ def evaluate(name: str, params: dict) -> Tuple[bool, str]:
 
 def evaluate_all(conditions: list[dict], base_path: str = ".",
                  cache_ttl: Optional[float] = None,
-                 variables: dict = None,
+                 variables: Optional[dict] = None,
                  timeout: Optional[float] = None) -> Tuple[bool, list[str]]:
     """Evaluate a list of conditions. Returns (all_passed, messages).
 
@@ -178,7 +178,7 @@ def _parse_condition(cond: dict) -> Tuple[str, dict]:
     """Parse a condition dict like {'file_exists': 'path/to/file'} or
     {'json_field': {'path': '...', 'field': '...', 'op': 'not_empty'}}.
     Returns (condition_type, params_dict)."""
-    known_keys = set()
+    known_keys: set[str] = set()
     for key in cond:
         if key not in ("severity", "max_attempts"):
             name = key
@@ -269,9 +269,13 @@ def _json_field(params: dict) -> Tuple[bool, str]:
         ok = obj != expected
         return ok, f"Field '{field}' != {expected!r}: {ok} (got {obj!r})"
     elif op == "gt":
+        if obj is None or expected is None:
+            return False, f"Field '{field}' or expected is None for gt comparison"
         ok = float(obj) > float(expected)
         return ok, f"Field '{field}' > {expected}: {ok} (got {obj})"
     elif op == "lt":
+        if obj is None or expected is None:
+            return False, f"Field '{field}' or expected is None for lt comparison"
         ok = float(obj) < float(expected)
         return ok, f"Field '{field}' < {expected}: {ok} (got {obj})"
     elif op == "in":
@@ -359,20 +363,20 @@ def _shell_test(params: dict) -> Tuple[bool, str]:
         return ok, f"stdout matches /{expected}/: {ok}"
     elif op == "gt":
         try:
-            ok = float(output) > float(expected)
-        except ValueError:
+            ok = float(output) > float(str(expected))
+        except (ValueError, TypeError):
             ok = False
         return ok, f"stdout({output}) > {expected}: {ok}"
     elif op == "lt":
         try:
-            ok = float(output) < float(expected)
-        except ValueError:
+            ok = float(output) < float(str(expected))
+        except (ValueError, TypeError):
             ok = False
         return ok, f"stdout({output}) < {expected}: {ok}"
     elif op == "eq":
         try:
-            ok = float(output) == float(expected)
-        except ValueError:
+            ok = float(output) == float(str(expected))
+        except (ValueError, TypeError):
             ok = False
         return ok, f"stdout({output}) == {expected}: {ok}"
     else:

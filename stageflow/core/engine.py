@@ -226,7 +226,7 @@ class StateMachine:
         self.audit.log_transition(current, target, True, [msg], forced=force)
         return True, [msg]
 
-    def _handle_transition_failure(self, current: str, target: str,
+    def _handle_transition_failure(self, current: str | None, target: str,
                                    msgs: List[str]) -> Tuple[bool, List[str]]:
         """Handle failed transition: increment retry count and optionally rollback.
         Hard-blocked conditions prevent rollback."""
@@ -234,12 +234,13 @@ class StateMachine:
         has_hard_fail = any("HARD_FAIL" in m for m in msgs)
 
         # Increment retry count for current stage
+        current_str = current or ""
         self._state.setdefault("retry_count", {})
-        self._state["retry_count"][current] = self._state["retry_count"].get(current, 0) + 1
+        self._state["retry_count"][current_str] = self._state["retry_count"].get(current_str, 0) + 1
         self._save_state()
 
         # Check if we should rollback
-        transitions = self.registry.get_transitions_from(current)
+        transitions = self.registry.get_transitions_from(current_str)
         matching = [t for t in transitions if t.to_stage == target]
 
         rollback_target = None

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import yaml
 
@@ -293,6 +293,8 @@ class AnthropicAdapter:
         if self._client is None:
             import anthropic
             self._client = anthropic.Anthropic(api_key=self.api_key)
+
+        assert self._client is not None, "Client should be initialized"
 
         system, _, rest = prompt.partition("\n\n")
         if system.startswith("You are"):
