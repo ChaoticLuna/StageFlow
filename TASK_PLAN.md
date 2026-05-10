@@ -54,7 +54,7 @@
 | 4.6 | 性能基准测试 | ✅ | test_benchmark.py → task-003 |
 | 4.7 | Hook 集成测试 | ✅ | test_hooks_integration.py → task-004 |
 
-## Phase 5: 文档与演示 🔄
+## Phase 5: 文档与演示 ✅
 
 | # | 任务 | 状态 | 产出 |
 |---|------|------|------|
@@ -63,7 +63,7 @@
 | 5.3 | TASK_PLAN.md 任务计划 | ✅ | 本文件 |
 | 5.4 | HANDOFF.md 交接文档 | ✅ | Agent 交接记录 |
 | 5.5 | Demo 脚本 | ✅ | demo/demo_workflow.py |
-| 5.6 | API 参考文档 | ⬜ | docs/api_reference.md → task-005 |
+| 5.6 | API 参考文档 | ✅ | docs/api_reference.md → task-005 |
 
 ## Phase 6: 可视化工作流编辑器 🆕
 
