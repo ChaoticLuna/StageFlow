@@ -108,7 +108,7 @@
 - [x] **task-037**: Add 3 new condition types: `port_open` (check TCP port is listening), `process_running` (check process by name/cmdline), `docker_ps` (check container running). +6 tests each = 18 tests.
 - [x] **task-038**: Add audit log rotation — `max_entries` param on `AuditLogger.__init__` that truncates oldest entries when exceeded. Write ~10000 synthetic entries and verify count stays ≤ max. +3 tests.
 - [x] **task-039**: Extend guard.py to inspect `tool_input` — deny `Write`/`Edit` operations targeting paths outside `artifacts/` or `.claude/` in restricted stages. +5 tests.
-- [ ] **task-040**: Update CLAUDE.md to match current state — fix test count (6→17), fix directory structure (test/→stageflow/), add missing `stage_back.py` reference if task-035 delivers it.
+- [x] **task-040**: Update CLAUDE.md to match current state — fix test count (6→17), fix directory structure (test/→stageflow/), add missing `stage_back.py` reference if task-035 delivers it.
 
 ---
 

@@ -19,12 +19,12 @@ StageFlow 是一套**声明式、可扩展的阶段化状态机框架**，用于
 
 ```
 Framework files:  7 modules (~1,800 lines)
-Test files:       6 files (~2,400 lines)
-Tests:           362 passed, 0 failed
-Conditions:       27 types
+Test files:      19 files (~9,000 lines)
+Tests:           755 passed, 0 failed
+Conditions:       30 types
 Stages (default): 10 (pick → done)
 Transitions:      11 (含回退/重试路径)
-Extensibility:    100 stages verified
+Extensibility:    1,000 stages verified
 ```
 
 ## 快速开始
@@ -51,7 +51,7 @@ python -m stageflow list
 ```
 stageflow/
 ├── core/
-│   ├── conditions.py    # 条件判断系统（27 种类型，插件注册）
+│   ├── conditions.py    # 条件判断系统（30 种类型，插件注册）
 │   ├── registry.py      # 阶段注册表（动态增删 Stage/Transition）
 │   ├── engine.py        # 状态机引擎（转移判定、回退、变量、生命周期 Hook）
 │   ├── guard.py         # 工具守卫（Claude Code Hook 集成）
@@ -86,7 +86,7 @@ transitions:
     on_fail: analyze      # 失败自动回退目标
 ```
 
-## 内置条件类型（27 种）
+## 内置条件类型（30 种）
 
 | 类型 | 用途 | 示例 |
 |------|------|------|
@@ -117,6 +117,9 @@ transitions:
 | `command_exists` | 命令是否存在 | `{command_exists: "pytest"}` |
 | `diff_contains` | Git diff 模式检查 | `{diff_contains: {pattern: "eval\(", op: not_contains}}` |
 | `json_count` | JSON 元素计数 | `{json_count: {path: results.json, min: 5}}` |
+| `port_open` | TCP 端口监听检查 | `{port_open: {port: 8080, host: "127.0.0.1"}}` |
+| `process_running` | 进程运行检查 | `{process_running: {name: "python"}}` |
+| `docker_ps` | Docker 容器运行检查 | `{docker_ps: {name: "postgres"}}` |
 
 ## 变量插值
 
@@ -270,41 +273,63 @@ python -m stageflow cond <type>    # 测试条件类型
 ## 目录完整结构
 
 ```
-test/
+auto_workflow/
 ├── stageflow/
 │   ├── __init__.py
 │   ├── __main__.py            # CLI（python -m stageflow）
 │   ├── core/
-│   │   ├── conditions.py      # 27 种条件 + 缓存
+│   │   ├── conditions.py      # 30 种条件 + 缓存
 │   │   ├── registry.py        # StageRegistry + 动态 CRUD
 │   │   ├── engine.py          # StateMachine + 多重重试 + 生命周期
 │   │   ├── guard.py           # Tool Guard + Claude Hook
 │   │   └── audit.py           # AuditLogger
 │   ├── config/
 │   │   └── stages.yaml        # 10 阶段 + 11 转移声明
+│   ├── generator/
+│   │   ├── llm_generator.py   # LLM 工作流生成器
+│   │   └── prompts.py         # 4 种领域模板
+│   ├── agent/
+│   │   ├── runner.py          # Agent 运行时
+│   │   ├── hybrid.py          # 混合工作流
+│   │   └── orchestrator.py    # 并行编排器
 │   └── artifacts/
+├── editor/
+│   ├── server.py              # FastAPI 后端 (17 端点)
+│   └── src/                   # React + ReactFlow 前端
 ├── scripts/
 │   ├── stage_next.py
 │   ├── stage_status.py
 │   ├── stage_reset.py
 │   ├── stage_jump.py
-│   └── stage_back.py
+│   ├── stage_back.py          # CLI 回退
+│   ├── hooks_off.py
+│   └── hooks_on.py
 ├── tests/
 │   ├── conftest.py            # Fixtures + Pytest 插件
-│   ├── test_conditions.py     # 198 tests
-
-[...too long, omitted...]
+│   ├── test_conditions.py     # 346 tests
 │   ├── test_registry.py       # 65 tests
-│   ├── test_engine.py         # 28 tests
-│   ├── test_guard.py          # 8 tests
+│   ├── test_engine.py         # 59 tests
+│   ├── test_guard.py          # 13 tests
 │   ├── test_edge_cases.py     # 15 tests
 │   ├── test_e2e.py            # 18 tests
-│   └── test_extensibility_quick.py  # 100-stage proof
+│   ├── test_extensibility.py  # 29 tests
+│   ├── test_agent.py          # 35 tests
+│   ├── test_benchmark.py      # 18 tests
+│   ├── test_cache.py          # 31 tests
+│   ├── test_concurrency.py    # 21 tests
+│   ├── test_generator.py      # 43 tests
+│   ├── test_hooks_integration.py # 17 tests
+│   ├── test_hybrid.py         # 25 tests
+│   ├── test_orchestrator.py   # 33 tests
+│   ├── test_perf.py           # 7 tests
+│   ├── test_server.py         # 51 tests
+│   └── test_audit.py          # 4 tests
 ├── .claude/
 │   ├── settings.json          # PreToolUse Hook 配置
 │   ├── settings.local.json
 │   └── hooks/
 │       └── stage_guard.py     # Claude Code Hook 入口
+├── .ralph/                    # Ralph Agent 数据
 ├── pyproject.toml             # pip install -e .
 └── CLAUDE.md                  # 本文档
 ```
