@@ -102,14 +102,19 @@ html, body, #root {
 .stage-node {
   background: #e3f2fd;
   border: 2px solid #1565c0;
-  border-radius: 8px;
-  padding: 0.5rem 0.75rem;
-  min-width: 120px;
+  border-radius: 10px;
+  padding: 0.6rem 0.85rem;
+  min-width: 140px;
   font-size: 0.82rem;
+  transition: box-shadow 0.15s;
+}
+
+.stage-node:hover {
+  box-shadow: 0 2px 8px rgba(21, 101, 192, 0.15);
 }
 
 .stage-node.selected {
-  box-shadow: 0 0 0 2px #4caf50;
+  box-shadow: 0 0 0 2px #4caf50, 0 2px 12px rgba(76, 175, 80, 0.2);
 }
 
 .stage-node.terminal {
@@ -117,33 +122,142 @@ html, body, #root {
   border-color: #607d8b;
 }
 
+.stage-node.terminal:hover {
+  box-shadow: 0 2px 8px rgba(96, 125, 139, 0.15);
+}
+
 .stage-node-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  margin-bottom: 0.3rem;
+}
+
+.stage-icon {
+  font-size: 0.55rem;
+  color: #1565c0;
+  flex-shrink: 0;
+}
+
+.stage-icon.terminal-icon {
+  color: #43a047;
+  font-size: 0.65rem;
 }
 
 .stage-node-name {
   font-weight: 600;
   color: #1a1a2e;
-}
-
-.stage-node-badge {
-  font-size: 0.65rem;
-  background: #1565c0;
-  color: #fff;
-  padding: 0.1rem 0.35rem;
-  border-radius: 8px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.78rem;
 }
 
 .stage-node-desc {
-  margin-top: 0.25rem;
   font-size: 0.7rem;
   color: #666;
-  max-width: 160px;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-bottom: 0.4rem;
+}
+
+.stage-node-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+.stage-badge {
+  font-size: 0.6rem;
+  background: #1565c0;
+  color: #fff;
+  padding: 0.08rem 0.35rem;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.stage-badge.terminal-badge {
+  background: #78909c;
+}
+
+.stage-badge.all-badge {
+  background: #6a1b9a;
+}
+
+.stage-badge.empty-badge {
+  background: #bdbdbd;
+  color: #555;
+}
+
+.stage-badge.hook-badge {
+  background: #f57c00;
+}
+
+/* Canvas toolbar */
+.canvas-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  outline: none;
+}
+
+.canvas-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid #1565c0;
+  background: #e3f2fd;
+  color: #1565c0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.toolbar-btn:hover {
+  background: #bbdefb;
+}
+
+.add-stage-btn .btn-icon {
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.toolbar-info {
+  font-size: 0.72rem;
+  color: #888;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.toolbar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-left: 0.25rem;
+}
+
+.active-dot {
+  background: #1565c0;
+}
+
+.terminal-dot {
+  background: #607d8b;
 }
 
 /* EdgeEditor modal */

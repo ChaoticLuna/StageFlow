@@ -2,50 +2,45 @@
 
 > **最后更新**: 2026-05-10
 > **当前 Agent**: Claude (via Claude Code)
-> **交接原因**: task-006 完成 — React 编辑器项目初始化
+> **交接原因**: task-007 完成 — Canvas + StageNode 完整实现
 
 ---
 
 ## 当前状态快照
 
 ```
-Tests:           441 total (424 passing + 17 hook integration)
-Conditions:      28 types
+Tests:           441 total
 Framework files: 7 modules (~2,000 lines)
-Test files:      10 files
-Docs:            docs/api_reference.md
-Editor:          editor/ — React 18 + TypeScript + Vite 8 + React Flow 11
+Editor:          editor/ — Vite 8 + React 18 + TS 6.0 + React Flow 11
   Components:    5 files (App, Canvas, StageNode, EdgeEditor, PropertiesPanel)
-  Dependencies:  reactflow, @tanstack/react-query, js-yaml
+  Canvas:        toolbar with "Add Stage", draggable nodes, delete key, minimap
+  StageNode:     color-coded (blue/gray), icons, tool/hook badges
   Build:         tsc clean, vite dev works
 Current stage:   plan
-Hook status:     DISABLED (开发模式)
-Ralph:           活跃 — 读取 .ralph/fix_plan.md 执行任务
+Ralph:           活跃 — task-008 next (PropertiesPanel 完整实现)
 ```
 
 ## 本次会话完成的工作
 
-1. **task-006 完成** — `editor/` React+TypeScript+Vite 项目:
-   - Vite 8 + React 18 + TypeScript 6.0 项目骨架
-   - 安装依赖: reactflow, @tanstack/react-query, js-yaml
-   - 创建共享类型 `types.ts` (StageData, EdgeData, ConditionDef, HookDef)
-   - 创建 `App.tsx` — ReactFlowProvider + Canvas + PropertiesPanel 布局
-   - 创建 `Canvas.tsx` — React Flow 画布 + 3 个初始节点 + 背景/控制/MiniMap
-   - 创建 `StageNode.tsx` — 自定义节点（名称 + 工具计数徽章 + 颜色标记）
-   - 创建 `EdgeEditor.tsx` — 边条件查看器模态框（骨架）
-   - 创建 `PropertiesPanel.tsx` — 节点属性面板（骨架）
-   - 创建 `App.css` — 完整样式系统（app shell + 节点 + 模态框 + 面板）
-   - TypeScript 编译通过（0 错误）
-   - Vite dev server 正常启动（http://localhost:5173）
+1. **task-007 完成** — Canvas.tsx + StageNode.tsx 完整实现:
+   - **Canvas.tsx**: "Add Stage" 工具栏按钮，自动生成新节点并定位到视口中心
+   - **节点创建**: 唯一 ID (`stage_1`, `stage_2`...)，随机位置偏移避免重叠
+   - **Delete 键支持**: 选中节点按 Delete/Backspace 删除（同时删除关联边）
+   - **MiniMap 颜色编码**: 终端节点灰色，普通节点蓝色
+   - **工具栏信息**: 显示总节点数、普通/终端统计
+   - **StageNode.tsx 增强**:
+     - 图标区分: 普通节点 `●` 蓝色，终端节点 `✔` 绿色
+     - 5 种徽章类型: 工具计数（蓝）、terminal（灰）、all tools（紫）、空工具（灰）、hook 指示（橙）
+     - Hover 阴影效果
+     - 选中绿色边框+阴影
+     - 一键删除快捷键
 
 ## 下一步
 
-Ralph 自动从 task-007 开始（Canvas 完整实现 — 添加节点按钮、拖拽、颜色编码）
+Ralph 自动从 task-008 开始（PropertiesPanel 完整实现 — 点击节点显示属性表单，实时更新）
 
 ## 已知问题
 
-1. Hook 当前已关闭 — `python scripts/hooks_on.py` 恢复
-2. **test_cache.py 还有 5 个失败** — 缓存测试假设错误
-3. **test_concurrency.py 有 1 个失败** — 历史记录顺序问题
-4. Guard hook Windows 兼容性 — `stage_guard.py` 只匹配 Bash 不匹配 PowerShell
-5. 当前 StageFlow 阶段 = plan
+1. Hook 当前已关闭
+2. test_cache.py + test_concurrency.py 预存失败（6 个）
+3. Guard hook Windows 兼容性（Bash vs PowerShell）

@@ -6,8 +6,10 @@ import ReactFlow, {
   addEdge,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   type Connection,
   type Edge,
+  type Node,
   BackgroundVariant,
 } from "reactflow";
 import StageNode from "./StageNode";
@@ -16,30 +18,46 @@ import type { StageNode as StageNodeType, EdgeData } from "../types";
 
 const nodeTypes = { stageNode: StageNode };
 
+const TERMINAL_STAGES = new Set(["done", "complete", "finished", "end"]);
+
+let _nodeCounter = 0;
+
+function newStageId(): string {
+  _nodeCounter += 1;
+  return `stage_${_nodeCounter}`;
+}
+
 const initialNodes: StageNodeType[] = [
   {
     id: "pick",
     type: "stageNode",
-    position: { x: 80, y: 100 },
+    position: { x: 80, y: 120 },
     data: { name: "pick", tools: ["Read", "Grep", "Glob"], description: "Pick an issue", on_enter: [], on_exit: [] },
   },
   {
     id: "analyze",
     type: "stageNode",
-    position: { x: 320, y: 100 },
+    position: { x: 320, y: 120 },
     data: { name: "analyze", tools: ["Read", "Grep", "WebSearch"], description: "Analyze root cause", on_enter: [], on_exit: [] },
   },
   {
     id: "plan",
     type: "stageNode",
-    position: { x: 560, y: 100 },
+    position: { x: 560, y: 120 },
     data: { name: "plan", tools: ["Read", "Write"], description: "Plan the fix", on_enter: [], on_exit: [] },
+  },
+  {
+    id: "done",
+    type: "stageNode",
+    position: { x: 800, y: 120 },
+    data: { name: "done", tools: [], description: "Work complete", on_enter: [], on_exit: [] },
   },
 ];
 
 const initialEdges: Edge<EdgeData>[] = [
   { id: "pick-analyze", source: "pick", target: "analyze", data: { conditions: [{ type: "always", params: {} }], on_fail: null, description: "Start analysis" } },
   { id: "analyze-plan", source: "analyze", target: "plan", data: { conditions: [{ type: "file_exists", params: { path: "artifacts/analyze/findings.md" } }], on_fail: "analyze", description: "Findings ready" } },
+  { id: "plan-done", source: "plan", target: "done", data: { conditions: [{ type: "file_exists", params: { path: "artifacts/plan/plan.md" } }], on_fail: "plan", description: "Plan delivered" } },
 ];
 
 interface CanvasProps {
@@ -47,17 +65,24 @@ interface CanvasProps {
 }
 
 export default function Canvas({ onNodeSelect }: CanvasProps) {
-  const [nodes, _setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedEdge, setSelectedEdge] = useState<Edge<EdgeData> | null>(null);
+  const reactFlow = useReactFlow();
 
   const onConnect = useCallback(
-    (connection: Connection) => setEdges((eds) => addEdge({ ...connection, data: { conditions: [], on_fail: null, description: "" } }, eds)),
+    (connection: Connection) =>
+      setEdges((eds) =>
+        addEdge(
+          { ...connection, data: { conditions: [], on_fail: null, description: "" } },
+          eds
+        )
+      ),
     [setEdges]
   );
 
   const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: StageNodeType) => onNodeSelect(node),
+    (_: React.MouseEvent, node: Node) => onNodeSelect(node as StageNodeType),
     [onNodeSelect]
   );
 
@@ -71,8 +96,60 @@ export default function Canvas({ onNodeSelect }: CanvasProps) {
     setSelectedEdge(null);
   }, [onNodeSelect]);
 
+  const addStage = useCallback(() => {
+    const id = newStageId();
+    const center = reactFlow.screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 3,
+    });
+    const offsetX = (Math.random() - 0.5) * 160;
+    const offsetY = (Math.random() - 0.5) * 120;
+    const newNode: StageNodeType = {
+      id,
+      type: "stageNode",
+      position: { x: center.x + offsetX, y: center.y + offsetY },
+      data: {
+        name: id,
+        tools: ["Read", "Write"],
+        description: "New stage",
+        on_enter: [],
+        on_exit: [],
+      },
+    };
+    setNodes((nds) => nds.concat(newNode));
+    onNodeSelect(newNode);
+  }, [setNodes, onNodeSelect, reactFlow]);
+
+  const onKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key === "Delete" || event.key === "Backspace") {
+        const sel = reactFlow.getNodes().find((n) => n.selected);
+        if (sel) {
+          setNodes((nds) => nds.filter((n) => n.id !== sel.id));
+          setEdges((eds) => eds.filter((e) => e.source !== sel.id && e.target !== sel.id));
+          onNodeSelect(null);
+        }
+      }
+    },
+    [setNodes, setEdges, onNodeSelect, reactFlow]
+  );
+
+  const activeNodes = nodes.filter((n) => !TERMINAL_STAGES.has(n.data?.name ?? ""));
+  const terminalNodes = nodes.filter((n) => TERMINAL_STAGES.has(n.data?.name ?? ""));
+
   return (
-    <>
+    <div className="canvas-wrapper" onKeyDown={onKeyDown} tabIndex={0}>
+      <div className="canvas-toolbar">
+        <button className="toolbar-btn add-stage-btn" onClick={addStage} title="Add a new stage">
+          <span className="btn-icon">+</span>
+          Add Stage
+        </button>
+        <span className="toolbar-info">
+          {nodes.length} stage{nodes.length !== 1 ? "s" : ""}
+          <span className="toolbar-dot active-dot" /> {activeNodes.length} normal
+          <span className="toolbar-dot terminal-dot" /> {terminalNodes.length} terminal
+        </span>
+      </div>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -84,14 +161,20 @@ export default function Canvas({ onNodeSelect }: CanvasProps) {
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         fitView
+        deleteKeyCode={["Delete", "Backspace"]}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         <Controls />
-        <MiniMap />
+        <MiniMap
+          nodeColor={(node) => {
+            const name = node.data?.name ?? "";
+            return TERMINAL_STAGES.has(name) ? "#607d8b" : "#1565c0";
+          }}
+        />
       </ReactFlow>
       {selectedEdge && (
         <EdgeEditor edge={selectedEdge} onClose={() => setSelectedEdge(null)} />
       )}
-    </>
+    </div>
   );
 }
