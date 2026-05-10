@@ -5,6 +5,7 @@ Usage:
 
     gen = WorkflowGenerator(llm_call=my_llm_function)
     yaml_str, history = gen.generate("CI/CD pipeline with build, test, deploy")
+    yaml_str, history = gen.generate("review process", template="CODE_REVIEW")
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import yaml
 
 from stageflow.core.schema import validate_stages_config
 from stageflow.core.registry import StageRegistry
+from stageflow.generator.prompts import get_template, PromptTemplate
 
 CONDITION_REFERENCE = """## Built-in Condition Types (27)
 
@@ -141,12 +143,25 @@ class WorkflowGenerator:
         self,
         llm_call: Optional[Callable[[str], str]] = None,
         max_retries: int = 3,
+        template: Optional[str] = None,
     ):
         self.llm_call = llm_call
         self.max_retries = max_retries
+        self.default_template = template
 
-    def build_prompt(self, description: str) -> str:
-        """Build the full prompt for the LLM (system + user)."""
+    def build_prompt(
+        self, description: str, template: Optional[str] = None
+    ) -> str:
+        """Build the full prompt for the LLM using a domain template."""
+        tmpl_name = template or self.default_template
+        if tmpl_name:
+            try:
+                tmpl = get_template(tmpl_name)
+            except KeyError:
+                tmpl = None
+            if tmpl:
+                return tmpl.format_prompt(CONDITION_REFERENCE, description)
+
         system = SYSTEM_PROMPT.format(condition_reference=CONDITION_REFERENCE)
         user = USER_PROMPT.format(description=description)
         return f"{system}\n\n{user}"
@@ -187,8 +202,14 @@ class WorkflowGenerator:
 
         return len(errors) == 0, errors
 
-    def generate(self, description: str) -> tuple[Optional[str], list[dict]]:
+    def generate(
+        self, description: str, template: Optional[str] = None
+    ) -> tuple[Optional[str], list[dict]]:
         """Generate stages.yaml from a description.
+
+        Args:
+            description: Natural language workflow description.
+            template: Optional template name (GENERIC, CI_CD, CODE_REVIEW, DATA_PIPELINE).
 
         Returns (yaml_string_or_None, history).
         Each history entry: {attempt, yaml, valid, errors, prompt}.
@@ -200,7 +221,7 @@ class WorkflowGenerator:
                 "No llm_call function provided. Set generator.llm_call or pass to constructor."
             )
 
-        prompt = self.build_prompt(description)
+        prompt = self.build_prompt(description, template)
 
         for attempt in range(1, self.max_retries + 1):
             response = self.llm_call(prompt)

@@ -13,6 +13,11 @@ from stageflow.generator.llm_generator import (
     SYSTEM_PROMPT,
     CONDITION_REFERENCE,
 )
+from stageflow.generator.prompts import (
+    get_template,
+    list_templates,
+    PromptTemplate,
+)
 
 
 VALID_SIMPLE_YAML = """stages:
@@ -195,3 +200,92 @@ class TestGenerate:
         gen = WorkflowGenerator()
         with pytest.raises(ValueError, match="llm_call"):
             gen.generate("test")
+
+    def test_generate_with_template(self):
+        def mock_llm(prompt: str) -> str:
+            return f"```yaml\n{VALID_SIMPLE_YAML}\n```"
+
+        gen = WorkflowGenerator(llm_call=mock_llm)
+        yaml_str, history = gen.generate("build pipeline", template="CI_CD")
+        assert yaml_str is not None
+        assert len(history) == 1
+
+    def test_generate_uses_default_template(self):
+        def mock_llm(prompt: str) -> str:
+            return f"```yaml\n{VALID_SIMPLE_YAML}\n```"
+
+        gen = WorkflowGenerator(llm_call=mock_llm, template="CI_CD")
+        yaml_str, history = gen.generate("build pipeline")
+        assert yaml_str is not None
+
+    def test_build_prompt_with_unknown_template_falls_back(self):
+        gen = WorkflowGenerator()
+        prompt = gen.build_prompt("test", template="NONEXISTENT")
+        assert "stages:" in prompt
+
+
+class TestTemplates:
+    def test_all_four_registered(self):
+        templates = list_templates()
+        names = {t.name for t in templates}
+        assert names == {"GENERIC", "CI_CD", "CODE_REVIEW", "DATA_PIPELINE"}
+
+    def test_get_template_ci_cd(self):
+        t = get_template("CI_CD")
+        assert isinstance(t, PromptTemplate)
+        assert t.name == "CI_CD"
+        assert "CI/CD" in t.role or "CI/CD" in t.label
+
+    def test_get_template_code_review(self):
+        t = get_template("CODE_REVIEW")
+        assert "review" in t.role.lower() or "review" in t.label.lower()
+
+    def test_get_template_data_pipeline(self):
+        t = get_template("DATA_PIPELINE")
+        assert "data" in t.role.lower() or "data" in t.label.lower()
+
+    def test_get_template_generic(self):
+        t = get_template("GENERIC")
+        assert isinstance(t, PromptTemplate)
+
+    def test_get_template_case_insensitive(self):
+        t = get_template("ci_cd")
+        assert t.name == "CI_CD"
+
+    def test_unknown_template_raises(self):
+        with pytest.raises(KeyError, match="Unknown template"):
+            get_template("NONEXISTENT")
+
+    def test_format_prompt_includes_everything(self):
+        t = get_template("CI_CD")
+        desc = "Test the build pipeline"
+        prompt = t.format_prompt(CONDITION_REFERENCE, desc)
+        assert desc in prompt
+        assert "file_exists" in prompt
+        assert "stages:" in prompt
+        assert "transitions:" in prompt
+        assert "checkout" in prompt.lower() or "lint" in prompt.lower()
+
+    def test_ci_cd_example_is_valid_yaml(self):
+        t = get_template("CI_CD")
+        gen = WorkflowGenerator()
+        valid, _ = gen.validate(t.example_yaml)
+        assert valid is True
+
+    def test_code_review_example_is_valid_yaml(self):
+        t = get_template("CODE_REVIEW")
+        gen = WorkflowGenerator()
+        valid, _ = gen.validate(t.example_yaml)
+        assert valid is True
+
+    def test_data_pipeline_example_is_valid_yaml(self):
+        t = get_template("DATA_PIPELINE")
+        gen = WorkflowGenerator()
+        valid, _ = gen.validate(t.example_yaml)
+        assert valid is True
+
+    def test_generic_example_is_valid_yaml(self):
+        t = get_template("GENERIC")
+        gen = WorkflowGenerator()
+        valid, _ = gen.validate(t.example_yaml)
+        assert valid is True
