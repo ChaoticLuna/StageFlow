@@ -1,0 +1,1 @@
+﻿- [2026-05-10 19:56] Loop 1: 搜索发现 2026 harness engineering 范式验证了 StageFlow 架构（HASS pattern, DAG dependency graphs）。实施 max_iterations 每阶段硬上限（+6 tests），防止无限循环。618 tests pass。

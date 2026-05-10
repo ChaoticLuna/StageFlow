@@ -913,3 +913,109 @@ class TestSeverityInEngine:
         assert state_machine.current_stage == "start"
         history = state_machine.history
         assert len(history) == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TestMaxIterations — iteration caps per stage
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestMaxIterations:
+    def test_no_cap_by_default(self, state_machine, registry):
+        """Without max_iterations, stage can be entered unlimited times."""
+        state_machine.initialize("start")
+        for _ in range(5):
+            ok, _ = state_machine.transition_to("middle")
+            assert ok
+            state_machine.force_transition_to("start")
+
+    def test_cap_blocks_transition_when_exceeded(self, state_machine, registry):
+        """When max_iterations is set, exceeding it blocks the transition."""
+        registry.register_stage("capped_stage", tools=["Read"],
+                                max_iterations=2)
+        registry.register_transition(
+            "start", "capped_stage",
+            conditions=[{"always": True}],
+        )
+        state_machine.initialize("start")
+
+        # Enter capped_stage twice — should work
+        ok1, _ = state_machine.transition_to("capped_stage")
+        assert ok1
+        state_machine.force_transition_to("start")
+
+        ok2, _ = state_machine.transition_to("capped_stage")
+        assert ok2
+
+        # Third time — blocked
+        state_machine.force_transition_to("start")
+        ok3, msgs = state_machine.transition_to("capped_stage")
+        assert ok3 is False
+        assert any("ITERATION_CAP" in m for m in msgs)
+
+    def test_cap_message_includes_limit_and_count(self, state_machine, registry):
+        """ITERATION_CAP message includes the limit and current count."""
+        registry.register_stage("limited", tools=["Read"],
+                                max_iterations=1)
+        registry.register_transition(
+            "start", "limited",
+            conditions=[{"always": True}],
+        )
+        state_machine.initialize("start")
+        state_machine.transition_to("limited")
+        state_machine.force_transition_to("start")
+        ok, msgs = state_machine.transition_to("limited")
+        assert not ok
+        combined = " ".join(msgs)
+        assert "1" in combined
+
+    def test_force_bypasses_iteration_cap(self, state_machine, registry):
+        """Force transition bypasses max_iterations check."""
+        registry.register_stage("capped", tools=["Read"],
+                                max_iterations=1)
+        state_machine.initialize("start")
+        state_machine.transition_to("capped")
+        state_machine.force_transition_to("start")
+        # Force should work even though cap is exceeded
+        ok, _ = state_machine.force_transition_to("capped")
+        assert ok is True
+
+    def test_cap_per_stage_independent(self, state_machine, registry):
+        """Each stage has its own independent iteration cap."""
+        registry.register_stage("capped_a", tools=["Read"],
+                                max_iterations=1)
+        registry.register_stage("capped_b", tools=["Read"],
+                                max_iterations=3)
+        registry.register_transition(
+            "start", "capped_a", conditions=[{"always": True}])
+        registry.register_transition(
+            "start", "capped_b", conditions=[{"always": True}])
+
+        state_machine.initialize("start")
+
+        # capped_a: 1 entry works
+        ok, _ = state_machine.transition_to("capped_a")
+        assert ok
+        state_machine.force_transition_to("start")
+        ok, _ = state_machine.transition_to("capped_a")
+        assert not ok  # capped_a limit reached
+
+        # capped_b: still has room
+        state_machine.force_transition_to("start")
+        for _ in range(3):
+            state_machine.force_transition_to("start")
+            ok, _ = state_machine.transition_to("capped_b")
+            assert ok
+        state_machine.force_transition_to("start")
+        ok, _ = state_machine.transition_to("capped_b")
+        assert not ok  # capped_b limit reached
+
+    def test_iterations_count_tracks_entries(self, state_machine, registry):
+        """iterations field in state tracks entry count for capped stages."""
+        registry.register_stage("tracked", tools=["Read"],
+                                max_iterations=5)
+        registry.register_transition(
+            "start", "tracked", conditions=[{"always": True}])
+        state_machine.initialize("start")
+        assert state_machine.get_iterations("tracked") == 0
+        state_machine.transition_to("tracked")
+        assert state_machine.get_iterations("tracked") == 1

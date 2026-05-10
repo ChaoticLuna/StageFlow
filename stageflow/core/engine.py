@@ -166,6 +166,18 @@ class StateMachine:
             return False, [f"Cannot transition: state machine is paused. Reason: {self._state.get('paused_reason', 'none')}"]
         current = self.current_stage
 
+        # Check max_iterations on target stage
+        if not force:
+            target_stage = self.registry.get_stage(target)
+            if target_stage and target_stage.max_iterations is not None:
+                current_count = self._state.get("iterations", {}).get(target, 0)
+                if current_count >= target_stage.max_iterations:
+                    return False, [
+                        f"[ITERATION_CAP] Stage '{target}' has reached "
+                        f"max_iterations ({target_stage.max_iterations}). "
+                        f"Current: {current_count}. Transition blocked."
+                    ]
+
         if not force:
             ok, msgs = self.can_transition_to(target)
             if not ok:

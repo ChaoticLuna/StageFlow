@@ -27,10 +27,14 @@ class Stage:
         self.tools: List[str] = data.get("tools", data.get("allow_tools", []))
         self.description: str = data.get("description", data.get("meta", {}).get("description", ""))
         self.meta: dict = data.get("meta", {})
-        self.extra: dict = {k: v for k, v in data.items() if k not in ("name", "tools", "allow_tools", "description", "meta")}
+        self.max_iterations: Optional[int] = data.get("max_iterations")
+        self.extra: dict = {k: v for k, v in data.items() if k not in ("name", "tools", "allow_tools", "description", "meta", "max_iterations")}
 
     def to_dict(self) -> dict:
-        return {"name": self.name, "tools": self.tools, "description": self.description, "meta": self.meta, **self.extra}
+        d = {"name": self.name, "tools": self.tools, "description": self.description, "meta": self.meta, **self.extra}
+        if self.max_iterations is not None:
+            d["max_iterations"] = self.max_iterations
+        return d
 
     def __repr__(self):
         return f"Stage({self.name!r}, tools={len(self.tools)})"
