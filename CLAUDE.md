@@ -19,8 +19,8 @@ StageFlow 是一套**声明式、可扩展的阶段化状态机框架**，用于
 
 ```
 Framework files:  7 modules (~1,800 lines)
-Test files:      19 files (~9,000 lines)
-Tests:           755 passed, 0 failed
+Test files:      21 files (~10,000 lines)
+Tests:           789 passed, 0 failed (790 collected, 1 skipped)
 Conditions:       30 types
 Stages (default): 10 (pick → done)
 Transitions:      11 (含回退/重试路径)
@@ -306,24 +306,27 @@ auto_workflow/
 │   └── hooks_on.py
 ├── tests/
 │   ├── conftest.py            # Fixtures + Pytest 插件
-│   ├── test_conditions.py     # 346 tests
-│   ├── test_registry.py       # 65 tests
-│   ├── test_engine.py         # 59 tests
-│   ├── test_guard.py          # 13 tests
-│   ├── test_edge_cases.py     # 15 tests
-│   ├── test_e2e.py            # 18 tests
-│   ├── test_extensibility.py  # 29 tests
+│   ├── test_conditions.py     # 246 tests
+│   ├── test_registry.py       # 66 tests
+│   ├── test_engine.py         # 68 tests
+│   ├── test_guard.py          # 16 tests
+│   ├── test_edge_cases.py     # 11 tests
+│   ├── test_e2e.py            # 22 tests
+│   ├── test_extensibility.py  # 28 tests
+│   ├── test_extensibility_quick.py # 1 test
 │   ├── test_agent.py          # 35 tests
 │   ├── test_benchmark.py      # 18 tests
 │   ├── test_cache.py          # 31 tests
 │   ├── test_concurrency.py    # 21 tests
-│   ├── test_generator.py      # 43 tests
+│   ├── test_generator.py      # 50 tests
 │   ├── test_hooks_integration.py # 17 tests
 │   ├── test_hybrid.py         # 25 tests
+│   ├── test_main.py           # 13 tests
 │   ├── test_orchestrator.py   # 33 tests
 │   ├── test_perf.py           # 7 tests
-│   ├── test_server.py         # 51 tests
-│   └── test_audit.py          # 4 tests
+│   ├── test_server.py         # 49 tests
+│   ├── test_audit.py          # 15 tests
+│   └── test_stress.py         # 18 tests
 ├── .claude/
 │   ├── settings.json          # PreToolUse Hook 配置
 │   ├── settings.local.json

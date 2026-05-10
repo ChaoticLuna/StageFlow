@@ -118,7 +118,7 @@
 - [x] **task-042**: Install `pytest-cov` and run coverage — `pip install -e ".[dev]"`, run `pytest --cov=stageflow --cov-report=term`, identify uncovered lines. Add targeted tests for weakest 3 modules. Target: 80%+ line coverage.
 - [x] **task-043**: Strengthen `verify → document` transition in `stages.yaml` — add `shell_test: {command: "python -m pytest --tb=short", op: exit_zero}` condition to prevent bypassing test failures.
 - [x] **task-044**: Add built-in LLM adapter in `llm_generator.py` — `AnthropicAdapter` wrapping `anthropic` SDK with prompt caching. Make generator work out-of-box. +5 tests.
-- [ ] **task-045**: Audit + update per-file test counts in CLAUDE.md by running `pytest --collect-only -q` and parsing counts per file.
+- [x] **task-045**: Audit + update per-file test counts in CLAUDE.md by running `pytest --collect-only -q` and parsing counts per file.
 
 ---
 
