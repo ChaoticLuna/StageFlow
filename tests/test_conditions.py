@@ -1217,6 +1217,15 @@ class TestHttpStatus:
         })
         assert not passed
 
+    def test_body_contains_op_recognized(self, temp_dir):
+        """body_contains op should not crash with 'Unknown op' even on conn failure."""
+        passed, msg = evaluate("http_status", {
+            "url": "http://127.0.0.1:1", "op": "body_contains",
+            "pattern": "hello", "timeout": 2
+        })
+        assert not passed
+        assert "Unknown op" not in msg
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # time_range

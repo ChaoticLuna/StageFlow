@@ -3404,3 +3404,54 @@
 {"event": "stage_exit", "stage": "stage_007", "duration_seconds": 0.001, "timestamp": "2026-05-10T13:09:19.326499+00:00"}
 {"event": "stage_enter", "stage": "stage_008", "timestamp": "2026-05-10T13:09:19.326499+00:00"}
 {"event": "transition", "from": "stage_007", "to": "stage_008", "success": true, "forced": false, "messages": ["Transitioned: stage_007 -> stage_008"], "timestamp": "2026-05-10T13:09:19.327676+00:00"}
+{"event": "stage_enter", "stage": "stage_000", "timestamp": "2026-05-10T13:11:35.205548+00:00"}
+{"event": "stage_exit", "stage": "stage_000", "duration_seconds": 0.0, "timestamp": "2026-05-10T13:11:35.205548+00:00"}
+{"event": "stage_enter", "stage": "stage_001", "timestamp": "2026-05-10T13:11:35.205548+00:00"}
+{"event": "transition", "from": "stage_000", "to": "stage_001", "success": true, "forced": false, "messages": ["Transitioned: stage_000 -> stage_001"], "timestamp": "2026-05-10T13:11:35.206638+00:00"}
+{"event": "stage_exit", "stage": "stage_001", "duration_seconds": 0.002, "timestamp": "2026-05-10T13:11:35.207639+00:00"}
+{"event": "stage_enter", "stage": "stage_002", "timestamp": "2026-05-10T13:11:35.207639+00:00"}
+{"event": "transition", "from": "stage_001", "to": "stage_002", "success": true, "forced": false, "messages": ["Transitioned: stage_001 -> stage_002"], "timestamp": "2026-05-10T13:11:35.208639+00:00"}
+{"event": "stage_exit", "stage": "stage_002", "duration_seconds": 0.001, "timestamp": "2026-05-10T13:11:35.208639+00:00"}
+{"event": "stage_enter", "stage": "stage_003", "timestamp": "2026-05-10T13:11:35.208639+00:00"}
+{"event": "transition", "from": "stage_002", "to": "stage_003", "success": true, "forced": false, "messages": ["Transitioned: stage_002 -> stage_003"], "timestamp": "2026-05-10T13:11:35.209640+00:00"}
+{"event": "stage_exit", "stage": "stage_003", "duration_seconds": 0.001, "timestamp": "2026-05-10T13:11:35.209640+00:00"}
+{"event": "stage_enter", "stage": "stage_004", "timestamp": "2026-05-10T13:11:35.209640+00:00"}
+{"event": "transition", "from": "stage_003", "to": "stage_004", "success": true, "forced": false, "messages": ["Transitioned: stage_003 -> stage_004"], "timestamp": "2026-05-10T13:11:35.211145+00:00"}
+{"event": "stage_exit", "stage": "stage_004", "duration_seconds": 0.002, "timestamp": "2026-05-10T13:11:35.211145+00:00"}
+{"event": "stage_enter", "stage": "stage_005", "timestamp": "2026-05-10T13:11:35.211145+00:00"}
+{"event": "transition", "from": "stage_004", "to": "stage_005", "success": true, "forced": false, "messages": ["Transitioned: stage_004 -> stage_005"], "timestamp": "2026-05-10T13:11:35.212497+00:00"}
+{"event": "stage_exit", "stage": "stage_005", "duration_seconds": 0.001, "timestamp": "2026-05-10T13:11:35.212497+00:00"}
+{"event": "stage_enter", "stage": "stage_006", "timestamp": "2026-05-10T13:11:35.212497+00:00"}
+{"event": "transition", "from": "stage_005", "to": "stage_006", "success": true, "forced": false, "messages": ["Transitioned: stage_005 -> stage_006"], "timestamp": "2026-05-10T13:11:35.213917+00:00"}
+{"event": "stage_exit", "stage": "stage_006", "duration_seconds": 0.003, "timestamp": "2026-05-10T13:11:35.214998+00:00"}
+{"event": "stage_enter", "stage": "stage_007", "timestamp": "2026-05-10T13:11:35.214998+00:00"}
+{"event": "transition", "from": "stage_006", "to": "stage_007", "success": true, "forced": false, "messages": ["Transitioned: stage_006 -> stage_007"], "timestamp": "2026-05-10T13:11:35.214998+00:00"}
+{"event": "stage_exit", "stage": "stage_007", "duration_seconds": 0.001, "timestamp": "2026-05-10T13:11:35.216478+00:00"}
+{"event": "stage_enter", "stage": "stage_008", "timestamp": "2026-05-10T13:11:35.216478+00:00"}
+{"event": "transition", "from": "stage_007", "to": "stage_008", "success": true, "forced": false, "messages": ["Transitioned: stage_007 -> stage_008"], "timestamp": "2026-05-10T13:11:35.217551+00:00"}
+{"event": "stage_exit", "stage": "stage_008", "duration_seconds": 0.001, "timestamp": "2026-05-10T13:11:35.217551+00:00"}
+{"event": "stage_enter", "stage": "stage_009", "timestamp": "2026-05-10T13:11:35.217551+00:00"}
+{"event": "transition", "from": "stage_008", "to": "stage_009", "success": true, "forced": false, "messages": ["Transitioned: stage_008 -> stage_009"], "timestamp": "2026-05-10T13:11:35.218590+00:00"}
+{"event": "stage_exit", "stage": "stage_009", "duration_seconds": 0.001, "timestamp": "2026-05-10T13:11:35.218590+00:00"}
+{"event": "stage_enter", "stage": "stage_010", "timestamp": "2026-05-10T13:11:35.218590+00:00"}
+{"event": "transition", "from": "stage_009", "to": "stage_010", "success": true, "forced": false, "messages": ["Transitioned: stage_009 -> stage_010"], "timestamp": "2026-05-10T13:11:35.219714+00:00"}
+{"event": "stage_exit", "stage": "stage_010", "duration_seconds": 0.001, "timestamp": "2026-05-10T13:11:35.219714+00:00"}
+{"event": "stage_enter", "stage": "stage_011", "timestamp": "2026-05-10T13:11:35.221220+00:00"}
+{"event": "transition", "from": "stage_010", "to": "stage_011", "success": true, "forced": false, "messages": ["Transitioned: stage_010 -> stage_011"], "timestamp": "2026-05-10T13:11:35.222230+00:00"}
+{"event": "stage_exit", "stage": "stage_011", "duration_seconds": 0.001, "timestamp": "2026-05-10T13:11:35.222230+00:00"}
+{"event": "stage_enter", "stage": "stage_012", "timestamp": "2026-05-10T13:11:35.222230+00:00"}
+{"event": "transition", "from": "stage_011", "to": "stage_012", "success": true, "forced": false, "messages": ["Transitioned: stage_011 -> stage_012"], "timestamp": "2026-05-10T13:11:35.223316+00:00"}
+{"event": "stage_exit", "stage": "stage_012", "duration_seconds": 0.001, "timestamp": "2026-05-10T13:11:35.223316+00:00"}
+{"event": "stage_enter", "stage": "stage_013", "timestamp": "2026-05-10T13:11:35.223316+00:00"}
+{"event": "transition", "from": "stage_012", "to": "stage_013", "success": true, "forced": false, "messages": ["Transitioned: stage_012 -> stage_013"], "timestamp": "2026-05-10T13:11:35.224446+00:00"}
+{"event": "stage_exit", "stage": "stage_013", "duration_seconds": 0.001, "timestamp": "2026-05-10T13:11:35.224446+00:00"}
+{"event": "stage_enter", "stage": "stage_014", "timestamp": "2026-05-10T13:11:35.224446+00:00"}
+{"event": "transition", "from": "stage_013", "to": "stage_014", "success": true, "forced": false, "messages": ["Transitioned: stage_013 -> stage_014"], "timestamp": "2026-05-10T13:11:35.225693+00:00"}
+{"event": "stage_enter", "stage": "stage_005", "timestamp": "2026-05-10T13:11:35.227198+00:00"}
+{"event": "stage_enter", "stage": "stage_006", "timestamp": "2026-05-10T13:11:35.228216+00:00"}
+{"event": "stage_exit", "stage": "stage_006", "duration_seconds": 0.0, "timestamp": "2026-05-10T13:11:35.228216+00:00"}
+{"event": "stage_enter", "stage": "stage_007", "timestamp": "2026-05-10T13:11:35.228216+00:00"}
+{"event": "transition", "from": "stage_006", "to": "stage_007", "success": true, "forced": false, "messages": ["Transitioned: stage_006 -> stage_007"], "timestamp": "2026-05-10T13:11:35.229517+00:00"}
+{"event": "stage_exit", "stage": "stage_007", "duration_seconds": 0.001, "timestamp": "2026-05-10T13:11:35.229517+00:00"}
+{"event": "stage_enter", "stage": "stage_008", "timestamp": "2026-05-10T13:11:35.229517+00:00"}
+{"event": "transition", "from": "stage_007", "to": "stage_008", "success": true, "forced": false, "messages": ["Transitioned: stage_007 -> stage_008"], "timestamp": "2026-05-10T13:11:35.229517+00:00"}

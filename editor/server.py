@@ -102,8 +102,8 @@ CONDITION_DEFS = [
     {"type": "http_status", "label": "HTTP Status", "description": "Check an HTTP endpoint response", "params": [
         {"name": "url", "label": "URL", "kind": "text", "placeholder": "https://api.example.com/health", "required": True},
         {"name": "method", "label": "Method", "kind": "select", "options": ["GET", "POST", "HEAD"], "default": "GET"},
-        {"name": "expected_status", "label": "Expected status", "kind": "number", "default": 200},
-        {"name": "timeout", "label": "Timeout (seconds)", "kind": "number", "default": 10}
+        {"name": "op", "label": "Check", "kind": "select", "options": ["status", "body_contains"], "default": "status"},
+        {"name": "expected", "label": "Expected value", "kind": "text", "placeholder": "status code (200) or body pattern"}
     ]},
     {"type": "time_range", "label": "Time Range", "description": "Check current time is within a range", "params": [
         {"name": "after", "label": "After (HH:MM)", "kind": "text", "placeholder": "09:00", "required": True},

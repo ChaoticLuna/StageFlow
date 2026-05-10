@@ -491,9 +491,10 @@ def _git_status(params: dict) -> Tuple[bool, str]:
 
 @register("http_status")
 def _http_status(params: dict) -> Tuple[bool, str]:
-    """Check HTTP endpoint status code."""
+    """Check HTTP endpoint status code or response body content."""
     url = params.get("url", params.get("value", ""))
-    expected = params.get("expected", params.get("code", 200))
+    op = params.get("op", "status")
+    expected = params.get("expected", 200)
     timeout = params.get("timeout", 10)
     method = params.get("method", "GET")
 
@@ -501,6 +502,11 @@ def _http_status(params: dict) -> Tuple[bool, str]:
         import urllib.request
         req = urllib.request.Request(url, method=method)
         resp = urllib.request.urlopen(req, timeout=timeout)
+        if op == "body_contains":
+            body = resp.read().decode("utf-8", errors="replace")
+            pattern = str(params.get("pattern", params.get("value", "")))
+            ok = pattern in body
+            return ok, f"HTTP {url} body contains '{pattern[:80]}': {ok}"
         ok = resp.status == expected
         return ok, f"HTTP {url} -> {resp.status} (expected {expected})"
     except Exception as e:
