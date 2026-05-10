@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -15,6 +15,7 @@ import ReactFlow, {
 import StageNode from "./StageNode";
 import EdgeEditor from "./EdgeEditor";
 import { formatConditionSummary } from "./conditionDefs";
+import { exportToYaml, importFromYaml } from "../utils/yaml";
 import type { StageNode as StageNodeType, EdgeData, StageData } from "../types";
 
 const nodeTypes = { stageNode: StageNode };
@@ -178,6 +179,47 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     onNodeSelect(newNode);
   }, [setNodes, onNodeSelect, reactFlow]);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExport = useCallback(() => {
+    const yamlStr = exportToYaml(nodes as StageNodeType[], edges as Edge<EdgeData>[]);
+    const blob = new Blob([yamlStr], { type: "application/x-yaml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "stages.yaml";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [nodes, edges]);
+
+  const handleImport = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = reader.result as string;
+        const result = importFromYaml(text);
+        if ("error" in result) {
+          alert(`Import failed: ${result.error}`);
+          return;
+        }
+        setNodes(result.nodes);
+        setEdges(result.edges);
+        _nodeCounter = result.nodes.length;
+        onNodeSelect(null);
+        setSelectedEdge(null);
+      };
+      reader.readAsText(file);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    },
+    [setNodes, setEdges, onNodeSelect]
+  );
+
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
       if (event.key === "Delete" || event.key === "Backspace") {
@@ -202,6 +244,19 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           <span className="btn-icon">+</span>
           Add Stage
         </button>
+        <button className="toolbar-btn" onClick={handleExport} title="Export canvas to stages.yaml">
+          &darr; Export YAML
+        </button>
+        <button className="toolbar-btn" onClick={handleImport} title="Import stages.yaml into canvas">
+          &uarr; Import YAML
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".yaml,.yml"
+          style={{ display: "none" }}
+          onChange={handleFileChange}
+        />
         <span className="toolbar-info">
           {nodes.length} stage{nodes.length !== 1 ? "s" : ""}
           <span className="toolbar-dot active-dot" /> {activeNodes.length} normal
