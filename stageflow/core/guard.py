@@ -12,6 +12,10 @@ from .engine import StateMachine
 from .registry import StageRegistry
 
 
+WRITE_TOOLS = {"Write", "Edit", "NotebookEdit"}
+ALLOWED_WRITE_ROOTS = {"artifacts", ".claude"}
+
+
 class StageGuard:
     """Intercepts tool calls and validates against current stage's allow list.
 
@@ -22,15 +26,46 @@ class StageGuard:
     """
 
     def __init__(self, config_path: str = "stageflow/config/stages.yaml",
-                 base_path: str = ".", registry: StageRegistry = None):
+                 base_path: str = ".", registry: StageRegistry = None,
+                 enforce_path_guard: bool = True):
         self.registry = registry if registry is not None else StageRegistry(config_path)
         self.machine = StateMachine(self.registry, base_path)
+        self._enforce_path_guard = enforce_path_guard
+
+    def _check_write_path(self, tool_input: dict) -> tuple[bool, str]:
+        file_path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
+        if not file_path:
+            return True, ""
+        p = Path(file_path)
+        if p.is_absolute():
+            try:
+                p = p.resolve()
+                rel = p.relative_to(self.machine.base_path)
+            except ValueError:
+                return False, f"Write denied: '{file_path}' is outside project"
+        else:
+            rel = p
+        parts = rel.parts
+        if not parts:
+            return True, ""
+        root = parts[0]
+        if root in ALLOWED_WRITE_ROOTS:
+            return True, ""
+        return False, f"Write denied: '{file_path}' — stage only allows writes to artifacts/ or .claude/"
 
     def check(self, tool_name: str, tool_input: dict = None) -> tuple[bool, str]:
         """Check if a tool call is allowed. Returns (allowed, message)."""
-        # Refresh state from disk in case it changed
         self.machine._state = self.machine._load_state()
-        return self.machine.is_tool_allowed(tool_name)
+        base_result = self.machine.is_tool_allowed(tool_name)
+        if not base_result[0]:
+            return base_result
+
+        if self._enforce_path_guard and tool_input and tool_name in WRITE_TOOLS:
+            path_ok, msg = self._check_write_path(tool_input)
+            if not path_ok:
+                return path_ok, msg
+
+        return base_result
 
     def allowed_tools(self) -> list[str]:
         """Return list of tools allowed in the current stage."""

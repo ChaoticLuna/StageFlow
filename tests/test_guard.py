@@ -109,3 +109,42 @@ class TestToolPatternMatching:
 
         allowed, msg = state_machine.is_tool_allowed("Bash(python test.py)")
         assert not allowed, f"Should NOT match different command: {msg}"
+
+
+class TestPathGuard:
+    def test_write_to_artifacts_allowed(self, registry, temp_dir):
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")  # tools: [Read, Write]
+        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        allowed, msg = guard.check("Write", {"file_path": "artifacts/test/output.md"})
+        assert allowed, f"Write to artifacts/ should be allowed: {msg}"
+
+    def test_write_to_dot_claude_allowed(self, registry, temp_dir):
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")
+        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        allowed, msg = guard.check("Write", {"file_path": ".claude/notes.md"})
+        assert allowed, f"Write to .claude/ should be allowed: {msg}"
+
+    def test_write_outside_denied(self, registry, temp_dir):
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")
+        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        allowed, msg = guard.check("Write", {"file_path": "stageflow/core/engine.py"})
+        assert not allowed, f"Write to engine.py should be denied: {msg}"
+        assert "denied" in msg.lower()
+
+    def test_edit_outside_denied(self, registry, temp_dir):
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")
+        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        allowed, msg = guard.check("Edit", {"file_path": "pyproject.toml"})
+        assert not allowed, f"Edit to pyproject.toml should be denied: {msg}"
+
+    def test_read_always_allowed_if_in_tools(self, registry, temp_dir):
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")
+        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        allowed, msg = guard.check("Read", {"file_path": "stageflow/core/engine.py"})
+        # Read is not in WRITE_TOOLS, so path guard doesn't apply
+        assert allowed, f"Read should be allowed regardless of path: {msg}"
