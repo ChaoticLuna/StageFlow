@@ -109,7 +109,7 @@
 | # | 任务 | 状态 | 产出 |
 |---|------|------|------|
 | 10.1 | 竞品调研 (Dify, n8n, LangGraph, Temporal, Prefect) | ✅ | docs/harness_research.md → task-021 |
-| 10.2 | Agent 模式调研 | ⬜ | docs/harness_research.md → task-022 |
+| 10.2 | Agent 模式调研 | ✅ | docs/harness_research.md → task-022 |
 | 10.3 | 集成方案设计 | ⬜ | docs/integration_blueprint.md → task-023 |
 | 10.4 | 基于调研改进实现 | ⬜ | Top 3 improvements → task-024 |
 | 10.5-LOOP | 时间检查循环 (≥21:00 → 停止，<21:00 → 搜索+迭代) | ⬜ | .ralph/harness_iterations.md → task-025-LOOP |
