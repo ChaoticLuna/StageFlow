@@ -100,8 +100,8 @@
 | 9.1 | 暂停/恢复执行 | ✅ | engine pause/resume → task-019 |
 | 9.2 | Webhook 通知 | ✅ | on_enter/on_exit webhook → task-020 |
 | 9.3 | 并行条件评估 | ⬜ | 多条件并发执行 |
-| 9.4 | 软性门控（warn 不阻止） | ⬜ | condition severity 分级 |
-| 9.5 | Web UI 状态面板 | ⬜ | Flask/FastAPI 仪表板 |
+| 9.4 | 软性门控（warn 不阻止） | ✅ | condition severity 分级 → task-024 |
+| 9.5 | Web UI 状态面板 | ✅ | FastAPI 状态/审计 API → task-024 |
 | 9.6 | MCP Server 集成 | ⬜ | 通过 MCP 协议暴露条件评估 |
 
 ## Phase 10: Harness 工程调研 🆕
@@ -111,7 +111,7 @@
 | 10.1 | 竞品调研 (Dify, n8n, LangGraph, Temporal, Prefect) | ✅ | docs/harness_research.md → task-021 |
 | 10.2 | Agent 模式调研 | ✅ | docs/harness_research.md → task-022 |
 | 10.3 | 集成方案设计 | ✅ | docs/integration_blueprint.md → task-023 |
-| 10.4 | 基于调研改进实现 | ⬜ | Top 3 improvements → task-024 |
+| 10.4 | 基于调研改进实现 | ✅ | Top 3 improvements → task-024 |
 | 10.5-LOOP | 时间检查循环 (≥21:00 → 停止，<21:00 → 搜索+迭代) | ⬜ | .ralph/harness_iterations.md → task-025-LOOP |
 
 ## Phase 11: 生态与集成

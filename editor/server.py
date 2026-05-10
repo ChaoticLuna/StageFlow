@@ -10,9 +10,11 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -25,8 +27,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from stageflow.core.schema import validate_stages_config
 from stageflow.core.conditions import evaluate_all, list_conditions
+from stageflow.core.audit import AuditLogger
+from stageflow.core.engine import StateMachine
+from stageflow.core.registry import StageRegistry
 
 import yaml
+
+WORKFLOWS_DIR = Path(__file__).parent / "workflows"
+WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
+
+DEFAULT_CONFIG = str(Path(__file__).resolve().parent.parent / "stageflow" / "config" / "stages.yaml")
 
 app = FastAPI(title="StageFlow Editor API", version="1.0.0")
 
@@ -168,6 +178,43 @@ class RunResponse(BaseModel):
     messages: list[str]
 
 
+class AuditQueryParams(BaseModel):
+    limit: int = 50
+    event_type: Optional[str] = None
+
+
+class GenerateRequest(BaseModel):
+    description: str
+    template: Optional[str] = None
+
+
+class GenerateResponse(BaseModel):
+    yaml: str
+    success: bool
+    messages: list[str]
+
+
+class WorkflowSaveRequest(BaseModel):
+    yaml: str
+
+
+class WorkflowRunResponse(BaseModel):
+    success: bool
+    messages: list[str]
+    current_stage: Optional[str] = None
+    history: list[dict] = []
+
+
+class WorkflowStatusResponse(BaseModel):
+    name: str
+    current_stage: Optional[str] = None
+    history: list[dict]
+    paused: bool
+    variables: dict
+    retry_count: dict
+    iterations: dict
+
+
 @app.get("/api/conditions")
 def get_conditions():
     registered = list_conditions()
@@ -241,6 +288,232 @@ def run_check(req: RunRequest):
         result_messages.append(f"on_fail target: {on_fail}")
 
     return RunResponse(can_transition=passed, messages=result_messages)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Audit log endpoints
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/audit")
+def get_audit_log(limit: int = 50, event_type: Optional[str] = None):
+    """Get recent audit log entries, optionally filtered by event type."""
+    logger = AuditLogger(str(Path.cwd()))
+    if not logger.log_path.exists():
+        return {"entries": [], "total": 0}
+
+    entries = []
+    with open(logger.log_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event_type and entry.get("event") != event_type:
+                continue
+            entries.append(entry)
+
+    total = len(entries)
+    entries = entries[-limit:] if limit > 0 else entries
+    return {"entries": entries, "total": total, "returned": len(entries)}
+
+
+@app.get("/api/audit/summary")
+def get_audit_summary():
+    """Get audit log summary statistics."""
+    logger = AuditLogger(str(Path.cwd()))
+    return logger.get_summary()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Workflow generation endpoint
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/generate", response_model=GenerateResponse)
+def generate_workflow(req: GenerateRequest):
+    """Generate a stages.yaml workflow from a natural language description."""
+    try:
+        from stageflow.generator.llm_generator import WorkflowGenerator
+
+        # Use mock LLM that returns template-based YAML
+        def api_llm(prompt: str) -> str:
+            from stageflow.generator.prompts import PromptTemplate, get_template
+            template = PromptTemplate(req.template) if req.template else PromptTemplate.GENERAL
+            tmpl = get_template(template)
+            desc = req.description
+            # Return the template example as a starting point
+            return (
+                f"Based on the description '{desc}', here is a workflow:\n\n"
+                f"```yaml\n{tmpl.example}\n```"
+            )
+
+        gen = WorkflowGenerator(llm_call=api_llm)
+        yaml_str, history = gen.generate(req.description, template=req.template)
+
+        return GenerateResponse(
+            yaml=yaml_str or "",
+            success=yaml_str is not None and len(yaml_str) > 0,
+            messages=history,
+        )
+    except Exception as e:
+        return GenerateResponse(yaml="", success=False, messages=[str(e)])
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Workflow CRUD endpoints
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/workflows")
+def list_workflows():
+    """List all saved workflows."""
+    workflows = []
+    for f in WORKFLOWS_DIR.glob("*.yaml"):
+        workflows.append({
+            "name": f.stem,
+            "path": str(f),
+            "size": f.stat().st_size,
+            "modified": datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
+        })
+    return {"workflows": sorted(workflows, key=lambda w: w["name"])}
+
+
+@app.get("/api/workflows/{name}")
+def get_workflow(name: str):
+    """Get a saved workflow's YAML content."""
+    path = WORKFLOWS_DIR / f"{name}.yaml"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Workflow '{name}' not found")
+    content = path.read_text(encoding="utf-8")
+    return {"name": name, "yaml": content}
+
+
+@app.put("/api/workflows/{name}")
+def save_workflow(name: str, req: WorkflowSaveRequest):
+    """Save or update a workflow YAML."""
+    # Validate YAML first
+    try:
+        doc = yaml.safe_load(req.yaml)
+    except yaml.YAMLError as e:
+        raise HTTPException(status_code=400, detail=f"YAML parse error: {e}")
+    if doc is None:
+        raise HTTPException(status_code=400, detail="YAML document is empty")
+
+    valid, errors = validate_stages_config(doc)
+    if not valid:
+        raise HTTPException(status_code=400, detail=f"Invalid config: {'; '.join(errors)}")
+
+    path = WORKFLOWS_DIR / f"{name}.yaml"
+    path.write_text(req.yaml, encoding="utf-8")
+    return {"name": name, "saved": True, "valid": True}
+
+
+@app.delete("/api/workflows/{name}")
+def delete_workflow(name: str):
+    """Delete a saved workflow."""
+    path = WORKFLOWS_DIR / f"{name}.yaml"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Workflow '{name}' not found")
+    path.unlink()
+    return {"name": name, "deleted": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Workflow execution endpoints
+# ═══════════════════════════════════════════════════════════════════════════
+
+_workflow_engines: dict[str, StateMachine] = {}
+
+
+def _get_engine(name: str) -> StateMachine:
+    """Get or create a StateMachine for a workflow."""
+    if name not in _workflow_engines:
+        config_path = WORKFLOWS_DIR / f"{name}.yaml"
+        if not config_path.exists():
+            raise HTTPException(status_code=404, detail=f"Workflow '{name}' not found")
+        registry = StageRegistry(str(config_path))
+        base = str(WORKFLOWS_DIR / name)
+        Path(base).mkdir(parents=True, exist_ok=True)
+        _workflow_engines[name] = StateMachine(registry, base)
+    return _workflow_engines[name]
+
+
+@app.post("/api/workflows/{name}/run", response_model=WorkflowRunResponse)
+def run_workflow(name: str, target: Optional[str] = None):
+    """Advance a workflow to the next stage or a specific target stage."""
+    sm = _get_engine(name)
+
+    if sm.current_stage is None:
+        # Initialize at first stage
+        registry = StageRegistry(str(WORKFLOWS_DIR / f"{name}.yaml"))
+        start_stages = _find_start_stages(registry)
+        if not start_stages:
+            raise HTTPException(status_code=400, detail="No start stages found in workflow")
+        start = start_stages[0]
+        ok, msgs = sm.initialize(start)
+        if not ok:
+            return WorkflowRunResponse(success=False, messages=msgs, current_stage=sm.current_stage)
+
+    if target:
+        ok, msgs = sm.transition_to(target)
+    else:
+        # Advance to any available next stage
+        available = sm.registry.get_next_stages(sm.current_stage) if sm.current_stage else []
+        if not available:
+            return WorkflowRunResponse(
+                success=False,
+                messages=[f"No available transitions from '{sm.current_stage}'"],
+                current_stage=sm.current_stage,
+            )
+        target = available[0]
+        ok, msgs = sm.transition_to(target)
+
+    return WorkflowRunResponse(
+        success=ok,
+        messages=msgs,
+        current_stage=sm.current_stage,
+        history=sm.history,
+    )
+
+
+def _find_start_stages(registry: StageRegistry) -> list[str]:
+    """Find stages with no incoming transitions."""
+    all_targets = {t.to_stage for t in registry.all_transitions}
+    return [s for s in registry.stage_names if s not in all_targets]
+
+
+@app.get("/api/workflows/{name}/status", response_model=WorkflowStatusResponse)
+def get_workflow_status(name: str):
+    """Get the current execution status of a workflow."""
+    sm = _get_engine(name)
+    return WorkflowStatusResponse(
+        name=name,
+        current_stage=sm.current_stage,
+        history=sm.history,
+        paused=sm.is_paused,
+        variables=sm.get_all_vars(),
+        retry_count=sm._state.get("retry_count", {}),
+        iterations=sm._state.get("iterations", {}),
+    )
+
+
+@app.post("/api/workflows/{name}/pause")
+def pause_workflow(name: str, reason: str = ""):
+    """Pause a running workflow."""
+    sm = _get_engine(name)
+    sm.pause(reason)
+    return {"name": name, "paused": True, "reason": reason}
+
+
+@app.post("/api/workflows/{name}/resume")
+def resume_workflow(name: str):
+    """Resume a paused workflow."""
+    sm = _get_engine(name)
+    if not sm.is_paused:
+        raise HTTPException(status_code=400, detail="Workflow is not paused")
+    sm.resume()
+    return {"name": name, "paused": False}
 
 
 if DIST_DIR.exists():

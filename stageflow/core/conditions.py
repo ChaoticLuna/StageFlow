@@ -116,19 +116,32 @@ def evaluate_all(conditions: list[dict], base_path: str = ".",
                 return result
 
     messages = []
+    has_hard_fail = False
     for cond in conditions:
+        severity = _get_severity(cond)
         cond_type, cond_params = _parse_condition(cond)
         if not isinstance(cond_params, dict):
             cond_params = {"value": cond_params}
+        else:
+            cond_params = dict(cond_params)
         cond_params.setdefault("base_path", base_path)
         passed, msg = evaluate(cond_type, cond_params)
-        messages.append(f"[{'PASS' if passed else 'FAIL'}] {cond_type}: {msg}")
-        if not passed:
+
+        if severity == "warn":
+            tag = "PASS" if passed else "WARN"
+            messages.append(f"[{tag}] {cond_type}: {msg}")
+        elif not passed:
+            tag = "HARD_FAIL" if severity == "hard" else "FAIL"
+            messages.append(f"[{tag}] {cond_type}: {msg}")
+            has_hard_fail = (severity == "hard")
             result = (False, messages)
             if ttl > 0:
                 key = _cache_key(conditions, base_path, variables)
                 _CONDITION_CACHE[key] = (result, time.time())
             return result
+        else:
+            messages.append(f"[PASS] {cond_type}: {msg}")
+
     result = (True, messages)
     if ttl > 0:
         key = _cache_key(conditions, base_path, variables)
@@ -143,13 +156,23 @@ def list_conditions() -> list[str]:
 
 def _parse_condition(cond: dict) -> Tuple[str, dict]:
     """Parse a condition dict like {'file_exists': 'path/to/file'} or
-    {'json_field': {'path': '...', 'field': '...', 'op': 'not_empty'}}."""
-    # Dict with single key = condition type
-    name = next(iter(cond))
+    {'json_field': {'path': '...', 'field': '...', 'op': 'not_empty'}}.
+    Returns (condition_type, params_dict)."""
+    known_keys = set()
+    for key in cond:
+        if key not in ("severity", "max_attempts"):
+            name = key
+            break
+    else:
+        raise ValueError("Condition dict has no recognized type key")
     params = cond[name]
     if not isinstance(params, dict):
         params = {"value": params}
     return name, params
+
+
+def _get_severity(cond: dict) -> str:
+    return cond.get("severity", "soft")
 
 
 # ─────────────────────────── Built-in Conditions ───────────────────────────

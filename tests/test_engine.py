@@ -803,3 +803,113 @@ class TestWebhookHooks:
         server.server_close()
 
         assert len(received) == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TestSeverityInEngine — severity levels integrated with StateMachine
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestSeverityInEngine:
+    def test_hard_failure_prevents_rollback(self, state_machine, registry):
+        """When a hard-severity condition fails, engine does NOT rollback."""
+        state_machine.initialize("start")
+        registry.register_transition(
+            "start", "end",
+            conditions=[{"severity": "hard", "never": "hard safety gate"}],
+            on_fail="start",
+        )
+        ok, msgs = state_machine.transition_to("end")
+        assert ok is False
+        combined = " ".join(msgs)
+        assert "HARD_BLOCK" in combined, f"Expected [HARD_BLOCK] in: {msgs}"
+        assert state_machine.current_stage == "start"
+
+    def test_hard_failure_increments_retry_count(self, state_machine, registry):
+        """Hard failure still increments retry count."""
+        state_machine.initialize("start")
+        registry.register_transition(
+            "start", "end",
+            conditions=[{"severity": "hard", "never": "blocked"}],
+        )
+        assert state_machine.get_retry_count("start") == 0
+        state_machine.transition_to("end")
+        assert state_machine.get_retry_count("start") == 1
+
+    def test_soft_failure_with_rollback_still_works(self, state_machine, registry):
+        """Soft severity (default) failure with on_fail still triggers rollback."""
+        state_machine.initialize("start")
+        registry.register_transition(
+            "start", "end",
+            conditions=[{"severity": "soft", "never": "soft block"}],
+            on_fail="start",
+        )
+        ok, msgs = state_machine.transition_to("end")
+        assert ok is False
+        combined = " ".join(msgs)
+        assert "ROLLBACK" in combined or "Auto-rolled back" in combined
+        assert state_machine.current_stage == "start"
+
+    def test_hard_failure_multiple_conditions(self, state_machine, registry):
+        """With multiple conditions, a hard failure prevents rollback even
+        if earlier conditions passed."""
+        state_machine.initialize("start")
+        registry.register_transition(
+            "start", "end",
+            conditions=[
+                {"always": True},
+                {"severity": "hard", "never": "hard gate"},
+            ],
+            on_fail="start",
+        )
+        ok, msgs = state_machine.transition_to("end")
+        assert ok is False
+        combined = " ".join(msgs)
+        assert "HARD_BLOCK" in combined or "HARD_FAIL" in combined
+
+    def test_warn_condition_via_evaluate_all_passes_transition(self, state_machine, registry, temp_dir):
+        """A warn-severity condition that fails does NOT block the transition."""
+        state_machine.initialize("start")
+        registry.register_transition(
+            "start", "end",
+            conditions=[{"severity": "warn", "file_exists": "does_not_exist.txt"}],
+        )
+        ok, msgs = state_machine.transition_to("end")
+        assert ok is True, f"Warn condition should not block: {msgs}"
+        assert state_machine.current_stage == "end"
+
+    def test_mixed_severity_warn_and_pass(self, state_machine, registry, temp_dir):
+        """Mixed: warn (fails but passes) + always (passes) -> transition succeeds."""
+        state_machine.initialize("start")
+        registry.register_transition(
+            "start", "end",
+            conditions=[
+                {"severity": "warn", "file_exists": "nope.txt"},
+                {"always": True},
+            ],
+        )
+        ok, msgs = state_machine.transition_to("end")
+        assert ok is True
+
+    def test_force_transition_bypasses_hard_condition(self, state_machine, registry):
+        """Force transition skips conditions including hard severity."""
+        state_machine.initialize("start")
+        registry.register_transition(
+            "start", "end",
+            conditions=[{"severity": "hard", "never": "hard gate"}],
+        )
+        ok, msgs = state_machine.force_transition_to("end")
+        assert ok is True
+        assert state_machine.current_stage == "end"
+
+    def test_no_rollback_when_no_on_fail_configured(self, state_machine, registry):
+        """Without on_fail, any severity failure just blocks without rollback."""
+        state_machine.initialize("start")
+        registry.register_transition(
+            "start", "end",
+            conditions=[{"severity": "soft", "never": "blocked"}],
+        )
+        ok, msgs = state_machine.transition_to("end")
+        assert ok is False
+        assert state_machine.current_stage == "start"
+        history = state_machine.history
+        assert len(history) == 0

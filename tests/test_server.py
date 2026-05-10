@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import json
+import os
 import sys
+import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 from fastapi.testclient import TestClient
 
-from editor.server import app, CONDITION_DEFS
+from editor.server import app, CONDITION_DEFS, WORKFLOWS_DIR
 
 client = TestClient(app)
 
@@ -217,3 +221,390 @@ transitions:
         data = r.json()
         if not data["can_transition"]:
             assert any("on_fail" in m for m in data["messages"])
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Audit log endpoints
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestAuditEndpoints:
+    def test_audit_empty_when_no_log(self, tmp_path):
+        """Audit returns empty when no log file exists."""
+        aud = tmp_path / ".claude" / "audit.jsonl"
+        aud.parent.mkdir(parents=True, exist_ok=True)
+        orig = os.getcwd()
+        try:
+            os.chdir(str(tmp_path))
+            r = client.get("/api/audit")
+            assert r.status_code == 200
+            data = r.json()
+            assert data["total"] == 0
+            assert data["entries"] == []
+        finally:
+            os.chdir(orig)
+
+    def test_audit_returns_entries(self, tmp_path):
+        """Audit returns entries from the log file."""
+        aud = tmp_path / ".claude" / "audit.jsonl"
+        aud.parent.mkdir(parents=True, exist_ok=True)
+        aud.write_text(
+            '{"event": "transition", "from": "a", "to": "b"}\n'
+            '{"event": "tool_violation", "tool": "Bash"}\n',
+            encoding="utf-8"
+        )
+        orig = os.getcwd()
+        try:
+            os.chdir(str(tmp_path))
+            r = client.get("/api/audit")
+            assert r.status_code == 200
+            data = r.json()
+            assert data["total"] == 2
+            assert len(data["entries"]) == 2
+        finally:
+            os.chdir(orig)
+
+    def test_audit_filter_by_event_type(self, tmp_path):
+        """Audit endpoint filters by event_type query parameter."""
+        aud = tmp_path / ".claude" / "audit.jsonl"
+        aud.parent.mkdir(parents=True, exist_ok=True)
+        aud.write_text(
+            '{"event": "transition", "from": "a", "to": "b"}\n'
+            '{"event": "tool_violation", "tool": "Bash"}\n'
+            '{"event": "transition", "from": "b", "to": "c"}\n',
+            encoding="utf-8"
+        )
+        orig = os.getcwd()
+        try:
+            os.chdir(str(tmp_path))
+            r = client.get("/api/audit", params={"event_type": "transition"})
+            assert r.status_code == 200
+            data = r.json()
+            assert data["total"] == 2
+            assert data["returned"] == 2
+            for e in data["entries"]:
+                assert e["event"] == "transition"
+        finally:
+            os.chdir(orig)
+
+    def test_audit_respects_limit(self, tmp_path):
+        """Audit endpoint respects the limit parameter."""
+        aud = tmp_path / ".claude" / "audit.jsonl"
+        aud.parent.mkdir(parents=True, exist_ok=True)
+        lines = [f'{{"event": "test", "i": {i}}}' for i in range(10)]
+        aud.write_text("\n".join(lines), encoding="utf-8")
+        orig = os.getcwd()
+        try:
+            os.chdir(str(tmp_path))
+            r = client.get("/api/audit", params={"limit": 3})
+            assert r.status_code == 200
+            data = r.json()
+            assert data["total"] == 10
+            assert data["returned"] == 3
+            assert len(data["entries"]) == 3
+        finally:
+            os.chdir(orig)
+
+    def test_audit_skips_invalid_json_lines(self, tmp_path):
+        """Audit endpoint skips malformed JSON lines."""
+        aud = tmp_path / ".claude" / "audit.jsonl"
+        aud.parent.mkdir(parents=True, exist_ok=True)
+        aud.write_text(
+            'not valid json\n'
+            '{"event": "valid"}\n'
+            'also not json\n',
+            encoding="utf-8"
+        )
+        orig = os.getcwd()
+        try:
+            os.chdir(str(tmp_path))
+            r = client.get("/api/audit")
+            assert r.status_code == 200
+            data = r.json()
+            assert data["total"] == 1
+        finally:
+            os.chdir(orig)
+
+    def test_audit_summary_empty(self, tmp_path):
+        """Audit summary returns zero counts when no log exists."""
+        orig = os.getcwd()
+        try:
+            os.chdir(str(tmp_path))
+            r = client.get("/api/audit/summary")
+            assert r.status_code == 200
+            assert r.json()["total_events"] == 0
+        finally:
+            os.chdir(orig)
+
+    def test_audit_summary_with_events(self, tmp_path):
+        """Audit summary counts events by type."""
+        aud = tmp_path / ".claude" / "audit.jsonl"
+        aud.parent.mkdir(parents=True, exist_ok=True)
+        aud.write_text(
+            '{"event": "transition", "from": "a", "to": "b"}\n'
+            '{"event": "transition", "from": "b", "to": "c"}\n'
+            '{"event": "tool_violation", "tool": "Bash"}\n',
+            encoding="utf-8"
+        )
+        orig = os.getcwd()
+        try:
+            os.chdir(str(tmp_path))
+            r = client.get("/api/audit/summary")
+            assert r.status_code == 200
+        finally:
+            os.chdir(orig)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Workflow CRUD endpoints
+# ═══════════════════════════════════════════════════════════════════════════
+
+SIMPLE_WORKFLOW_YAML = """
+stages:
+  - name: start
+    tools: [Read]
+  - name: end
+    tools: []
+transitions:
+  - from: start
+    to: end
+    conditions:
+      - always: true
+"""
+
+
+class TestWorkflowCRUD:
+    def test_list_workflows_empty(self):
+        """Listing workflows when none exist returns empty list."""
+        orig_count = len(list(WORKFLOWS_DIR.glob("*.yaml")))
+        r = client.get("/api/workflows")
+        assert r.status_code == 200
+        workflows = r.json()["workflows"]
+        # Should have at most the ones we haven't created yet
+        assert isinstance(workflows, list)
+
+    def test_save_and_get_workflow(self):
+        """Save a workflow and retrieve it."""
+        name = "test_crud_workflow"
+        r = client.put(f"/api/workflows/{name}", json={"yaml": SIMPLE_WORKFLOW_YAML})
+        assert r.status_code == 200
+        data = r.json()
+        assert data["name"] == name
+        assert data["saved"] is True
+
+        r2 = client.get(f"/api/workflows/{name}")
+        assert r2.status_code == 200
+        assert name in r2.json()["name"]
+        assert "stages" in r2.json()["yaml"]
+
+    def test_save_invalid_yaml_returns_400(self):
+        """Saving invalid YAML returns 400."""
+        r = client.put("/api/workflows/bad", json={"yaml": "not: [valid: yaml"})
+        assert r.status_code == 400
+
+    def test_save_empty_yaml_returns_400(self):
+        """Saving empty YAML returns 400."""
+        r = client.put("/api/workflows/empty", json={"yaml": ""})
+        assert r.status_code == 400
+
+    def test_save_invalid_config_returns_400(self):
+        """Saving YAML with invalid StageFlow config returns 400."""
+        r = client.put("/api/workflows/bad_config", json={"yaml": "stages: not_a_list"})
+        assert r.status_code == 400
+
+    def test_get_nonexistent_workflow_returns_404(self):
+        """Getting a workflow that doesn't exist returns 404."""
+        r = client.get("/api/workflows/nonexistent_xyz_123")
+        assert r.status_code == 404
+
+    def test_delete_workflow(self):
+        """Delete a saved workflow."""
+        name = "test_delete_workflow"
+        client.put(f"/api/workflows/{name}", json={"yaml": SIMPLE_WORKFLOW_YAML})
+        r = client.delete(f"/api/workflows/{name}")
+        assert r.status_code == 200
+        assert r.json()["deleted"] is True
+
+        r2 = client.get(f"/api/workflows/{name}")
+        assert r2.status_code == 404
+
+    def test_delete_nonexistent_workflow_returns_404(self):
+        """Deleting a workflow that doesn't exist returns 404."""
+        r = client.delete("/api/workflows/nonexistent_xyz_123")
+        assert r.status_code == 404
+
+    def test_list_workflows_includes_saved(self):
+        """List workflows includes saved workflow metadata."""
+        name = "test_list_workflow"
+        client.put(f"/api/workflows/{name}", json={"yaml": SIMPLE_WORKFLOW_YAML})
+        r = client.get("/api/workflows")
+        assert r.status_code == 200
+        workflows = r.json()["workflows"]
+        names = [w["name"] for w in workflows]
+        assert name in names
+        # Check metadata fields
+        wf = [w for w in workflows if w["name"] == name][0]
+        assert "size" in wf
+        assert "modified" in wf
+        assert "path" in wf
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Workflow execution endpoints
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestWorkflowExecution:
+    SETUP_YAML = """
+stages:
+  - name: pick
+    tools: [Read]
+  - name: analyze
+    tools: [Read, Grep]
+  - name: done
+    tools: []
+transitions:
+  - from: pick
+    to: analyze
+    conditions:
+      - always: true
+  - from: analyze
+    to: done
+    conditions:
+      - always: true
+"""
+
+    def setup_method(self):
+        """Ensure the test workflow exists before each test."""
+        name = "test_exec_workflow"
+        client.put(f"/api/workflows/{name}", json={"yaml": self.SETUP_YAML})
+
+    def teardown_method(self):
+        """Clean up after each test."""
+        import shutil
+        name = "test_exec_workflow"
+        path = WORKFLOWS_DIR / f"{name}.yaml"
+        if path.exists():
+            path.unlink()
+        engine_dir = WORKFLOWS_DIR / name
+        if engine_dir.exists():
+            shutil.rmtree(engine_dir, ignore_errors=True)
+        # Also clean up the in-memory engine
+        from editor.server import _workflow_engines
+        _workflow_engines.pop(name, None)
+
+    def test_run_initializes_and_advances(self):
+        """First run initializes at pick AND advances to analyze."""
+        name = "test_exec_workflow"
+        # First run: initializes at pick and immediately advances to analyze
+        r1 = client.post(f"/api/workflows/{name}/run")
+        assert r1.status_code == 200
+        d1 = r1.json()
+        assert d1["current_stage"] == "analyze"
+        assert d1["success"] is True
+
+        # Second run: advances from analyze to done
+        r2 = client.post(f"/api/workflows/{name}/run")
+        assert r2.status_code == 200
+        d2 = r2.json()
+        assert d2["current_stage"] == "done"
+
+    def test_run_to_specific_target(self):
+        """Run with target parameter advances to a specific stage."""
+        name = "test_exec_workflow"
+        # Initialize first
+        client.post(f"/api/workflows/{name}/run")
+        # Advance to specific target
+        r = client.post(f"/api/workflows/{name}/run?target=done")
+        assert r.status_code == 200
+        d = r.json()
+        assert d["current_stage"] == "done"
+
+    def test_run_nonexistent_workflow_returns_404(self):
+        """Running a workflow that doesn't exist returns 404."""
+        r = client.post("/api/workflows/nonexistent_xyz_123/run")
+        assert r.status_code == 404
+
+    def test_status_returns_workflow_state(self):
+        """Status endpoint returns current workflow state after run."""
+        name = "test_exec_workflow"
+        # First run initializes pick and advances to analyze
+        client.post(f"/api/workflows/{name}/run")
+        r = client.get(f"/api/workflows/{name}/status")
+        assert r.status_code == 200
+        d = r.json()
+        assert d["name"] == name
+        assert d["current_stage"] is not None  # some stage after run
+        assert isinstance(d["history"], list)
+        assert d["paused"] is False
+        assert isinstance(d["variables"], dict)
+        assert isinstance(d["retry_count"], dict)
+        assert isinstance(d["iterations"], dict)
+
+    def test_status_nonexistent_workflow_returns_404(self):
+        """Status for nonexistent workflow returns 404."""
+        r = client.get("/api/workflows/nonexistent_xyz_123/status")
+        assert r.status_code == 404
+
+    def test_pause_workflow(self):
+        """Pause a running workflow."""
+        name = "test_exec_workflow"
+        client.post(f"/api/workflows/{name}/run")
+        r = client.post(f"/api/workflows/{name}/pause?reason=testing")
+        assert r.status_code == 200
+        d = r.json()
+        assert d["paused"] is True
+        assert d["reason"] == "testing"
+
+        # Verify status shows paused
+        s = client.get(f"/api/workflows/{name}/status")
+        assert s.json()["paused"] is True
+
+    def test_pause_blocks_transition(self):
+        """Paused workflow cannot transition."""
+        name = "test_exec_workflow"
+        # First run: pick init + advance to analyze
+        client.post(f"/api/workflows/{name}/run")
+        client.post(f"/api/workflows/{name}/pause?reason=block")
+
+        # Try to advance from analyze to done while paused
+        r = client.post(f"/api/workflows/{name}/run?target=done")
+        assert r.status_code == 200
+        d = r.json()
+        assert d["success"] is False
+
+    def test_resume_workflow(self):
+        """Resume a paused workflow."""
+        name = "test_exec_workflow"
+        client.post(f"/api/workflows/{name}/run")
+        client.post(f"/api/workflows/{name}/pause?reason=test")
+        r = client.post(f"/api/workflows/{name}/resume")
+        assert r.status_code == 200
+        assert r.json()["paused"] is False
+
+    def test_resume_not_paused_returns_400(self):
+        """Resuming a non-paused workflow returns 400."""
+        name = "test_exec_workflow"
+        client.post(f"/api/workflows/{name}/run")
+        r = client.post(f"/api/workflows/{name}/resume")
+        assert r.status_code == 400
+
+    def test_run_history_persists(self):
+        """History is tracked across multiple runs."""
+        name = "test_exec_workflow"
+        client.post(f"/api/workflows/{name}/run")  # init pick
+        client.post(f"/api/workflows/{name}/run")  # pick -> analyze
+
+        r = client.get(f"/api/workflows/{name}/status")
+        history = r.json()["history"]
+        assert len(history) >= 1  # at least one transition recorded
+
+    def test_run_no_available_transition(self):
+        """Running at a terminal stage reports failure."""
+        name = "test_exec_workflow"
+        client.post(f"/api/workflows/{name}/run")  # init pick
+        client.post(f"/api/workflows/{name}/run?target=done")  # -> done
+        # At done, no more transitions
+        r = client.post(f"/api/workflows/{name}/run")
+        assert r.status_code == 200
+        d = r.json()
+        assert d["success"] is False
+        assert "No available" in str(d["messages"])

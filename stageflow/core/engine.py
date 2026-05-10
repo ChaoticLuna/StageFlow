@@ -202,7 +202,11 @@ class StateMachine:
 
     def _handle_transition_failure(self, current: str, target: str,
                                    msgs: List[str]) -> Tuple[bool, List[str]]:
-        """Handle failed transition: increment retry count and optionally rollback."""
+        """Handle failed transition: increment retry count and optionally rollback.
+        Hard-blocked conditions prevent rollback."""
+        # Check for hard-blocked conditions — no rollback allowed
+        has_hard_fail = any("HARD_FAIL" in m for m in msgs)
+
         # Increment retry count for current stage
         self._state.setdefault("retry_count", {})
         self._state["retry_count"][current] = self._state["retry_count"].get(current, 0) + 1
@@ -213,9 +217,10 @@ class StateMachine:
         matching = [t for t in transitions if t.to_stage == target]
 
         rollback_target = None
-        for t in matching:
-            if t.on_fail:
-                rollback_target = t.on_fail
+        if not has_hard_fail:
+            for t in matching:
+                if t.on_fail:
+                    rollback_target = t.on_fail
 
         if rollback_target:
             self.current_stage = rollback_target
@@ -226,6 +231,8 @@ class StateMachine:
             })
             self._save_state()
             msgs.append(f"[ROLLBACK] Auto-rolled back to: {rollback_target}")
+        elif has_hard_fail:
+            msgs.append("[HARD_BLOCK] Transition blocked by hard condition; no rollback")
 
         return False, msgs
 

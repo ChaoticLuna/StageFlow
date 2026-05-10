@@ -10,7 +10,9 @@ from stageflow.core.conditions import (
     evaluate_all,
     list_conditions,
     _parse_condition,
+    _get_severity,
     _resolve_vars,
+    _CONDITION_REGISTRY,
 )
 
 
@@ -938,7 +940,7 @@ class TestParseCondition:
         assert params == {"value": True}
 
     def test_empty_dict_raises(self):
-        with pytest.raises(StopIteration):
+        with pytest.raises(ValueError, match="no recognized type key"):
             _parse_condition({})
 
 
@@ -1812,3 +1814,265 @@ class TestJsonCount:
         })
         assert not passed
         assert "Invalid JSON" in msg
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Condition Severity Levels (warn / soft / hard)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestConditionSeverity:
+    """Tests for condition severity: warn (log but pass), soft (default, block),
+    hard (block immediately, no retry/rollback)."""
+
+    # ── _parse_condition ──────────────────────────────────────────────
+
+    def test_parse_skips_severity_key(self, temp_dir):
+        """_parse_condition skips 'severity' to find the condition type."""
+        name, params = _parse_condition({"severity": "hard", "file_exists": "test.txt"})
+        assert name == "file_exists"
+        assert params == {"value": "test.txt"}
+
+    def test_parse_skips_max_attempts_key(self, temp_dir):
+        """_parse_condition skips 'max_attempts' to find the condition type."""
+        name, params = _parse_condition(
+            {"max_attempts": 5, "severity": "soft", "always": True}
+        )
+        assert name == "always"
+        assert params == {"value": True}
+
+    def test_parse_skips_both_meta_keys(self, temp_dir):
+        name, params = _parse_condition(
+            {"severity": "warn", "max_attempts": 3, "file_exists": "x.txt"}
+        )
+        assert name == "file_exists"
+        assert params == {"value": "x.txt"}
+
+    # ── _get_severity ─────────────────────────────────────────────────
+
+    def test_get_severity_default_soft(self):
+        assert _get_severity({"file_exists": "x.txt"}) == "soft"
+
+    def test_get_severity_explicit(self):
+        assert _get_severity({"file_exists": "x.txt", "severity": "hard"}) == "hard"
+        assert _get_severity({"file_exists": "x.txt", "severity": "warn"}) == "warn"
+        assert _get_severity({"file_exists": "x.txt", "severity": "soft"}) == "soft"
+
+    # ── evaluate_all: warn severity ───────────────────────────────────
+
+    def test_warn_passes_even_when_condition_fails(self, temp_dir):
+        """Warn severity: condition fails but evaluate_all still returns True."""
+        passed, msgs = evaluate_all(
+            [{"severity": "warn", "file_exists": "nonexistent_file.xyz"}],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is True
+        assert any("[WARN]" in m for m in msgs), f"Expected [WARN] tag in: {msgs}"
+
+    def test_warn_passes_when_condition_passes(self, temp_dir):
+        """Warn severity: passing condition tagged as PASS."""
+        f = temp_dir / "exists.txt"
+        f.write_text("ok")
+        passed, msgs = evaluate_all(
+            [{"severity": "warn", "file_exists": "exists.txt"}],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is True
+        assert any("[PASS]" in m for m in msgs)
+
+    def test_warn_never_blocks_transition(self, temp_dir):
+        """Warn severity: all conditions fail but overall result is still pass."""
+        passed, msgs = evaluate_all(
+            [
+                {"severity": "warn", "file_exists": "nope.txt"},
+                {"severity": "warn", "file_exists": "also_missing.txt"},
+            ],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is True
+        warn_count = sum(1 for m in msgs if "[WARN]" in m)
+        assert warn_count == 2
+
+    # ── evaluate_all: soft severity (default) ─────────────────────────
+
+    def test_soft_fails_normally(self, temp_dir):
+        """Soft severity (default): failure blocks transition like before."""
+        passed, msgs = evaluate_all(
+            [{"severity": "soft", "file_exists": "nonexistent.xyz"}],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is False
+        assert any("[FAIL]" in m for m in msgs)
+
+    def test_soft_is_default_when_no_severity_specified(self, temp_dir):
+        """When severity not specified, behaves as soft (blocks on fail)."""
+        passed, msgs = evaluate_all(
+            [{"never": "blocked"}],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is False
+        assert any("[FAIL]" in m for m in msgs)
+
+    def test_soft_passes_normally(self, temp_dir):
+        """Soft severity: passing condition tagged PASS."""
+        passed, msgs = evaluate_all(
+            [{"severity": "soft", "always": True}],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is True
+        assert any("[PASS]" in m for m in msgs)
+
+    # ── evaluate_all: hard severity ───────────────────────────────────
+
+    def test_hard_fails_with_hard_fail_tag(self, temp_dir):
+        """Hard severity: failure tagged [HARD_FAIL]."""
+        passed, msgs = evaluate_all(
+            [{"severity": "hard", "file_exists": "nonexistent.xyz"}],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is False
+        assert any("[HARD_FAIL]" in m for m in msgs)
+
+    def test_hard_stops_evaluating_subsequent_conditions(self, temp_dir):
+        """Hard severity failure stops immediately without evaluating remaining."""
+        eval_order = []
+
+        # Register a custom condition to track evaluation order
+        from stageflow.core.conditions import register as _reg
+        called = []
+
+        @_reg("_tracked_check")
+        def _tracked(params):
+            called.append(params.get("id", "unknown"))
+            return False, f"tracked_{params.get('id', '?')}_failed"
+
+        passed, msgs = evaluate_all(
+            [
+                {"severity": "hard", "_tracked_check": {"id": "first"}},
+                {"severity": "soft", "_tracked_check": {"id": "second"}},
+            ],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is False
+        assert any("[HARD_FAIL]" in m for m in msgs)
+        # Second condition should NOT have been evaluated
+        assert called == ["first"], f"Expected only 'first', got {called}"
+
+        # Clean up
+        _CONDITION_REGISTRY.pop("_tracked_check", None)
+
+    def test_hard_passes_normally_when_condition_ok(self, temp_dir):
+        """Hard severity: passing condition behaves normally."""
+        f = temp_dir / "real.txt"
+        f.write_text("content")
+        passed, msgs = evaluate_all(
+            [{"severity": "hard", "file_exists": "real.txt"}],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is True
+        assert any("[PASS]" in m for m in msgs)
+
+    # ── Mixed severities ──────────────────────────────────────────────
+
+    def test_mixed_warn_and_soft(self, temp_dir):
+        """Warn condition logs but doesn't block; soft condition blocks on fail."""
+        passed, msgs = evaluate_all(
+            [
+                {"severity": "warn", "file_exists": "nope.txt"},
+                {"severity": "soft", "always": True},
+            ],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is True
+        assert any("[WARN]" in m for m in msgs)
+        assert any("[PASS]" in m for m in msgs)
+
+    def test_mixed_warn_soft_first_fails(self, temp_dir):
+        """Soft condition evaluated first fails, blocks immediately."""
+        passed, msgs = evaluate_all(
+            [
+                {"severity": "soft", "never": "blocked"},
+                {"severity": "warn", "file_exists": "nope.txt"},
+            ],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is False
+        assert any("[FAIL]" in m for m in msgs)
+        # Warn condition should not be evaluated (soft blocked first)
+        assert not any("[WARN]" in m for m in msgs)
+
+    def test_warn_before_hard(self, temp_dir):
+        """Warn passes through; hard blocks and stops evaluation."""
+        passed, msgs = evaluate_all(
+            [
+                {"severity": "warn", "file_exists": "nope.txt"},
+                {"severity": "hard", "never": "hard_block"},
+            ],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is False
+        assert any("[WARN]" in m for m in msgs)
+        assert any("[HARD_FAIL]" in m for m in msgs)
+
+    def test_all_warn_conditions_dont_block(self, temp_dir):
+        """Even with multiple failing warn conditions, overall passes."""
+        passed, msgs = evaluate_all(
+            [
+                {"severity": "warn", "never": "reason1"},
+                {"severity": "warn", "never": "reason2"},
+                {"severity": "warn", "never": "reason3"},
+            ],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is True
+        assert len([m for m in msgs if "[WARN]" in m]) == 3
+
+    # ── Severity in all_of / any_of ──────────────────────────────────
+
+    def test_severity_in_all_of_sub_condition(self, temp_dir):
+        """Severity works inside all_of sub-conditions."""
+        passed, msgs = evaluate_all(
+            [{
+                "all_of": {
+                    "conditions": [
+                        {"severity": "warn", "file_exists": "nope.txt"},
+                        {"severity": "soft", "always": True},
+                    ]
+                }
+            }],
+            str(temp_dir), cache_ttl=0
+        )
+        assert passed is True
+
+    def test_hard_severity_in_any_of(self, temp_dir):
+        """Hard severity in any_of still propagates HARD_FAIL."""
+        f = temp_dir / "yes.txt"
+        f.write_text("ok")
+        passed, msgs = evaluate_all(
+            [{
+                "any_of": {
+                    "conditions": [
+                        {"severity": "hard", "file_exists": "nope.txt"},
+                        {"severity": "soft", "file_exists": "yes.txt"},
+                    ]
+                }
+            }],
+            str(temp_dir), cache_ttl=0
+        )
+        # any_of: first (hard) fails, second (soft) passes → overall passes
+        assert passed is True
+
+    # ── Variable interpolation with severity ──────────────────────────
+
+    def test_severity_with_variable_interpolation(self, temp_dir):
+        """Severity works correctly when variables are resolved."""
+        f = temp_dir / "BUG-99" / "summary.md"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("# Issue BUG-99")
+
+        passed, msgs = evaluate_all(
+            [{"severity": "warn", "file_exists": "{{var.issue_dir}}/summary.md"}],
+            str(temp_dir), cache_ttl=0,
+            variables={"issue_dir": "BUG-99"}
+        )
+        assert passed is True
+        assert any("[PASS]" in m for m in msgs)

@@ -2,50 +2,64 @@
 
 > **最后更新**: 2026-05-10
 > **当前 Agent**: Claude (via Claude Code)
-> **交接原因**: task-018 完成 — WorkflowOrchestrator 多 Agent 编排器
+> **交接原因**: task-024 完成 — Top 3 improvements from research integration blueprint
 
 ---
 
 ## 当前状态快照
 
 ```
-Tests:           643 total (610 previous + 33 orchestrator tests)
-Framework files: 14 modules (~3,800 lines)
-Agent Runtime:   stageflow/agent/ — 4 modules, 93 tests
-  AgentRunner:         task parsing, lifecycle, plan file updates, progress persistence (35 tests)
-  HybridWorkflow:      LLM stages + framework condition gates, 8 prompts (25 tests)
-  WorkflowOrchestrator: parallel execution, dependency DAG, shared state, audit (33 tests)
-Generator:       stageflow/generator/ — llm_generator.py + prompts.py (43 tests)
-CLI:             python -m stageflow generate "desc" [--template TYPE] [--output PATH]
-Editor:          editor/ — Vite 8 + React 18 + TS 6.0 + React Flow 11 + FastAPI
-Phase 8:         ✅ All 3 tasks complete
-Ralph:           活跃 — task-019 next (pause/resume engine)
+Tests:           685 total (612 excluding timing-heavy tests)
+Framework files: 14 modules (~4,200 lines)
+Severity levels: warn (log, don't block), soft (default, blocks), hard (blocks immediately, no rollback)
+Server API:      15 endpoints (conditions, validate, run, audit, generate, workflows CRUD, execution)
+  Audit:          GET /api/audit (with filtering/limits), GET /api/audit/summary
+  Workflows:      CRUD + run/status/pause/resume
+Ralph:           活跃 — task-025-LOOP next (time-gated loop)
 ```
 
 ## 本次会话完成的工作
 
-**task-017 完成** — HybridWorkflow LLM + StageFlow 混合工作流
+**task-024 完成** — Top 3 improvements from `docs/integration_blueprint.md`:
 
-**task-018 完成** — WorkflowOrchestrator 多 Agent 编排器:
-- **stageflow/agent/orchestrator.py**: `WorkflowOrchestrator` 类:
-  - `add_task(task_id, description, depends_on)`: 注册任务及依赖关系
-  - `add_tasks(tasks)`: 批量注册
-  - `_validate_graph()`: DFS 环检测 + 缺失依赖验证
-  - `_ready_tasks(completed)`: 计算依赖已满足的就绪任务
-  - `run()`: 异步执行所有任务，遵守依赖顺序，独立任务并行（ThreadPoolExecutor）
-  - `_execute_single_task()`: 单任务执行（线程池），为每个任务创建独立 HybridWorkflow
-  - 共享变量存储 (`set_shared`/`get_shared`/`get_all_shared`)
-  - 聚合审计追踪 (`get_audit_trail`/`get_summary`)
-  - 支持 diamond/chain/complex 依赖图
-- **tests/test_orchestrator.py**: 33 个测试，7 个测试类
-- **stageflow/agent/__init__.py**: 导出 WorkflowOrchestrator
+### Improvement #1: Condition Severity Levels (Blueprint A)
+- **stageflow/core/conditions.py**: 
+  - `_parse_condition()` skips `severity` and `max_attempts` meta-keys
+  - `_get_severity(cond)` returns `"soft"` by default
+  - `evaluate_all()` handles 3 severity tiers:
+    - `warn`: always passes, logs `[WARN]` tag
+    - `soft` (default): normal — fail blocks transition with `[FAIL]`
+    - `hard`: fail blocks immediately with `[HARD_FAIL]`, stops evaluating subsequent conditions
+- **stageflow/core/engine.py**: `_handle_transition_failure()` detects `HARD_FAIL` and prevents rollback (`[HARD_BLOCK]`)
+- **tests/test_conditions.py**: 21 new tests (TestConditionSeverity class)
+- **tests/test_engine.py**: 8 new tests (TestSeverityInEngine class)
+
+### Improvement #2: Audit Log Query API (Blueprint C subset)
+- **editor/server.py**: `GET /api/audit` — query with limit + event_type filter, `GET /api/audit/summary` — AuditLogger summary
+- **tests/test_server.py**: 7 new tests (TestAuditEndpoints class)
+
+### Improvement #3: Workflow Run API (Blueprint C subset)
+- **editor/server.py**: 
+  - `POST /api/generate` — NL → YAML via WorkflowGenerator
+  - `GET/PUT/DELETE /api/workflows/{name}` — workflow CRUD with YAML validation
+  - `GET /api/workflows` — list saved workflows
+  - `POST /api/workflows/{name}/run` — initialize + advance stages
+  - `GET /api/workflows/{name}/status` — stage, history, paused, variables
+  - `POST /api/workflows/{name}/pause` / `resume`
+- **tests/test_server.py**: 20 new tests (TestWorkflowCRUD + TestWorkflowExecution classes)
+
+### Fixes
+- `_parse_condition` now raises `ValueError` (not `StopIteration`) for empty dicts — updated pre-existing test
 
 ## 下一步
 
-Ralph 自动从 task-019 开始（pause/resume 引擎 — `engine.py`）
+Ralph 自动从 task-025-LOOP 开始（时间门控循环 — ≥21:00 停止，<21:00 搜索+迭代）
 
 ## 已知问题
 
 1. Hook 当前已关闭
-2. test_cache.py + test_concurrency.py 预存失败（6 个）
-3. Guard hook Windows 兼容性（Bash vs PowerShell）
+2. test_cache.py + test_concurrency.py 预存失败（6 个，与 severity 无关）
+3. test_stress.py 超时（sleep-based 测试）
+4. Guard hook Windows 兼容性（Bash vs PowerShell）
+5. Phase 9: 9.3 并行条件评估、9.6 MCP Server 集成 未实现
+6. Phase 11: GitHub Actions、Docker、VS Code 扩展、Linear/Notion 同步 未开始
