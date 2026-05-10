@@ -21,7 +21,21 @@ dev = [
     "pytest>=7.0",
     "pytest-cov",
 ]
+anthropic = [
+    "anthropic>=0.18.0",
+]
+psutil = [
+    "psutil>=5.9.0",
+]
 editor = [
+    "fastapi>=0.100",
+    "uvicorn>=0.20",
+]
+all = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "anthropic>=0.18.0",
+    "psutil>=5.9.0",
     "fastapi>=0.100",
     "uvicorn>=0.20",
 ]

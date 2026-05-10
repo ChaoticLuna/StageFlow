@@ -38,6 +38,7 @@ tests/test_generator.py
 tests/test_guard.py
 tests/test_hooks_integration.py
 tests/test_hybrid.py
+tests/test_main.py
 tests/test_orchestrator.py
 tests/test_perf.py
 tests/test_registry.py

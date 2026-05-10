@@ -127,7 +127,7 @@
 - [x] **task-046**: Improve `schema.py` coverage (80%→95%+) — add tests for non-dict stages, bad names, duplicate transitions, non-list tools/conditions, non-string on_fail, non-list groups. ~8 new tests targeting 10 uncovered lines.
 - [x] **task-047**: Improve `guard.py` coverage (61%→80%+) — test absolute path resolution, `_check_write_path` edge cases (no path, empty parts), `claude_hook_main()` with mocked stdin. ~6 new tests.
 - [x] **task-048**: Update `docs/api_reference.md` — add `port_open`, `process_running`, `docker_ps` condition types (added in task-037 but docs not updated). Verify all 30 condition types are documented with params and examples.
-- [ ] **task-049**: Audit `pyproject.toml` dev dependencies — verify `pytest-cov`, `pytest`, `pyyaml` properly declared. Ensure `pip install -e ".[dev]"` works end-to-end. Add any missing test deps.
+- [x] **task-049**: Audit `pyproject.toml` dev dependencies — verify `pytest-cov`, `pytest`, `pyyaml` properly declared. Ensure `pip install -e ".[dev]"` works end-to-end. Add any missing test deps.
 - [ ] **task-050**: Cross-platform audit of `conditions.py` — identify Unix-only subprocess calls (`which`, `ps`, `grep`), verify Windows fallbacks exist and are tested. Ensure `shell_test` defaults work cross-platform.
 
 ---
