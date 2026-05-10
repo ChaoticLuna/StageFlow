@@ -43,7 +43,7 @@ def set_cache_ttl(ttl: float):
 def clear_cache():
     """Clear the condition evaluation cache."""
     global _CONDITION_CACHE
-    _CONDITION_CACHE = {}
+    _CONDITION_CACHE.clear()
 
 
 def _cache_key(conditions: list[dict], base_path: str, variables: dict = None) -> str:
@@ -106,12 +106,15 @@ def evaluate_all(conditions: list[dict], base_path: str = ".",
     if variables:
         conditions = _resolve_vars(conditions, variables)
 
-    # Check cache
+    # Check cache — compute key once before evaluation so that mutations
+    # inside handlers (e.g. any_of calling setdefault on sub-condition params)
+    # don't cause key drift between lookup and storage.
     ttl = cache_ttl if cache_ttl is not None else _CACHE_TTL
+    cache_key = None
     if ttl > 0:
-        key = _cache_key(conditions, base_path, variables)
-        if key in _CONDITION_CACHE:
-            result, timestamp = _CONDITION_CACHE[key]
+        cache_key = _cache_key(conditions, base_path, variables)
+        if cache_key in _CONDITION_CACHE:
+            result, timestamp = _CONDITION_CACHE[cache_key]
             if time.time() - timestamp < ttl:
                 return result
 
@@ -135,17 +138,15 @@ def evaluate_all(conditions: list[dict], base_path: str = ".",
             messages.append(f"[{tag}] {cond_type}: {msg}")
             has_hard_fail = (severity == "hard")
             result = (False, messages)
-            if ttl > 0:
-                key = _cache_key(conditions, base_path, variables)
-                _CONDITION_CACHE[key] = (result, time.time())
+            if cache_key:
+                _CONDITION_CACHE[cache_key] = (result, time.time())
             return result
         else:
             messages.append(f"[PASS] {cond_type}: {msg}")
 
     result = (True, messages)
-    if ttl > 0:
-        key = _cache_key(conditions, base_path, variables)
-        _CONDITION_CACHE[key] = (result, time.time())
+    if cache_key:
+        _CONDITION_CACHE[cache_key] = (result, time.time())
     return result
 
 
@@ -396,6 +397,7 @@ def _any_of(params: dict) -> Tuple[bool, str]:
     base_path = params.get("base_path", ".")
     for cond in sub:
         cond_type, cond_params = _parse_condition(cond)
+        cond_params = dict(cond_params) if isinstance(cond_params, dict) else {"value": cond_params}
         cond_params.setdefault("base_path", base_path)
         passed, msg = evaluate(cond_type, cond_params)
         if passed:

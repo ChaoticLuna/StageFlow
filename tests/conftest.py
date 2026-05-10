@@ -232,33 +232,4 @@ def pytest_collection_modifyitems(config, items):
                     )
                 )
 
-# ── Helper: create config file with N stages ────────────────────────────────
 
-def create_config_with_n_stages(n: int, base_dir) -> Path:
-    """Create a stages.yaml config file with N stages and N-1 transitions."""
-    import yaml
-    config = {"stages": [], "transitions": []}
-    for i in range(n):
-        config["stages"].append({
-            "name": f"stage_{i}",
-            "tools": [f"Tool_{i % 3}"],
-            "meta": {"description": f"Test stage {i}"}
-        })
-    for i in range(n - 1):
-        config["transitions"].append({
-            "from": f"stage_{i}",
-            "to": f"stage_{i + 1}",
-            "conditions": [{"always": True}]
-        })
-    config_dir = base_dir / "stageflow" / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    config_path = config_dir / "stages.yaml"
-    with open(config_path, "w") as f:
-        yaml.dump(config, f)
-    return config_path
-
-
-@pytest.fixture
-def temp_dir(tmp_path):
-    """Alias for tmp_path — temp directory."""
-    return tmp_path

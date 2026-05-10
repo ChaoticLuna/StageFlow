@@ -1,11 +1,28 @@
 {
-  "current_stage": "analyze",
-  "history": [],
+  "current_stage": "stage_008",
+  "history": [
+    {
+      "from": "stage_006",
+      "to": "stage_007",
+      "at": "2026-05-10T12:31:10.754504+00:00"
+    },
+    {
+      "from": "stage_007",
+      "to": "stage_008",
+      "at": "2026-05-10T12:31:10.755571+00:00"
+    }
+  ],
   "retry_count": {
-    "analyze": 0
+    "stage_006": 0,
+    "stage_007": 0,
+    "stage_008": 0
   },
   "iterations": {
-    "analyze": 1
+    "stage_006": 1,
+    "stage_007": 1,
+    "stage_008": 1
   },
-  "variables": {}
+  "variables": {},
+  "paused": false,
+  "paused_reason": ""
 }

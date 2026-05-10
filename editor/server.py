@@ -220,7 +220,7 @@ class WorkflowStatusResponse(BaseModel):
 
 @app.get("/api/conditions")
 def get_conditions():
-    registered = list_conditions()
+    registered = [t for t in list_conditions() if not t.startswith("_")]
     missing = [t for t in registered if not any(c["type"] == t for c in CONDITION_DEFS)]
     return {
         "conditions": CONDITION_DEFS,

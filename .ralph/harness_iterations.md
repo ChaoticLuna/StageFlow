@@ -1,3 +1,4 @@
-﻿- [2026-05-10 19:56] Loop 1: 搜索发现 2026 harness engineering 范式验证了 StageFlow 架构（HASS pattern, DAG dependency graphs）。实施 max_iterations 每阶段硬上限（+6 tests），防止无限循环。618 tests pass。
+- [2026-05-10 19:56] Loop 1: 搜索发现 2026 harness engineering 范式验证了 StageFlow 架构（HASS pattern, DAG dependency graphs）。实施 max_iterations 每阶段硬上限（+6 tests），防止无限循环。618 tests pass。
 - [2026-05-10 20:03] Loop 2: MCP Server best practices 调研（FastMCP 成为标准，Streamable HTTP 替代 SSE）。发现并修复 bug：PUT/DELETE workflow 后 engine cache 未失效导致 stale config（+1 test）。619 tests pass。
 - [2026-05-10 20:08] Loop 3: FastMCP 部署模式调研（Streamable HTTP default, uvicorn, 环境感知部署）。增强 status API 返回 stage_info (tools/max_iterations), available_next, total_transitions。619 tests pass。
+- [2026-05-10 20:20] Loop 4: 修复 3 个 bug — (1) clear_cache() 全局重绑定导致 cache 测试导入引用过期，改用 .clear() (2) evaluate_all 缓存 key 在条件评估前后变化（any_of 内部 setdefault 污染条件 dict 导致 key 漂移），改为评估前计算一次 key 供存储重用 (3) test_concurrency 后向 transition 错误使用 transition_to 而非 force_transition_to。修复 8 个 pre-existing 测试失败。服务端过滤 _ 前缀内部条件避免 test-only 条件泄漏。671 tests pass。

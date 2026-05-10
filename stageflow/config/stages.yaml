@@ -54,6 +54,9 @@ stages:
       - Edit
       - Bash(python *)
       - Bash(git *)
+      - PowerShell(python *)
+      - PowerShell(git *)
+      - PowerShell
       - TaskCreate
       - TaskUpdate
       - AskUserQuestion

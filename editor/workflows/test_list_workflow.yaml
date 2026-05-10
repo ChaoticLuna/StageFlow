@@ -1,0 +1,11 @@
+
+stages:
+  - name: start
+    tools: [Read]
+  - name: end
+    tools: []
+transitions:
+  - from: start
+    to: end
+    conditions:
+      - always: true
