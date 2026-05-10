@@ -309,6 +309,7 @@ def _shell_test(params: dict) -> Tuple[bool, str]:
     command = params.get("command", params.get("value", ""))
     op = params.get("op", "exit_zero")
     expected = params.get("value")
+    stream = params.get("stream", "stdout")
 
     try:
         result = subprocess.run(
@@ -320,7 +321,7 @@ def _shell_test(params: dict) -> Tuple[bool, str]:
     except Exception as e:
         return False, f"Shell command error: {e}"
 
-    output = result.stdout.strip()
+    output = (result.stderr if stream == "stderr" else result.stdout).strip()
 
     if op == "exit_zero":
         ok = result.returncode == 0

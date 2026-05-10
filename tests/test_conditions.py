@@ -633,6 +633,26 @@ class TestShellTest:
         })
         assert not passed
 
+    def test_stderr_stream_contains(self, temp_dir):
+        """Check stderr output using stream=stderr with stdout_contains."""
+        passed, msg = evaluate("shell_test", {
+            "base_path": str(temp_dir),
+            "command": 'python -c "import sys; sys.stderr.write(\'error_output\')"',
+            "op": "stdout_contains",
+            "value": "error_output",
+            "stream": "stderr"
+        })
+        assert passed
+
+    def test_stderr_stream_not_empty(self, temp_dir):
+        passed, msg = evaluate("shell_test", {
+            "base_path": str(temp_dir),
+            "command": 'python -c "import sys; sys.stderr.write(\'err\')"',
+            "op": "stdout_not_empty",
+            "stream": "stderr"
+        })
+        assert passed
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # python_expr
