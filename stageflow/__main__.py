@@ -28,10 +28,15 @@ from stageflow.core.engine import StateMachine
 from stageflow.core.conditions import evaluate, list_conditions
 
 
+import json as _json
+
 def cmd_status(args):
     reg = StageRegistry()
     sm = StateMachine(reg)
     info = sm.status()
+    if getattr(args, 'json', False):
+        print(_json.dumps(info, indent=2, default=str))
+        return
     stage = info["current_stage"] or "(not initialized)"
     print(f"  Current Stage : {stage}")
     if info["stage_info"]:
@@ -183,6 +188,20 @@ def cmd_graph(args):
 
 def cmd_list(args):
     reg = StageRegistry()
+    if getattr(args, 'json', False):
+        stages_list = []
+        for name in reg.stage_names:
+            stage = reg.get_stage(name)
+            stages_list.append(stage.to_dict())
+        transitions_list = [t.to_dict() for t in reg.all_transitions]
+        ok, errs = reg.validate()
+        print(_json.dumps({
+            "stages": stages_list,
+            "transitions": transitions_list,
+            "valid": ok,
+            "errors": errs,
+        }, indent=2, default=str))
+        return
     print(f"Stages ({len(reg.stage_names)}):")
     for name in reg.stage_names:
         stage = reg.get_stage(name)
@@ -215,9 +234,20 @@ def cmd_check(args):
     reg = StageRegistry()
     sm = StateMachine(reg)
     if sm.current_stage is None:
-        print("Not initialized.", file=sys.stderr)
+        if getattr(args, 'json', False):
+            print(_json.dumps({"error": "Not initialized", "current_stage": None}))
+        else:
+            print("Not initialized.", file=sys.stderr)
         return 1
     ok, msgs = sm.can_transition_to(args.target)
+    if getattr(args, 'json', False):
+        print(_json.dumps({
+            "current_stage": sm.current_stage,
+            "target": args.target,
+            "allowed": ok,
+            "messages": msgs,
+        }, indent=2, default=str))
+        return 0 if ok else 1
     for m in msgs:
         print(m)
     print(f"\nResult: {'ALLOWED' if ok else 'BLOCKED'}")
@@ -326,6 +356,7 @@ Examples:
 
     p = sub.add_parser("status", help="Show current stage and status")
     p.add_argument("--verbose", "-v", action="store_true")
+    p.add_argument("--json", "-j", action="store_true", help="JSON output")
 
     p = sub.add_parser("next", help="Advance to next stage")
     p.add_argument("target", nargs="?", help="Target stage name")
@@ -344,13 +375,15 @@ Examples:
 
     p = sub.add_parser("graph", help="Generate Mermaid flowchart")
 
-    sub.add_parser("list", help="List all stages and transitions")
+    p = sub.add_parser("list", help="List all stages and transitions")
+    p.add_argument("--json", "-j", action="store_true", help="JSON output")
 
     p = sub.add_parser("init", help="Initialize state machine")
     p.add_argument("stage", help="Starting stage name")
 
     p = sub.add_parser("check", help="Dry-run: check conditions for transition")
     p.add_argument("target", help="Target stage to check")
+    p.add_argument("--json", "-j", action="store_true", help="JSON output")
 
     p = sub.add_parser("cond", help="Test a condition type")
     p.add_argument("type", help="Condition type name")

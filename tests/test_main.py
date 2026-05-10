@@ -53,6 +53,40 @@ class TestStageflowCLI:
         r = _stageflow("reset", "--help")
         assert r.returncode == 0, r.stderr
 
+    def test_status_json_output(self):
+        r = _stageflow("status", "--json")
+        assert r.returncode == 0, r.stderr
+        import json
+        data = json.loads(r.stdout)
+        assert "current_stage" in data
+        assert "history" in data
+        assert "registered_stages" in data
+
+    def test_list_json_output(self):
+        r = _stageflow("list", "--json")
+        assert r.returncode == 0, r.stderr
+        import json
+        data = json.loads(r.stdout)
+        assert "stages" in data
+        assert "transitions" in data
+        assert isinstance(data["valid"], bool)
+
+    def test_check_json_output(self):
+        r = _stageflow("check", "--json", "analyze")
+        import json
+        data = json.loads(r.stdout)
+        assert "current_stage" in data
+        assert "target" in data
+        assert "allowed" in data
+        assert "messages" in data
+
+    def test_status_json_short_flag(self):
+        r = _stageflow("status", "-j")
+        assert r.returncode == 0, r.stderr
+        import json
+        data = json.loads(r.stdout)
+        assert "current_stage" in data
+
 
 class TestStageflowMainModule:
     def test_import_main(self):
