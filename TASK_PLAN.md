@@ -97,7 +97,7 @@
 
 | # | 任务 | 状态 | 产出 |
 |---|------|------|------|
-| 9.1 | 暂停/恢复执行 | ⬜ | engine pause/resume → task-019 |
+| 9.1 | 暂停/恢复执行 | ✅ | engine pause/resume → task-019 |
 | 9.2 | Webhook 通知 | ⬜ | on_enter/on_exit webhook → task-020 |
 | 9.3 | 并行条件评估 | ⬜ | 多条件并发执行 |
 | 9.4 | 软性门控（warn 不阻止） | ⬜ | condition severity 分级 |

@@ -448,3 +448,98 @@ class TestLifecycleHooks:
         assert not hook_exit_file.exists(), (
             "Force transition should skip on_exit hooks"
         )
+
+
+class TestPauseResume:
+    def test_not_paused_by_default(self, state_machine):
+        state_machine.initialize("start")
+        assert state_machine.is_paused is False
+
+    def test_pause_sets_flag(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.pause("Maintenance window")
+        assert state_machine.is_paused is True
+
+    def test_resume_clears_flag(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.pause("break")
+        state_machine.resume()
+        assert state_machine.is_paused is False
+
+    def test_pause_persists_across_reload(self, state_machine, registry, temp_dir):
+        state_machine.initialize("start")
+        state_machine.pause("system upgrade")
+        sm2 = StateMachine(registry, str(temp_dir))
+        assert sm2.is_paused is True
+        assert sm2._state["paused_reason"] == "system upgrade"
+
+    def test_resume_persists_across_reload(self, state_machine, registry, temp_dir):
+        state_machine.initialize("start")
+        state_machine.pause("test")
+        state_machine.resume()
+        sm2 = StateMachine(registry, str(temp_dir))
+        assert sm2.is_paused is False
+
+    def test_paused_transition_to_blocked(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.pause("blocking test")
+        ok, msgs = state_machine.transition_to("middle")
+        assert ok is False
+        assert any("paused" in m.lower() for m in msgs)
+
+    def test_paused_force_transition_blocked(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.pause("no force allowed")
+        ok, msgs = state_machine.force_transition_to("middle")
+        assert ok is False
+
+    def test_paused_can_transition_to_blocked(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.pause("test")
+        ok, msgs = state_machine.can_transition_to("middle")
+        assert ok is False
+
+    def test_paused_initialize_blocked(self, state_machine):
+        state_machine.pause("testing init block")
+        ok, msgs = state_machine.initialize("start")
+        assert ok is False
+
+    def test_resume_allows_transitions_again(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.pause("temporary")
+        state_machine.resume()
+        ok, msgs = state_machine.transition_to("middle")
+        assert ok is True
+
+    def test_reset_clears_paused_state(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.pause("will reset")
+        state_machine.reset()
+        assert state_machine.is_paused is False
+
+    def test_pause_with_reason_stores_reason(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.pause("deploy in progress")
+        assert "deploy in progress" in str(state_machine._state.get("paused_reason", ""))
+
+    def test_pause_error_message_includes_reason(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.pause("maintenance window")
+        ok, msgs = state_machine.transition_to("middle")
+        assert any("maintenance window" in m for m in msgs)
+
+    def test_pause_audit_logged(self, state_machine, temp_dir):
+        state_machine.initialize("start")
+        state_machine.pause("audit test")
+        audit_path = temp_dir / ".claude" / "audit.jsonl"
+        assert audit_path.exists()
+        content = audit_path.read_text(encoding="utf-8")
+        assert '"event": "pause"' in content
+
+    def test_resume_audit_logged(self, state_machine, temp_dir):
+        state_machine.initialize("start")
+        state_machine.pause("test")
+        state_machine.resume()
+        audit_path = temp_dir / ".claude" / "audit.jsonl"
+        content = audit_path.read_text(encoding="utf-8")
+        assert '"event": "resume"' in content

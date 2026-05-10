@@ -55,6 +55,8 @@ class StateMachine:
             "retry_count": {},
             "iterations": {},
             "variables": {},
+            "paused": False,
+            "paused_reason": "",
         }
 
     def _save_state(self):
@@ -86,6 +88,24 @@ class StateMachine:
     def get_iterations(self, stage: str) -> int:
         return self._state.get("iterations", {}).get(stage, 0)
 
+    @property
+    def is_paused(self) -> bool:
+        return self._state.get("paused", False)
+
+    def pause(self, reason: str = ""):
+        """Pause the state machine. No transitions allowed while paused."""
+        self._state["paused"] = True
+        self._state["paused_reason"] = reason
+        self._save_state()
+        self.audit._write({"event": "pause", "reason": reason})
+
+    def resume(self):
+        """Resume the state machine from a paused state."""
+        self._state["paused"] = False
+        self._state["paused_reason"] = ""
+        self._save_state()
+        self.audit._write({"event": "resume"})
+
     # ── Variables (like env vars but scoped to the state machine) ───────
 
     def set_var(self, key: str, value: Any):
@@ -104,6 +124,8 @@ class StateMachine:
     def can_transition_to(self, target: str) -> Tuple[bool, List[str]]:
         """Check if transition from current stage to target is allowed.
         Returns (allowed, messages)."""
+        if self.is_paused:
+            return False, [f"State machine is paused: {self._state.get('paused_reason', '')}"]
         current = self.current_stage
         if current is None:
             # No current stage means not initialized
@@ -140,6 +162,8 @@ class StateMachine:
         If force=True, bypass condition checks.
         On failure, applies on_fail logic (rollback).
         """
+        if self.is_paused:
+            return False, [f"Cannot transition: state machine is paused. Reason: {self._state.get('paused_reason', 'none')}"]
         current = self.current_stage
 
         if not force:
@@ -246,6 +270,8 @@ class StateMachine:
 
     def initialize(self, stage: str) -> Tuple[bool, List[str]]:
         """Initialize the state machine at a starting stage."""
+        if self.is_paused:
+            return False, [f"Cannot initialize: state machine is paused. Reason: {self._state.get('paused_reason', 'none')}"]
         if stage not in self.registry.stage_names:
             return False, [f"Unknown stage: {stage}"]
         self._state = {
@@ -254,6 +280,8 @@ class StateMachine:
             "retry_count": {stage: 0},
             "iterations": {stage: 1},
             "variables": {},
+            "paused": False,
+            "paused_reason": "",
         }
         self._save_state()
         self._run_hooks(stage, "on_enter")
@@ -268,6 +296,8 @@ class StateMachine:
             "retry_count": {},
             "iterations": {},
             "variables": {},
+            "paused": False,
+            "paused_reason": "",
         }
         if self.state_path.exists():
             self.state_path.unlink()
