@@ -95,7 +95,7 @@
 
 - [x] **task-030**: Add `stream` param to `shell_test` — allow checking stderr output with all existing ops. +tests.
 - [x] **task-031**: Add `timeout` parameter to `evaluate_all` — per-evaluation global timeout via ThreadPoolExecutor. +2 tests.
-- [ ] **task-032**: Write `tests/test_perf.py` — quick performance sanity checks: 100 transitions under 5s, 1000 condition evals under 2s, status() under 10ms. Small, fast, no hangs.
+- [x] **task-032**: Write `tests/test_perf.py` — quick performance sanity checks: 100 transitions under 5s, 1000 condition evals under 2s, status() under 10ms. Small, fast, no hangs.
 - [ ] **task-033**: Fix `test_stress.py` hanging — investigate sleep/threading issues, rewrite problematic tests to use deterministic patterns, ensure suite completes.
 
 ---
