@@ -343,6 +343,18 @@ def _shell_test(params: dict) -> Tuple[bool, str]:
         except ValueError:
             ok = False
         return ok, f"stdout({output}) > {expected}: {ok}"
+    elif op == "lt":
+        try:
+            ok = float(output) < float(expected)
+        except ValueError:
+            ok = False
+        return ok, f"stdout({output}) < {expected}: {ok}"
+    elif op == "eq":
+        try:
+            ok = float(output) == float(expected)
+        except ValueError:
+            ok = False
+        return ok, f"stdout({output}) == {expected}: {ok}"
     else:
         return False, f"Unknown op: {op}"
 

@@ -597,6 +597,42 @@ class TestShellTest:
         assert not passed
         assert "Regex error" in msg
 
+    def test_stdout_lt_passes(self, temp_dir):
+        passed, msg = evaluate("shell_test", {
+            "base_path": str(temp_dir),
+            "command": "echo 5",
+            "op": "lt",
+            "value": 10
+        })
+        assert passed
+
+    def test_stdout_lt_fails(self, temp_dir):
+        passed, msg = evaluate("shell_test", {
+            "base_path": str(temp_dir),
+            "command": "echo 50",
+            "op": "lt",
+            "value": 10
+        })
+        assert not passed
+
+    def test_stdout_eq_passes(self, temp_dir):
+        passed, msg = evaluate("shell_test", {
+            "base_path": str(temp_dir),
+            "command": "echo 42",
+            "op": "eq",
+            "value": 42
+        })
+        assert passed
+
+    def test_stdout_eq_fails(self, temp_dir):
+        passed, msg = evaluate("shell_test", {
+            "base_path": str(temp_dir),
+            "command": "echo 42",
+            "op": "eq",
+            "value": 99
+        })
+        assert not passed
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # python_expr
