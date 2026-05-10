@@ -41,3 +41,74 @@ class TestAuditLogger:
         events = logger.get_summary()["total_events"]
         assert events <= 20, f"Should be ≤ 20 (max 2× check), got {events}"
 
+    def test_log_transition_failed(self, tmp_path):
+        logger = AuditLogger(str(tmp_path))
+        logger.log_transition("a", "b", False, ["blocked"])
+        s = logger.get_summary()
+        assert s["failed_transitions"] == 1
+
+    def test_log_transition_forced(self, tmp_path):
+        logger = AuditLogger(str(tmp_path))
+        logger.log_transition("a", "b", True, forced=True)
+        s = logger.get_summary()
+        assert s["successful_transitions"] == 1
+
+    def test_log_condition_check(self, tmp_path):
+        logger = AuditLogger(str(tmp_path))
+        logger.log_condition_check("a->b", "file_exists", True, "found it")
+        s = logger.get_summary()
+        assert s["total_events"] == 1
+
+    def test_log_tool_violation(self, tmp_path):
+        logger = AuditLogger(str(tmp_path))
+        logger.log_tool_violation("Write", "analyze", "not allowed")
+        s = logger.get_summary()
+        assert s["tool_violations"] == 1
+        assert s["most_violated_stage"] == "analyze"
+
+    def test_log_stage_enter_exit_with_duration(self, tmp_path):
+        logger = AuditLogger(str(tmp_path))
+        logger.log_stage_enter("test_stage")
+        logger.log_stage_exit("test_stage")
+        s = logger.get_summary()
+        assert s["stages_visited"] == 1
+        assert "test_stage" in s["stage_durations"]
+        assert s["stage_durations"]["test_stage"] >= 0
+
+    def test_log_stage_exit_unknown_stage(self, tmp_path):
+        logger = AuditLogger(str(tmp_path))
+        logger.log_stage_exit("never_entered")
+        s = logger.get_summary()
+        assert s["total_events"] == 0  # stage not in timers, nothing written
+
+    def test_log_hook_execution_success(self, tmp_path):
+        logger = AuditLogger(str(tmp_path))
+        logger.log_hook_execution("build", "on_enter", "shell", True, "ran ok")
+        s = logger.get_summary()
+        assert s["total_events"] == 1
+
+    def test_log_hook_execution_failure(self, tmp_path):
+        logger = AuditLogger(str(tmp_path))
+        logger.log_hook_execution("build", "on_exit", "python", False, "crashed")
+        s = logger.get_summary()
+        assert s["total_events"] == 1
+
+    def test_log_error(self, tmp_path):
+        logger = AuditLogger(str(tmp_path))
+        logger.log_error("ValueError", "something broke", {"stage": "build"})
+        s = logger.get_summary()
+        assert s["total_events"] == 1
+
+    def test_get_summary_empty_log(self, tmp_path):
+        logger = AuditLogger(str(tmp_path))
+        s = logger.get_summary()
+        assert s["total_events"] == 0
+
+    def test_get_summary_corrupt_lines_skipped(self, tmp_path):
+        logger = AuditLogger(str(tmp_path))
+        logger.log_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.log_path.write_text("not valid json\n", encoding="utf-8")
+        logger._write({"event": "good"})
+        s = logger.get_summary()
+        assert s["total_events"] == 1
+

@@ -148,3 +148,25 @@ class TestPathGuard:
         allowed, msg = guard.check("Read", {"file_path": "stageflow/core/engine.py"})
         # Read is not in WRITE_TOOLS, so path guard doesn't apply
         assert allowed, f"Read should be allowed regardless of path: {msg}"
+
+    def test_path_guard_can_be_disabled(self, registry, temp_dir):
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")
+        guard = StageGuard(str(registry.config_path), str(temp_dir),
+                          enforce_path_guard=False)
+        allowed, msg = guard.check("Write", {"file_path": "stageflow/core/engine.py"})
+        assert allowed, f"Path guard disabled should allow write anywhere: {msg}"
+
+    def test_notebook_edit_also_checked(self, registry, temp_dir):
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")
+        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        allowed, msg = guard.check("NotebookEdit", {"notebook_path": "scripts/evil.ipynb"})
+        assert not allowed, f"NotebookEdit outside allowed roots: {msg}"
+
+    def test_write_without_file_path(self, registry, temp_dir):
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("start")
+        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        allowed, msg = guard.check("Write", {})
+        assert allowed, f"Write without file_path should pass: {msg}"
