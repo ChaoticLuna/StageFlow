@@ -103,7 +103,7 @@
 ## Phase 14: 打磨与生产就绪 (Polish & Production Readiness)
 
 - [x] **task-034**: Fix `editor/server.py` line 348 — `PromptTemplate.GENERAL` → `PromptTemplate.GENERIC`. The `/api/generate` endpoint crashes because `GENERAL` doesn't exist. +1 regression test in test_server.py.
-- [ ] **task-035**: Create `scripts/stage_back.py` — CLI rollback script promised in CLAUDE.md. Should call `sm.transition_back()` or equivalent. Verify it works end-to-end.
+- [x] **task-035**: Create `scripts/stage_back.py` — CLI rollback script promised in CLAUDE.md. Should call `sm.transition_back()` or equivalent. Verify it works end-to-end.
 - [ ] **task-036**: Fix 5 empty `pass`-body tests in `test_engine.py` (lines ~565, 636, 687, 732, 778). Either implement proper assertions or remove them. Tests that do nothing create false coverage.
 - [ ] **task-037**: Add 3 new condition types: `port_open` (check TCP port is listening), `process_running` (check process by name/cmdline), `docker_ps` (check container running). +6 tests each = 18 tests.
 - [ ] **task-038**: Add audit log rotation — `max_entries` param on `AuditLogger.__init__` that truncates oldest entries when exceeded. Write ~10000 synthetic entries and verify count stays ≤ max. +3 tests.
