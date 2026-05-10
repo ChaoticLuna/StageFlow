@@ -1019,3 +1019,47 @@ class TestMaxIterations:
         assert state_machine.get_iterations("tracked") == 0
         state_machine.transition_to("tracked")
         assert state_machine.get_iterations("tracked") == 1
+
+
+class TestTransitionReason:
+    """transition_to(reason=...) writes reason into history and audit."""
+
+    def test_reason_in_history(self, state_machine, registry):
+        registry.register_transition(
+            "start", "next", conditions=[{"always": True}])
+        state_machine.initialize("start")
+        state_machine.transition_to("next", reason="analysis complete")
+        assert state_machine.history[-1]["reason"] == "analysis complete"
+
+    def test_reason_optional(self, state_machine, registry):
+        """Backward compatible: omitting reason still works."""
+        registry.register_transition(
+            "start", "next", conditions=[{"always": True}])
+        state_machine.initialize("start")
+        ok, _ = state_machine.transition_to("next")
+        assert ok
+        assert "reason" not in state_machine.history[-1]
+
+    def test_reason_in_force_transition(self, state_machine, registry):
+        registry.register_stage("target", tools=[])
+        state_machine.initialize("start")
+        state_machine.force_transition_to("target", reason="manual override")
+        assert state_machine.history[-1]["reason"] == "manual override"
+
+    def test_reason_in_audit_log(self, state_machine, registry):
+        registry.register_transition(
+            "start", "next", conditions=[{"always": True}])
+        state_machine.initialize("start")
+        state_machine.transition_to("next", reason="test audit reason")
+        log_path = state_machine.base_path / ".claude" / "audit.jsonl"
+        assert log_path.exists()
+        raw = log_path.read_text()
+        assert "test audit reason" in raw
+
+    def test_empty_reason_not_in_record(self, state_machine, registry):
+        """Empty reason string is not written to history record."""
+        registry.register_transition(
+            "start", "next", conditions=[{"always": True}])
+        state_machine.initialize("start")
+        state_machine.transition_to("next", reason="")
+        assert "reason" not in state_machine.history[-1]

@@ -82,6 +82,15 @@
 
 ---
 
+## Phase 12: 查漏补缺 (Quick Wins & Finishing)
+
+- [x] **task-026**: Add `reason` parameter to `engine.transition_to()`. Write `reason` into the history record for structured audit trace. Update CONDITION_DEFS if needed. +tests.
+- [ ] **task-027**: Extend `http_status` condition with `body_contains` op — validate HTTP response body matches a pattern (string/regex). +tests. Update CONDITION_DEFS.
+- [ ] **task-028**: Add `response_headers` op to `http_status` — validate specific response headers exist/match values. +tests. Update CONDITION_DEFS.
+- [ ] **task-029**: Run full test suite, fix any remaining edge cases or flaky tests. Target: 680+ tests, 0 failures.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |

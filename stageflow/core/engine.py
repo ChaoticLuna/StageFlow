@@ -156,11 +156,13 @@ class StateMachine:
 
         return False, all_msgs
 
-    def transition_to(self, target: str, force: bool = False) -> Tuple[bool, List[str]]:
+    def transition_to(self, target: str, force: bool = False,
+                      reason: str = "") -> Tuple[bool, List[str]]:
         """Attempt to transition to target stage. Returns (success, messages).
 
         If force=True, bypass condition checks.
         On failure, applies on_fail logic (rollback).
+        Pass reason to annotate the transition in history and audit log.
         """
         if self.is_paused:
             return False, [f"Cannot transition: state machine is paused. Reason: {self._state.get('paused_reason', 'none')}"]
@@ -186,6 +188,8 @@ class StateMachine:
         # Execute transition
         now = datetime.now(timezone.utc).isoformat()
         record = {"from": current, "to": target, "at": now}
+        if reason:
+            record["reason"] = reason
 
         # Run on_exit hooks for current stage
         if current and not force:
@@ -209,6 +213,8 @@ class StateMachine:
 
         self._save_state()
         msg = f"Transitioned: {current} -> {target}"
+        if reason:
+            msg += f" ({reason})"
         self.audit.log_transition(current, target, True, [msg], forced=force)
         return True, [msg]
 
@@ -331,9 +337,9 @@ class StateMachine:
         except Exception as e:
             return False, str(e)[:200]
 
-    def force_transition_to(self, target: str) -> Tuple[bool, List[str]]:
+    def force_transition_to(self, target: str, reason: str = "") -> Tuple[bool, List[str]]:
         """Force a transition without condition checks."""
-        return self.transition_to(target, force=True)
+        return self.transition_to(target, force=True, reason=reason)
 
     def initialize(self, stage: str) -> Tuple[bool, List[str]]:
         """Initialize the state machine at a starting stage."""
