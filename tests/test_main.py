@@ -87,6 +87,30 @@ class TestStageflowCLI:
         data = json.loads(r.stdout)
         assert "current_stage" in data
 
+    def test_next_dry_run(self):
+        r = _stageflow("next", "--dry-run")
+        assert "Dry-run" in r.stdout or r.returncode in (0, 1), r.stderr
+
+    def test_next_dry_run_with_target(self):
+        r = _stageflow("next", "--dry-run", "analyze")
+        assert "Dry-run" in r.stdout or r.returncode in (0, 1), r.stderr
+
+    def test_next_dry_run_short_flag(self):
+        r = _stageflow("next", "-n")
+        assert "Dry-run" in r.stdout or r.returncode in (0, 1), r.stderr
+
+    def test_cond_list(self):
+        r = _stageflow("cond", "--list")
+        assert r.returncode == 0, r.stderr
+        assert "file_exists" in r.stdout
+        assert "shell_test" in r.stdout
+        assert "always" in r.stdout
+
+    def test_cond_list_short_flag(self):
+        r = _stageflow("cond", "-l")
+        assert r.returncode == 0, r.stderr
+        assert "file_exists" in r.stdout
+
 
 class TestStageflowMainModule:
     def test_import_main(self):

@@ -63,6 +63,20 @@ def cmd_next(args):
     elif args.force:
         target = args.target or reg.get_next_stages(sm.current_stage)[0]
         ok, msgs = sm.force_transition_to(target)
+    elif getattr(args, 'dry_run', False):
+        target = args.target
+        if target is None:
+            available = reg.get_next_stages(sm.current_stage)
+            if not available:
+                print(f"No transitions from '{sm.current_stage}'", file=sys.stderr)
+                return 1
+            target = available[0]
+        ok, msgs = sm.can_transition_to(target)
+        print(f"Dry-run: checking conditions for {sm.current_stage} -> {target}")
+        for m in msgs:
+            print(f"  {m}")
+        print(f"\nResult: {'ALLOWED' if ok else 'BLOCKED'}")
+        return 0 if ok else 1
     else:
         target = args.target
         if target is None:
@@ -255,7 +269,14 @@ def cmd_check(args):
 
 
 def cmd_cond(args):
-    """Test a condition type interactively."""
+    """Test a condition type interactively or list all registered types."""
+    if getattr(args, 'list', False):
+        for c in list_conditions():
+            print(c)
+        return 0
+    if not args.type:
+        print("Usage: stageflow cond <type> [--params JSON] | stageflow cond --list", file=sys.stderr)
+        return 1
     name = args.type
     params = {}
     if args.params:
@@ -361,6 +382,7 @@ Examples:
     p = sub.add_parser("next", help="Advance to next stage")
     p.add_argument("target", nargs="?", help="Target stage name")
     p.add_argument("--force", "-f", action="store_true")
+    p.add_argument("--dry-run", "-n", action="store_true", help="Check conditions without executing")
 
     p = sub.add_parser("back", help="Go back to previous stage")
     p.add_argument("target", nargs="?", help="Target stage to go back to")
@@ -386,8 +408,9 @@ Examples:
     p.add_argument("--json", "-j", action="store_true", help="JSON output")
 
     p = sub.add_parser("cond", help="Test a condition type")
-    p.add_argument("type", help="Condition type name")
+    p.add_argument("type", nargs="?", help="Condition type name")
     p.add_argument("--params", help="JSON params for condition")
+    p.add_argument("--list", "-l", action="store_true", help="List all registered condition types")
 
     p = sub.add_parser("generate", help="Generate stages.yaml from description")
     p.add_argument("description", nargs="?", help="Natural language workflow description")
