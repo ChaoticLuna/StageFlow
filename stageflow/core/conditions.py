@@ -507,6 +507,12 @@ def _http_status(params: dict) -> Tuple[bool, str]:
             pattern = str(params.get("pattern", params.get("value", "")))
             ok = pattern in body
             return ok, f"HTTP {url} body contains '{pattern[:80]}': {ok}"
+        if op == "header_equals":
+            header = str(params.get("header", ""))
+            expected_val = str(params.get("expected", params.get("value", "")))
+            actual_val = resp.getheader(header)
+            ok = actual_val == expected_val
+            return ok, f"HTTP {url} header '{header}' == '{expected_val}': {ok} (actual: {actual_val!r})"
         ok = resp.status == expected
         return ok, f"HTTP {url} -> {resp.status} (expected {expected})"
     except Exception as e:
