@@ -6,10 +6,18 @@ Usage:
     gen = WorkflowGenerator(llm_call=my_llm_function)
     yaml_str, history = gen.generate("CI/CD pipeline with build, test, deploy")
     yaml_str, history = gen.generate("review process", template="CODE_REVIEW")
+
+Out-of-box usage with Anthropic adapter:
+    from stageflow.generator.llm_generator import WorkflowGenerator, AnthropicAdapter
+
+    adapter = AnthropicAdapter(api_key="sk-ant-...")
+    gen = WorkflowGenerator(llm_call=adapter)
+    yaml_str, _ = gen.generate("review process", template="CODE_REVIEW")
 """
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Callable, Optional
 
@@ -253,3 +261,59 @@ class WorkflowGenerator:
             return yaml_str, history
 
         return None, history
+
+
+class AnthropicAdapter:
+    """LLM adapter for the Anthropic Claude API with prompt caching support.
+
+    Usage:
+        adapter = AnthropicAdapter(api_key="sk-ant-...")
+        gen = WorkflowGenerator(llm_call=adapter)
+        yaml_str, history = gen.generate("build pipeline")
+    """
+
+    def __init__(
+        self,
+        model: str = "claude-sonnet-4-6",
+        api_key: Optional[str] = None,
+        max_tokens: int = 4096,
+        enable_prompt_caching: bool = True,
+    ):
+        self.model = model
+        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        self.max_tokens = max_tokens
+        self.enable_prompt_caching = enable_prompt_caching
+        self._client = None
+
+    def __call__(self, prompt: str) -> str:
+        if not self.api_key:
+            raise ValueError(
+                "No API key provided. Set api_key parameter or ANTHROPIC_API_KEY env var."
+            )
+        if self._client is None:
+            import anthropic
+            self._client = anthropic.Anthropic(api_key=self.api_key)
+
+        system, _, rest = prompt.partition("\n\n")
+        if system.startswith("You are"):
+            system_block = system
+            user_message = rest
+        else:
+            system_block = None
+            user_message = prompt
+
+        kwargs = dict(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            messages=[{"role": "user", "content": user_message}],
+        )
+
+        if self.enable_prompt_caching and system_block:
+            kwargs["system"] = [
+                {"type": "text", "text": system_block, "cache_control": {"type": "ephemeral"}},
+            ]
+        elif system_block:
+            kwargs["system"] = system_block
+
+        response = self._client.messages.create(**kwargs)
+        return response.content[0].text

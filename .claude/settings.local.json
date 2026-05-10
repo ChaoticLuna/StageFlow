@@ -5,6 +5,5 @@
       "Bash(python *)"
     ]
   },
-  "permissionMode": "bypassPermissions",
-  "hooks": {}
+  "permissionMode": "bypassPermissions"
 }

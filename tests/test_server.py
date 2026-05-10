@@ -38,12 +38,12 @@ transitions:
 
 
 class TestGetConditions:
-    def test_returns_27_conditions(self):
+    def test_returns_30_conditions(self):
         r = client.get("/api/conditions")
         assert r.status_code == 200
         data = r.json()
-        assert data["count"] == 27
-        assert len(data["conditions"]) == 27
+        assert data["count"] == len(CONDITION_DEFS)
+        assert len(data["conditions"]) == len(CONDITION_DEFS)
 
     def test_has_required_fields(self):
         r = client.get("/api/conditions")
@@ -65,7 +65,7 @@ class TestGetConditions:
 
     def test_type_order_matches_condition_defs(self):
         assert CONDITION_DEFS[0]["type"] == "always"
-        assert CONDITION_DEFS[-1]["type"] == "json_count"
+        assert CONDITION_DEFS[-1]["type"] == "docker_ps"
 
 
 class TestValidateEndpoint:

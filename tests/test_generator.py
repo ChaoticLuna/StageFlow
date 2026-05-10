@@ -9,6 +9,7 @@ import pytest
 
 from stageflow.generator.llm_generator import (
     WorkflowGenerator,
+    AnthropicAdapter,
     _extract_yaml,
     SYSTEM_PROMPT,
     CONDITION_REFERENCE,
@@ -289,6 +290,108 @@ class TestTemplates:
         gen = WorkflowGenerator()
         valid, _ = gen.validate(t.example_yaml)
         assert valid is True
+
+
+class TestAnthropicAdapter:
+    """Tests for AnthropicAdapter — built-in LLM adapter with prompt caching."""
+
+    def test_default_instantiation(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+        adapter = AnthropicAdapter()
+        assert adapter.model == "claude-sonnet-4-6"
+        assert adapter.api_key == "sk-ant-test-key"
+        assert adapter.max_tokens == 4096
+        assert adapter.enable_prompt_caching is True
+
+    def test_custom_instantiation(self):
+        adapter = AnthropicAdapter(
+            model="claude-opus-4-7",
+            api_key="sk-ant-custom-key",
+            max_tokens=2048,
+        )
+        assert adapter.model == "claude-opus-4-7"
+        assert adapter.api_key == "sk-ant-custom-key"
+        assert adapter.max_tokens == 2048
+
+    def test_raises_without_api_key(self, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        adapter = AnthropicAdapter(api_key="")
+        with pytest.raises(ValueError, match="No API key"):
+            adapter("some prompt")
+
+    def test_call_with_mock_client(self):
+        from unittest.mock import MagicMock
+
+        fake_response = MagicMock()
+        fake_response.content = [MagicMock(text="```yaml\nstages:\n  - name: test\n```")]
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = fake_response
+
+        adapter = AnthropicAdapter(api_key="sk-ant-test")
+        adapter._client = mock_client
+        result = adapter("You are a designer\n\nDesign a workflow")
+
+        assert "stages:" in result
+        mock_client.messages.create.assert_called_once()
+
+    def test_prompt_caching_disabled(self):
+        from unittest.mock import MagicMock
+
+        fake_response = MagicMock()
+        fake_response.content = [MagicMock(text="no yaml here")]
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = fake_response
+
+        adapter = AnthropicAdapter(
+            api_key="sk-ant-test",
+            enable_prompt_caching=False,
+        )
+        adapter._client = mock_client
+        adapter("You are a designer\n\nDesign a workflow")
+
+        call_kwargs = mock_client.messages.create.call_args.kwargs
+        assert "system" in call_kwargs
+        assert not isinstance(call_kwargs["system"], list)
+
+    def test_prompt_caching_enabled_uses_cache_control(self):
+        from unittest.mock import MagicMock
+
+        fake_response = MagicMock()
+        fake_response.content = [MagicMock(text="```yaml\nstages:\n  - name: x\n```")]
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = fake_response
+
+        adapter = AnthropicAdapter(
+            api_key="sk-ant-test",
+            enable_prompt_caching=True,
+        )
+        adapter._client = mock_client
+        adapter("You are a designer\n\nDesign a workflow")
+
+        call_kwargs = mock_client.messages.create.call_args.kwargs
+        assert isinstance(call_kwargs["system"], list)
+        assert "cache_control" in call_kwargs["system"][0]
+
+    def test_no_system_block_leaves_prompt_as_is(self):
+        from unittest.mock import MagicMock
+
+        fake_response = MagicMock()
+        fake_response.content = [MagicMock(text="ok")]
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = fake_response
+
+        adapter = AnthropicAdapter(api_key="sk-ant-key")
+        adapter._client = mock_client
+        adapter("Just a plain prompt without system block")
+
+        call_kwargs = mock_client.messages.create.call_args.kwargs
+        user_content = call_kwargs["messages"][0]["content"]
+        assert user_content == "Just a plain prompt without system block"
+        assert "system" not in call_kwargs
 
 
 class TestGenerateCLI:
