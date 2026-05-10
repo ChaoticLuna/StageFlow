@@ -1,3 +1,97 @@
+:root {
+  --bg-body: #f5f5f5;
+  --bg-header: #1a1a2e;
+  --bg-toolbar: #fff;
+  --bg-panel: #fff;
+  --bg-modal: #fff;
+  --bg-input: #fafafa;
+  --bg-input-focus: #fff;
+  --bg-tag: #e3f2fd;
+  --bg-condition: #fafafa;
+  --bg-condition-item: #f5f5f5;
+  --bg-hook-item: #fafafa;
+  --bg-stage-node: #e3f2fd;
+  --bg-stage-terminal: #eceff1;
+  --bg-logic-off: #fafafa;
+  --bg-undo-hint: #1a1a2e;
+  --text-body: #1a1a1a;
+  --text-header: #eee;
+  --text-heading: #1a1a2e;
+  --text-secondary: #666;
+  --text-muted: #999;
+  --text-muted2: #aaa;
+  --text-muted3: #888;
+  --text-tag: #1565c0;
+  --text-on-primary: #fff;
+  --text-badge: #fff;
+  --text-badge-empty: #555;
+  --border-panel: #ddd;
+  --border-toolbar: #e0e0e0;
+  --border-input: #ddd;
+  --border-modal-sep: #eee;
+  --border-condition: #e0e0e0;
+  --border-hook: #eee;
+  --border-logic: #ddd;
+  --border-stage: #1565c0;
+  --border-stage-terminal: #607d8b;
+  --color-primary: #1565c0;
+  --color-primary-dark: #0d47a1;
+  --color-terminal: #607d8b;
+  --color-error: #c62828;
+  --color-hook: #f57c00;
+  --color-all-badge: #6a1b9a;
+  --shadow-modal: rgba(0, 0, 0, 0.2);
+  --shadow-overlay: rgba(0, 0, 0, 0.35);
+  --color-undo-text: #ccc;
+}
+
+[data-theme="dark"] {
+  --bg-body: #1e1e2e;
+  --bg-header: #111122;
+  --bg-toolbar: #252540;
+  --bg-panel: #252540;
+  --bg-modal: #2a2a45;
+  --bg-input: #1a1a30;
+  --bg-input-focus: #1a1a30;
+  --bg-tag: #1a2a40;
+  --bg-condition: #1e1e35;
+  --bg-condition-item: #222240;
+  --bg-hook-item: #1e1e35;
+  --bg-stage-node: #1a2a40;
+  --bg-stage-terminal: #2a2a3a;
+  --bg-logic-off: #1a1a30;
+  --bg-undo-hint: #111;
+  --text-body: #ddd;
+  --text-header: #ccc;
+  --text-heading: #ccc;
+  --text-secondary: #aaa;
+  --text-muted: #888;
+  --text-muted2: #777;
+  --text-muted3: #999;
+  --text-tag: #90caf9;
+  --text-on-primary: #fff;
+  --text-badge: #fff;
+  --text-badge-empty: #aaa;
+  --border-panel: #3a3a55;
+  --border-toolbar: #3a3a55;
+  --border-input: #3a3a55;
+  --border-modal-sep: #3a3a55;
+  --border-condition: #3a3a55;
+  --border-hook: #3a3a55;
+  --border-logic: #444;
+  --border-stage: #3a7ad5;
+  --border-stage-terminal: #78909c;
+  --color-primary: #4a8ad5;
+  --color-primary-dark: #3a6ab5;
+  --color-terminal: #78909c;
+  --color-error: #ef5350;
+  --color-hook: #ff9800;
+  --color-all-badge: #9c27b0;
+  --shadow-modal: rgba(0, 0, 0, 0.5);
+  --shadow-overlay: rgba(0, 0, 0, 0.6);
+  --color-undo-text: #666;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -7,8 +101,8 @@
 html, body, #root {
   height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #f5f5f5;
-  color: #1a1a1a;
+  background: var(--bg-body);
+  color: var(--text-body);
 }
 
 .app-shell {
@@ -22,8 +116,8 @@ html, body, #root {
   align-items: center;
   gap: 1rem;
   padding: 0.5rem 1rem;
-  background: #1a1a2e;
-  color: #eee;
+  background: var(--bg-header);
+  color: var(--text-header);
   flex-shrink: 0;
 }
 
@@ -40,6 +134,26 @@ html, body, #root {
   color: #aaa;
 }
 
+.app-header-spacer {
+  flex: 1;
+}
+
+.theme-toggle {
+  background: none;
+  border: 1px solid #555;
+  color: var(--text-header);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  line-height: 1;
+  transition: background 0.15s;
+}
+
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .app-body {
   display: flex;
   flex: 1;
@@ -52,8 +166,8 @@ html, body, #root {
 
 .properties-panel {
   width: 320px;
-  background: #fff;
-  border-left: 1px solid #ddd;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-panel);
   padding: 1rem;
   overflow-y: auto;
   flex-shrink: 0;
@@ -62,10 +176,11 @@ html, body, #root {
 .properties-panel h2 {
   font-size: 1rem;
   margin-bottom: 0.75rem;
+  color: var(--text-heading);
 }
 
 .properties-panel .empty-state {
-  color: #999;
+  color: var(--text-muted);
   font-size: 0.85rem;
 }
 
@@ -77,7 +192,7 @@ html, body, #root {
   display: block;
   font-size: 0.7rem;
   text-transform: uppercase;
-  color: #888;
+  color: var(--text-muted3);
   margin-bottom: 0.25rem;
   font-weight: 600;
 }
@@ -90,8 +205,8 @@ html, body, #root {
 }
 
 .tool-tag {
-  background: #e3f2fd;
-  color: #1565c0;
+  background: var(--bg-tag);
+  color: var(--text-tag);
   padding: 0.15rem 0.4rem;
   border-radius: 3px;
   font-size: 0.75rem;
@@ -100,8 +215,8 @@ html, body, #root {
 
 /* StageNode */
 .stage-node {
-  background: #e3f2fd;
-  border: 2px solid #1565c0;
+  background: var(--bg-stage-node);
+  border: 2px solid var(--border-stage);
   border-radius: 10px;
   padding: 0.6rem 0.85rem;
   min-width: 140px;
@@ -118,8 +233,8 @@ html, body, #root {
 }
 
 .stage-node.terminal {
-  background: #eceff1;
-  border-color: #607d8b;
+  background: var(--bg-stage-terminal);
+  border-color: var(--border-stage-terminal);
 }
 
 .stage-node.terminal:hover {
@@ -135,7 +250,7 @@ html, body, #root {
 
 .stage-icon {
   font-size: 0.55rem;
-  color: #1565c0;
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -146,14 +261,14 @@ html, body, #root {
 
 .stage-node-name {
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text-heading);
   font-family: "SF Mono", "Fira Code", monospace;
   font-size: 0.78rem;
 }
 
 .stage-node-desc {
   font-size: 0.7rem;
-  color: #666;
+  color: var(--text-secondary);
   max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -169,8 +284,8 @@ html, body, #root {
 
 .stage-badge {
   font-size: 0.6rem;
-  background: #1565c0;
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--text-badge);
   padding: 0.08rem 0.35rem;
   border-radius: 6px;
   font-weight: 500;
@@ -181,16 +296,16 @@ html, body, #root {
 }
 
 .stage-badge.all-badge {
-  background: #6a1b9a;
+  background: var(--color-all-badge);
 }
 
 .stage-badge.empty-badge {
   background: #bdbdbd;
-  color: #555;
+  color: var(--text-badge-empty);
 }
 
 .stage-badge.hook-badge {
-  background: #f57c00;
+  background: var(--color-hook);
 }
 
 /* Canvas toolbar */
@@ -206,9 +321,10 @@ html, body, #root {
   align-items: center;
   gap: 0.75rem;
   padding: 0.5rem 1rem;
-  background: #fff;
-  border-bottom: 1px solid #e0e0e0;
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border-toolbar);
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .toolbar-btn {
@@ -216,9 +332,9 @@ html, body, #root {
   align-items: center;
   gap: 0.35rem;
   padding: 0.35rem 0.75rem;
-  border: 1px solid #1565c0;
-  background: #e3f2fd;
-  color: #1565c0;
+  border: 1px solid var(--color-primary);
+  background: var(--bg-tag);
+  color: var(--color-primary);
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.8rem;
@@ -227,7 +343,8 @@ html, body, #root {
 }
 
 .toolbar-btn:hover {
-  background: #bbdefb;
+  background: var(--color-primary);
+  color: var(--text-on-primary);
 }
 
 .add-stage-btn .btn-icon {
@@ -236,12 +353,20 @@ html, body, #root {
   line-height: 1;
 }
 
+.toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background: var(--border-toolbar);
+  flex-shrink: 0;
+}
+
 .toolbar-info {
   font-size: 0.72rem;
-  color: #888;
+  color: var(--text-muted3);
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  margin-left: auto;
 }
 
 .toolbar-dot {
@@ -253,18 +378,18 @@ html, body, #root {
 }
 
 .active-dot {
-  background: #1565c0;
+  background: var(--color-primary);
 }
 
 .terminal-dot {
-  background: #607d8b;
+  background: var(--color-terminal);
 }
 
 /* EdgeEditor modal */
 .edge-editor-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--shadow-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -272,9 +397,9 @@ html, body, #root {
 }
 
 .edge-editor-modal {
-  background: #fff;
+  background: var(--bg-modal);
   border-radius: 8px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 24px var(--shadow-modal);
   width: 520px;
   max-height: 85vh;
   overflow-y: auto;
@@ -285,12 +410,13 @@ html, body, #root {
   justify-content: space-between;
   align-items: center;
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-modal-sep);
 }
 
 .edge-editor-header h3 {
   font-size: 0.95rem;
   font-family: "SF Mono", "Fira Code", monospace;
+  color: var(--text-heading);
 }
 
 .close-btn {
@@ -298,7 +424,7 @@ html, body, #root {
   border: none;
   font-size: 1.25rem;
   cursor: pointer;
-  color: #888;
+  color: var(--text-muted3);
   padding: 0 0.25rem;
 }
 
@@ -308,7 +434,7 @@ html, body, #root {
 
 .edge-editor-body h4 {
   font-size: 0.8rem;
-  color: #666;
+  color: var(--text-secondary);
   margin-bottom: 0.5rem;
 }
 
@@ -323,51 +449,51 @@ html, body, #root {
   gap: 0.5rem;
   margin-top: 1rem;
   padding-top: 0.75rem;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--border-modal-sep);
 }
 
 .cancel-btn {
-  background: #fff;
-  color: #666;
-  border-color: #ccc;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border-color: var(--border-input);
 }
 
 .cancel-btn:hover {
-  background: #f5f5f5;
+  background: var(--bg-condition-item);
 }
 
 /* Logic toggle */
 .logic-toggle {
   display: inline-flex;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-logic);
   border-radius: 4px;
   overflow: hidden;
 }
 
 .logic-option {
   border: none;
-  background: #fafafa;
+  background: var(--bg-logic-off);
   padding: 0.15rem 0.5rem;
   font-size: 0.68rem;
   font-weight: 600;
   cursor: pointer;
-  color: #999;
+  color: var(--text-muted);
   font-family: "SF Mono", "Fira Code", monospace;
   transition: background 0.15s, color 0.15s;
 }
 
 .logic-option:first-child {
-  border-right: 1px solid #ddd;
+  border-right: 1px solid var(--border-logic);
 }
 
 .logic-option.active {
-  background: #1565c0;
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--text-on-primary);
 }
 
 .logic-hint {
   font-size: 0.68rem;
-  color: #aaa;
+  color: var(--text-muted2);
   margin-top: 0.2rem;
   margin-bottom: 0.5rem;
   font-style: italic;
@@ -382,10 +508,10 @@ html, body, #root {
 }
 
 .condition-edit-item {
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border-condition);
   border-radius: 6px;
   padding: 0.5rem;
-  background: #fafafa;
+  background: var(--bg-condition);
 }
 
 .condition-edit-header {
@@ -397,7 +523,7 @@ html, body, #root {
 .condition-ordinal {
   font-size: 0.65rem;
   font-weight: 700;
-  color: #999;
+  color: var(--text-muted);
   font-family: "SF Mono", "Fira Code", monospace;
   min-width: 1.2rem;
 }
@@ -414,7 +540,7 @@ html, body, #root {
 
 .condition-desc {
   font-size: 0.68rem;
-  color: #999;
+  color: var(--text-muted);
   margin: 0.25rem 0 0.35rem 0;
 }
 
@@ -438,7 +564,7 @@ html, body, #root {
 .param-label {
   font-size: 0.6rem;
   text-transform: uppercase;
-  color: #999;
+  color: var(--text-muted);
   font-weight: 600;
 }
 
@@ -459,7 +585,7 @@ html, body, #root {
 
 .condition-item {
   padding: 0.3rem 0.5rem;
-  background: #f5f5f5;
+  background: var(--bg-condition-item);
   border-radius: 4px;
   margin-bottom: 0.25rem;
   font-size: 0.8rem;
@@ -467,31 +593,32 @@ html, body, #root {
 
 .condition-item code {
   font-family: monospace;
-  color: #1565c0;
+  color: var(--color-primary);
 }
 
 .on-fail {
   margin-top: 0.75rem;
   font-size: 0.8rem;
-  color: #c62828;
+  color: var(--color-error);
 }
 
 /* Form controls */
 .prop-input {
   width: 100%;
   padding: 0.35rem 0.5rem;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-input);
   border-radius: 4px;
   font-size: 0.8rem;
   font-family: inherit;
-  background: #fafafa;
+  background: var(--bg-input);
+  color: var(--text-body);
   transition: border-color 0.15s;
 }
 
 .prop-input:focus {
   outline: none;
-  border-color: #1565c0;
-  background: #fff;
+  border-color: var(--color-primary);
+  background: var(--bg-input-focus);
 }
 
 .prop-input.mono {
@@ -524,7 +651,7 @@ html, body, #root {
 .tool-remove {
   background: none;
   border: none;
-  color: #999;
+  color: var(--text-muted);
   font-size: 1rem;
   cursor: pointer;
   padding: 0;
@@ -538,7 +665,7 @@ html, body, #root {
 }
 
 .tool-remove:hover {
-  color: #c62828;
+  color: var(--color-error);
   background: #ffebee;
 }
 
@@ -553,8 +680,8 @@ html, body, #root {
 
 .add-btn {
   padding: 0.3rem 0.6rem;
-  background: #1565c0;
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--text-on-primary);
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -564,7 +691,7 @@ html, body, #root {
 }
 
 .add-btn:hover {
-  background: #0d47a1;
+  background: var(--color-primary-dark);
 }
 
 .add-btn:disabled {
@@ -579,7 +706,7 @@ html, body, #root {
 
 .empty-state.hint {
   font-size: 0.72rem;
-  color: #aaa;
+  color: var(--text-muted2);
   font-style: italic;
 }
 
@@ -598,10 +725,10 @@ html, body, #root {
 }
 
 .hook-item {
-  border: 1px solid #eee;
+  border: 1px solid var(--border-hook);
   border-radius: 4px;
   padding: 0.4rem;
-  background: #fafafa;
+  background: var(--bg-hook-item);
 }
 
 .hook-row {
@@ -616,7 +743,7 @@ html, body, #root {
   font-weight: 600;
   text-transform: uppercase;
   padding: 0.1rem 0.35rem;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-input);
   border-radius: 3px;
   cursor: pointer;
   font-family: monospace;
@@ -637,7 +764,7 @@ html, body, #root {
 .hook-remove {
   background: none;
   border: none;
-  color: #999;
+  color: var(--text-muted);
   font-size: 1.1rem;
   cursor: pointer;
   padding: 0 0.15rem;
@@ -645,7 +772,7 @@ html, body, #root {
 }
 
 .hook-remove:hover {
-  color: #c62828;
+  color: var(--color-error);
 }
 
 .hook-value {
@@ -655,4 +782,58 @@ html, body, #root {
 textarea.hook-value {
   resize: vertical;
   min-height: 2rem;
+}
+
+/* Mermaid modal */
+.mermaid-modal {
+  width: 640px;
+}
+
+.mermaid-body {
+  padding: 0.75rem 1rem;
+}
+
+.mermaid-code {
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: 6px;
+  padding: 0.75rem;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-body);
+  overflow-x: auto;
+  white-space: pre;
+  user-select: all;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.mermaid-footer {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border-modal-sep);
+}
+
+/* Undo hint toast */
+.undo-toast {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-undo-hint);
+  color: var(--color-undo-text);
+  padding: 0.4rem 1rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-family: "SF Mono", "Fira Code", monospace;
+  z-index: 200;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.3s;
+}
+
+.undo-toast.fade {
+  opacity: 0;
 }

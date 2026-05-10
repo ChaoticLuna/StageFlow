@@ -74,6 +74,12 @@ interface CanvasProps {
   onNodeSelect: (node: StageNodeType | null) => void;
 }
 
+interface Snapshot {
+  nodes: StageNodeType[];
+  edges: Edge<EdgeData>[];
+  counter: number;
+}
+
 const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   { onNodeSelect },
   ref
@@ -81,13 +87,43 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedEdge, setSelectedEdge] = useState<Edge<EdgeData> | null>(null);
+  const [mermaidOpen, setMermaidOpen] = useState(false);
+  const [undoToast, setUndoToast] = useState(false);
   const reactFlow = useReactFlow();
+
+  const undoStack = useRef<Snapshot[]>([]);
+  const MAX_UNDO = 50;
+
+  const takeSnapshot = useCallback((): Snapshot => ({
+    nodes: nodes as StageNodeType[],
+    edges: edges as Edge<EdgeData>[],
+    counter: _nodeCounter,
+  }), [nodes, edges]);
+
+  const pushUndo = useCallback(() => {
+    undoStack.current.push(takeSnapshot());
+    if (undoStack.current.length > MAX_UNDO) {
+      undoStack.current.shift();
+    }
+  }, [takeSnapshot]);
+
+  const popUndo = useCallback(() => {
+    const snap = undoStack.current.pop();
+    if (!snap) return;
+    setNodes(snap.nodes);
+    setEdges(snap.edges);
+    _nodeCounter = snap.counter;
+    setUndoToast(true);
+    setTimeout(() => setUndoToast(false), 1200);
+  }, [setNodes, setEdges]);
 
   useImperativeHandle(ref, () => ({
     updateNodeData(nodeId: string, data: StageData) {
+      pushUndo();
       setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data: { ...data } } : n)));
     },
     updateEdgeData(edgeId: string, data: EdgeData) {
+      pushUndo();
       setEdges((eds) => eds.map((e) => (e.id === edgeId ? { ...e, data: { ...data } } : e)));
     },
     getNodes() {
@@ -99,15 +135,15 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     getStageNames() {
       return nodes.map((n) => n.data?.name ?? n.id);
     },
-  }), [nodes, edges, setNodes, setEdges]);
+  }), [nodes, edges, setNodes, setEdges, pushUndo]);
 
   const labeledEdges = useMemo(
     () =>
       edges.map((e) => ({
         ...e,
         label: formatConditionSummary(e.data?.conditions ?? []),
-        labelStyle: { fill: "#555", fontSize: 10, fontWeight: 500 },
-        labelBgStyle: { fill: "#fff", fillOpacity: 0.9 },
+        labelStyle: { fill: "var(--text-secondary, #555)", fontSize: 10, fontWeight: 500 },
+        labelBgStyle: { fill: "var(--bg-toolbar, #fff)", fillOpacity: 0.9 },
         labelBgPadding: [4, 3] as [number, number],
         labelBgBorderRadius: 3,
       })),
@@ -121,23 +157,26 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
   const handleEdgeUpdate = useCallback(
     (edgeId: string, data: EdgeData) => {
+      pushUndo();
       setEdges((eds) =>
         eds.map((e) => (e.id === edgeId ? { ...e, data: { ...data } } : e))
       );
       setSelectedEdge(null);
     },
-    [setEdges]
+    [setEdges, pushUndo]
   );
 
   const onConnect = useCallback(
-    (connection: Connection) =>
+    (connection: Connection) => {
+      pushUndo();
       setEdges((eds) =>
         addEdge(
           { ...connection, data: { conditions: [], on_fail: null, description: "" } },
           eds
         )
-      ),
-    [setEdges]
+      );
+    },
+    [setEdges, pushUndo]
   );
 
   const onNodeClick = useCallback(
@@ -156,6 +195,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   }, [onNodeSelect]);
 
   const addStage = useCallback(() => {
+    pushUndo();
     const id = newStageId();
     const center = reactFlow.screenToFlowPosition({
       x: window.innerWidth / 2,
@@ -177,7 +217,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     };
     setNodes((nds) => nds.concat(newNode));
     onNodeSelect(newNode);
-  }, [setNodes, onNodeSelect, reactFlow]);
+  }, [setNodes, onNodeSelect, reactFlow, pushUndo]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -208,6 +248,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           alert(`Import failed: ${result.error}`);
           return;
         }
+        pushUndo();
         setNodes(result.nodes);
         setEdges(result.edges);
         _nodeCounter = result.nodes.length;
@@ -217,22 +258,123 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       reader.readAsText(file);
       if (fileInputRef.current) fileInputRef.current.value = "";
     },
-    [setNodes, setEdges, onNodeSelect]
+    [setNodes, setEdges, onNodeSelect, pushUndo]
   );
+
+  const autoLayout = useCallback(() => {
+    pushUndo();
+    const currentNodes = reactFlow.getNodes() as StageNodeType[];
+    const currentEdges = reactFlow.getEdges() as Edge<EdgeData>[];
+    const inDegree = new Map<string, number>();
+    const outEdges = new Map<string, string[]>();
+    for (const n of currentNodes) {
+      inDegree.set(n.id, 0);
+      outEdges.set(n.id, []);
+    }
+    for (const e of currentEdges) {
+      inDegree.set(e.target, (inDegree.get(e.target) ?? 0) + 1);
+      const outs = outEdges.get(e.source) ?? [];
+      outs.push(e.target);
+      outEdges.set(e.source, outs);
+    }
+
+    const layers = new Map<string, number>();
+    const queue: string[] = [];
+    for (const [id, deg] of inDegree) {
+      if (deg === 0) {
+        layers.set(id, 0);
+        queue.push(id);
+      }
+    }
+    if (queue.length === 0 && currentNodes.length > 0) {
+      layers.set(currentNodes[0].id, 0);
+      queue.push(currentNodes[0].id);
+    }
+
+    while (queue.length > 0) {
+      const u = queue.shift()!;
+      const layer = layers.get(u)!;
+      for (const v of outEdges.get(u) ?? []) {
+        const next = Math.max(layers.get(v) ?? 0, layer + 1);
+        layers.set(v, next);
+        queue.push(v);
+      }
+    }
+
+    const layerNodes = new Map<number, string[]>();
+    for (const [id, layer] of layers) {
+      const arr = layerNodes.get(layer) ?? [];
+      arr.push(id);
+      layerNodes.set(layer, arr);
+    }
+
+    const X_GAP = 240;
+    const Y_GAP = 100;
+    const updated = currentNodes.map((n) => {
+      const layer = layers.get(n.id) ?? 0;
+      const siblings = layerNodes.get(layer) ?? [n.id];
+      const idx = siblings.indexOf(n.id);
+      return {
+        ...n,
+        position: {
+          x: 80 + layer * X_GAP,
+          y: 80 + (idx >= 0 ? idx : 0) * Y_GAP,
+        },
+      };
+    });
+    setNodes(updated);
+  }, [reactFlow, setNodes, pushUndo]);
+
+  const mermaidCode = useMemo(() => {
+    const lines: string[] = ["flowchart LR"];
+    const nameSet = new Set<string>();
+    for (const n of nodes) {
+      const name = n.data?.name ?? n.id;
+      nameSet.add(name);
+      const label = n.data?.description
+        ? `${name}: ${n.data.description}`
+        : name;
+      const safeLabel = label.replace(/"/g, "'");
+      lines.push(`  ${n.id}["${safeLabel}"]`);
+    }
+    for (const e of edges) {
+      const label = formatConditionSummary(e.data?.conditions ?? []);
+      const safeLabel = label.replace(/"/g, "'");
+      const hasLabel = label && label !== "always";
+      const arrow = hasLabel ? `-->|"${safeLabel}"|` : "-->";
+      lines.push(`  ${e.source} ${arrow} ${e.target}`);
+    }
+    return lines.join("\n");
+  }, [nodes, edges]);
 
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "s") {
+        event.preventDefault();
+        handleExport();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key === "z") {
+        event.preventDefault();
+        popUndo();
+        return;
+      }
       if (event.key === "Delete" || event.key === "Backspace") {
         const sel = reactFlow.getNodes().find((n) => n.selected);
         if (sel) {
+          pushUndo();
           setNodes((nds) => nds.filter((n) => n.id !== sel.id));
           setEdges((eds) => eds.filter((e) => e.source !== sel.id && e.target !== sel.id));
           onNodeSelect(null);
         }
       }
     },
-    [setNodes, setEdges, onNodeSelect, reactFlow]
+    [setNodes, setEdges, onNodeSelect, reactFlow, handleExport, popUndo, pushUndo]
   );
+
+  const handleCopyMermaid = useCallback(() => {
+    navigator.clipboard.writeText(mermaidCode).catch(() => {});
+  }, [mermaidCode]);
 
   const activeNodes = nodes.filter((n) => !TERMINAL_STAGES.has(n.data?.name ?? ""));
   const terminalNodes = nodes.filter((n) => TERMINAL_STAGES.has(n.data?.name ?? ""));
@@ -244,11 +386,18 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           <span className="btn-icon">+</span>
           Add Stage
         </button>
-        <button className="toolbar-btn" onClick={handleExport} title="Export canvas to stages.yaml">
+        <button className="toolbar-btn" onClick={handleExport} title="Export canvas to stages.yaml (Ctrl+S)">
           &darr; Export YAML
         </button>
         <button className="toolbar-btn" onClick={handleImport} title="Import stages.yaml into canvas">
           &uarr; Import YAML
+        </button>
+        <span className="toolbar-separator" />
+        <button className="toolbar-btn" onClick={autoLayout} title="Auto-arrange nodes in layered layout">
+          &#9633; Auto Layout
+        </button>
+        <button className="toolbar-btn" onClick={() => setMermaidOpen(true)} title="Show Mermaid flowchart preview">
+          &#9654; Mermaid
         </button>
         <input
           ref={fileInputRef}
@@ -292,6 +441,35 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           onUpdate={handleEdgeUpdate}
           onClose={() => setSelectedEdge(null)}
         />
+      )}
+      {mermaidOpen && (
+        <div className="edge-editor-overlay" onClick={() => setMermaidOpen(false)}>
+          <div className="edge-editor-modal mermaid-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="edge-editor-header">
+              <h3>Mermaid Preview</h3>
+              <button className="close-btn" onClick={() => setMermaidOpen(false)}>
+                &times;
+              </button>
+            </div>
+            <div className="mermaid-body">
+              <pre className="mermaid-code">{mermaidCode}</pre>
+            </div>
+            <div className="mermaid-footer">
+              <button className="add-btn" onClick={handleCopyMermaid}>
+                Copy to Clipboard
+              </button>
+              <button
+                className="toolbar-btn cancel-btn"
+                onClick={() => setMermaidOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {undoToast && (
+        <div className={`undo-toast${undoToast ? "" : " fade"}`}>Undo (Ctrl+Z)</div>
       )}
     </div>
   );

@@ -2,7 +2,7 @@
 
 > **最后更新**: 2026-05-10
 > **当前 Agent**: Claude (via Claude Code)
-> **交接原因**: task-010 完成 — YAML 导入/导出
+> **交接原因**: task-011 完成 — Mermaid 预览 + 主题切换 + 快捷键 + 自动布局
 
 ---
 
@@ -14,37 +14,33 @@ Framework files: 7 modules (~2,000 lines)
 Editor:          editor/ — Vite 8 + React 18 + TS 6.0 + React Flow 11
   Components:    6 files (App, Canvas, StageNode, EdgeEditor, PropertiesPanel, conditionDefs)
   Utils:         yaml.ts (export/import/validate)
-  Canvas:        toolbar, Add Stage, Export YAML, Import YAML, edge labels, minimap, delete key
+  Canvas:        toolbar, Add Stage, Export/Import YAML, Auto Layout, Mermaid preview
+                 Ctrl+S export, Ctrl+Z undo (50-level stack), Delete node
+                 minimap, edge labels, dark/light theme
+  Theme:         38 CSS variables, light + dark modes, localStorage persistence
   EdgeEditor:    27 condition types, dynamic param forms, AND/OR toggle, on_fail selector
-  PropertiesPanel: full CRUD for stage name/desc/tools/hooks
-  YAML:          round-trip serialization (ConditionDef ↔ YAML-native format)
   Build:         tsc clean, vite build clean
 Current stage:   plan
-Ralph:           活跃 — task-011 next (Mermaid preview, theme, shortcuts, minimap)
+Ralph:           活跃 — task-012 next (FastAPI backend bridge)
 ```
 
 ## 本次会话完成的工作
 
-**task-010 完成** — YAML 导入/导出:
+**task-011 完成** — Mermaid 预览 + 主题切换 + 快捷键 + 自动布局:
 
-- **editor/src/utils/yaml.ts** — YAML 序列化工具:
-  - `exportToYaml(nodes, edges)` — 将画布序列化为 `stages.yaml` 格式（stages + transitions）
-  - `importFromYaml(yamlString)` — 解析 YAML，返回 nodes/edges（含错误处理）
-  - `validateYaml(yamlString)` — 验证 YAML 结构
-  - `conditionToYaml()` — 条件序列化：`{type, params}` → `{type: value}` (标量) 或 `{type: {params...}}` (对象)
-  - `conditionFromYaml()` — 条件反序列化：YAML 原生格式 → `{type, params}`
-  - Hook 序列化：`{shell, python}` ↔ `[{shell: "..."}, {python: "..."}]`
-  - 26 种条件的标量参数映射表（`FIRST_PARAMS`）
-- **Canvas.tsx** 更新:
-  - 工具栏新增 "Export YAML" 和 "Import YAML" 按钮
-  - `handleExport`: 序列化 → Blob → 触发浏览器下载 `stages.yaml`
-  - `handleImport`: 隐藏 `<input type="file">` → FileReader → 解析 → setNodes/setEdges
-  - 导入错误通过 `alert()` 提示
-  - 导入节点自动计算 `_nodeCounter` 避免 ID 冲突
+- **App.tsx**: 主题系统 — 从 localStorage 加载，`applyTheme()` 设置 `data-theme` 属性，toggle 按钮在 header（☾/☀ 图标），`prefers-color-scheme` 检测
+- **App.css**: 完整的 CSS 变量主题系统（38 个变量）：`:root` (light) + `[data-theme="dark"]` 覆盖。深色主题背景 #1e1e2e，所有组件通过变量引用颜色。Mermaid 预览 modal 样式。Undo toast 样式。工具栏分隔线。按钮 hover 变为实心。
+- **Canvas.tsx**: 
+  - **Undo 栈**: `useRef<Snapshot[]>` max 50 层，每次用户操作前 `pushUndo()`，Ctrl+Z 弹出恢复，含 toast 提示
+  - **Ctrl+S**: 阻止默认浏览器保存对话框 → 触发 YAML 导出下载
+  - **Ctrl+Z**: 恢复上一个快照（nodes + edges + _nodeCounter）
+  - **自动布局**: 拓扑排序分层算法（BFS 从入度为 0 的根节点），X_GAP=240/Y_GAP=100，按钮在工具栏
+  - **Mermaid 预览**: `flowchart LR` 生成，节点含描述，边含条件标签，modal 中含 Copy 按钮，`navigator.clipboard.writeText()`
+  - **pushUndo** 集成到所有变更点: addStage, Delete key, onConnect, handleEdgeUpdate, handleFileChange, autoLayout, updateNodeData, updateEdgeData
 
 ## 下一步
 
-Ralph 自动从 task-011 开始（Mermaid 预览、深/浅主题切换、键盘快捷键、minimap、自动布局）
+Ralph 自动从 task-012 开始（FastAPI 后端桥接 — editor/server.py + API 端点）
 
 ## 已知问题
 
