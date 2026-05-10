@@ -75,8 +75,8 @@ CONDITION_DEFS = [
     ]},
     {"type": "shell_test", "label": "Shell Test", "description": "Run a shell command and check the result", "params": [
         {"name": "command", "label": "Command", "kind": "text", "placeholder": "pytest -q", "required": True},
-        {"name": "op", "label": "Check", "kind": "select", "options": ["exit_zero", "exit_nonzero", "output_contains", "output_empty"], "default": "exit_zero"},
-        {"name": "expected", "label": "Expected output", "kind": "text", "placeholder": "(only for output_contains)"}
+        {"name": "op", "label": "Check", "kind": "select", "options": ["exit_zero", "stdout_contains", "stdout_not_empty", "stdout_matches", "gt", "lt", "eq"], "default": "exit_zero"},
+        {"name": "value", "label": "Expected value", "kind": "text", "placeholder": "(pattern, number, or string to compare)"}
     ]},
     {"type": "python_expr", "label": "Python Expression", "description": "Evaluate a Python expression (must return bool)", "params": [
         {"name": "expr", "label": "Expression", "kind": "textarea", "placeholder": "1 + 1 == 2", "required": True}
