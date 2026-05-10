@@ -4,10 +4,14 @@
 Usage:
     python scripts/hooks_off.py           # Disable hooks
     python scripts/hooks_off.py --status  # Show current hook state
+    python scripts/hooks_off.py --on      # Re-enable hooks
+    python scripts/hooks_off.py --json    # JSON output (for scripting)
+    python scripts/hooks_off.py --dry-run # Print what would change without doing it
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -18,36 +22,31 @@ BACKUP_FILE = PROJECT_ROOT / ".claude" / "settings.local.bak.json"
 
 
 def is_hooks_enabled() -> bool:
-    """Check if hooks are currently enabled."""
     if not LOCAL_SETTINGS.exists():
-        return True  # No local override = project hooks active
-
+        return True
     try:
         data = json.loads(LOCAL_SETTINGS.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, IOError):
         return True
-
     hooks = data.get("hooks", None)
     if hooks is None:
-        return True  # No hook override = project hooks active
+        return True
     if hooks == {}:
-        return False  # Explicitly disabled
+        return False
     return True
 
 
-def disable_hooks():
-    """Set hooks to empty dict in settings.local.json to override project hooks."""
+def disable_hooks(dry_run: bool = False):
     if not is_hooks_enabled():
         print("Hooks are already DISABLED.")
         return
-
-    # Backup existing local settings if present
+    if dry_run:
+        print("[DRY-RUN] Would disable hooks.")
+        return
     if LOCAL_SETTINGS.exists():
         import shutil
         shutil.copy(LOCAL_SETTINGS, BACKUP_FILE)
         print(f"  Backed up existing local settings to {BACKUP_FILE.name}")
-
-    # Read current local settings or create defaults
     if LOCAL_SETTINGS.exists():
         try:
             data = json.loads(LOCAL_SETTINGS.read_text(encoding="utf-8"))
@@ -55,28 +54,25 @@ def disable_hooks():
             data = {}
     else:
         data = {"permissionMode": "bypassPermissions"}
-
-    # Override hooks with empty dict
     data["hooks"] = {}
     data.setdefault("permissions", {})
     data.setdefault("permissionMode", "bypassPermissions")
-
     LOCAL_SETTINGS.parent.mkdir(parents=True, exist_ok=True)
     LOCAL_SETTINGS.write_text(json.dumps(data, indent=2), encoding="utf-8")
     print("Hooks DISABLED. All tools unrestricted.")
     print(f"  (Modified: {LOCAL_SETTINGS})")
 
 
-def enable_hooks():
-    """Restore hooks by removing the hooks override from settings.local.json."""
+def enable_hooks(dry_run: bool = False):
     if is_hooks_enabled():
         print("Hooks are already ENABLED.")
         return
-
+    if dry_run:
+        print("[DRY-RUN] Would enable hooks.")
+        return
     if not LOCAL_SETTINGS.exists():
         print("No local settings file found — hooks should already be enabled.")
         return
-
     try:
         data = json.loads(LOCAL_SETTINGS.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, IOError):
@@ -84,11 +80,8 @@ def enable_hooks():
         LOCAL_SETTINGS.unlink()
         print("Hooks ENABLED (local settings removed).")
         return
-
-    # Remove hooks override
     if "hooks" in data:
         del data["hooks"]
-
     if data:
         LOCAL_SETTINGS.write_text(json.dumps(data, indent=2), encoding="utf-8")
         print("Hooks ENABLED (hooks override removed from local settings).")
@@ -97,31 +90,45 @@ def enable_hooks():
         print("Hooks ENABLED (empty local settings deleted).")
 
 
-def show_status():
+def show_status(as_json: bool = False):
     state = "DISABLED" if not is_hooks_enabled() else "ENABLED"
-    print(f"Hook status: {state}")
+    hooks_override = None
     if LOCAL_SETTINGS.exists():
         try:
             data = json.loads(LOCAL_SETTINGS.read_text(encoding="utf-8"))
-            hooks = data.get("hooks", "not set (project hooks active)")
-            print(f"  Local hooks override: {hooks}")
+            hooks_override = data.get("hooks", "not set (project hooks active)")
         except Exception:
             pass
+    if as_json:
+        print(json.dumps({"status": state, "hooks_override": str(hooks_override)}))
     else:
-        print("  No local settings file — project hooks active.")
+        print(f"Hook status: {state}")
+        if hooks_override is not None:
+            print(f"  Local hooks override: {hooks_override}")
+        else:
+            print("  No local settings file — project hooks active.")
 
 
 def main():
-    if "--status" in sys.argv or "-s" in sys.argv:
-        show_status()
+    parser = argparse.ArgumentParser(
+        description="StageFlow: enable/disable PreToolUse/PostToolUse hooks"
+    )
+    parser.add_argument("--status", "-s", action="store_true", help="Show current hook state")
+    parser.add_argument("--on", action="store_true", help="Re-enable hooks")
+    parser.add_argument("--json", "-j", action="store_true", help="JSON output")
+    parser.add_argument("--dry-run", "-n", action="store_true", help="Print what would change without doing it")
+    args = parser.parse_args()
+
+    if args.status:
+        show_status(as_json=args.json)
         return 0
 
-    if "--on" in sys.argv or "-on" in sys.argv:
-        enable_hooks()
+    if args.on:
+        enable_hooks(dry_run=args.dry_run)
         return 0
 
     # Default: disable hooks
-    disable_hooks()
+    disable_hooks(dry_run=args.dry_run)
     return 0
 
 
