@@ -378,6 +378,125 @@ class TestValidate:
         assert len(errors) >= 2
 
 
+class TestValidateSchema:
+    """Direct tests for validate_stages_config covering all error paths."""
+
+    def test_non_dict_config(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config("not a dict")
+        assert not valid
+        assert any("must be a dict" in e for e in errors)
+
+    def test_stages_not_list(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config({"stages": "not_a_list"})
+        assert not valid
+        assert any("stages" in e and "list" in e for e in errors)
+
+    def test_stage_entry_not_dict(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config({"stages": ["string_instead_of_dict"]})
+        assert not valid
+        assert any("must be a dict" in e for e in errors)
+
+    def test_stage_missing_name(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config({"stages": [{"tools": []}]})
+        assert not valid
+        assert any("name" in e for e in errors)
+
+    def test_stage_name_not_string(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config({"stages": [{"name": 123}]})
+        assert not valid
+        assert any("name" in e for e in errors)
+
+    def test_stage_tools_not_list(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config({"stages": [{"name": "a", "tools": "not_list"}]})
+        assert not valid
+        assert any("tools" in e and "list" in e for e in errors)
+
+    def test_transitions_not_list(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config({"transitions": "not_a_list"})
+        assert not valid
+        assert any("transitions" in e and "list" in e for e in errors)
+
+    def test_transition_entry_not_dict(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config({"transitions": ["string_instead_of_dict"]})
+        assert not valid
+        assert any("must be a dict" in e for e in errors)
+
+    def test_transition_missing_from(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config({"transitions": [{"to": "b"}]})
+        assert not valid
+        assert any("from" in e for e in errors)
+
+    def test_transition_missing_to(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config({"transitions": [{"from": "a"}]})
+        assert not valid
+        assert any("to" in e for e in errors)
+
+    def test_transition_from_not_string(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config({"transitions": [{"from": 123, "to": "b"}]})
+        assert not valid
+        assert any("from" in e for e in errors)
+
+    def test_transition_to_not_string(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config({"transitions": [{"from": "a", "to": 456}]})
+        assert not valid
+        assert any("to" in e for e in errors)
+
+    def test_conditions_not_list(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config(
+            {"transitions": [{"from": "a", "to": "b", "conditions": "not_list"}]}
+        )
+        assert not valid
+        assert any("conditions" in e and "list" in e for e in errors)
+
+    def test_on_fail_not_string(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config(
+            {"transitions": [{"from": "a", "to": "b", "on_fail": 123}]}
+        )
+        assert not valid
+        assert any("on_fail" in e and "string" in e for e in errors)
+
+    def test_groups_not_list(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config({"groups": "not_a_list"})
+        assert not valid
+        assert any("groups" in e and "list" in e for e in errors)
+
+    def test_duplicate_transition_at_schema_level(self):
+        from stageflow.core.schema import validate_stages_config
+        valid, errors = validate_stages_config({
+            "transitions": [
+                {"from": "a", "to": "b"},
+                {"from": "a", "to": "b"},
+            ]
+        })
+        assert not valid
+        assert any("duplicate" in e for e in errors)
+
+    def test_valid_minimal_config(self):
+        from stageflow.core.schema import validate_stages_config
+        config = {
+            "stages": [{"name": "a", "tools": ["Read"]}],
+            "transitions": [{"from": "a", "to": "b"}],
+        }
+        valid, errors = validate_stages_config(config)
+        assert valid
+        assert errors == []
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Stage class
 # ═══════════════════════════════════════════════════════════════════════════
