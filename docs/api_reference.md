@@ -120,7 +120,7 @@ Clear all cached condition results immediately.
 
 ---
 
-### Built-in Condition Types (27)
+### Built-in Condition Types (30)
 
 Each condition is used in YAML or via `evaluate()` with a single-key dict: `{type: params}`.
 
@@ -167,6 +167,14 @@ Each condition is used in YAML or via `evaluate()` with a single-key dict: `{typ
 | `env_var` | `name`, `op?`, `value?` | Check environment variable (ops: `exists`, `equals`, `not_empty`) |
 | `http_status` | `url`, `expected?`, `timeout?`, `method?` | Check HTTP status code |
 | `time_range` | `after?`, `before?`, `tz?` | Check current time is within a window |
+
+#### Process & Container Conditions
+
+| Type | Params | Description |
+|------|--------|-------------|
+| `port_open` | `port`, `host?`, `timeout?` | Check TCP port is listening on host (default 127.0.0.1:2s timeout) |
+| `process_running` | `name`, `cmdline?` | Check if a process is running by name or command line pattern (uses `psutil` if available, falls back to `tasklist`/`ps`) |
+| `docker_ps` | `name?`, `filter?` | Check if Docker containers are running; filters by name if provided |
 
 #### File System Conditions
 
