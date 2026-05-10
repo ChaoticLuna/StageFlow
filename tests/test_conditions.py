@@ -569,6 +569,34 @@ class TestShellTest:
         })
         assert passed
 
+    def test_stdout_matches_passes(self, temp_dir):
+        passed, msg = evaluate("shell_test", {
+            "base_path": str(temp_dir),
+            "command": "echo PASS: 42 tests run",
+            "op": "stdout_matches",
+            "value": r"PASS: \d+ tests"
+        })
+        assert passed
+
+    def test_stdout_matches_fails(self, temp_dir):
+        passed, msg = evaluate("shell_test", {
+            "base_path": str(temp_dir),
+            "command": "echo FAIL: 0 tests",
+            "op": "stdout_matches",
+            "value": r"PASS: \d+"
+        })
+        assert not passed
+
+    def test_stdout_matches_invalid_regex(self, temp_dir):
+        passed, msg = evaluate("shell_test", {
+            "base_path": str(temp_dir),
+            "command": "echo anything",
+            "op": "stdout_matches",
+            "value": "[invalid"
+        })
+        assert not passed
+        assert "Regex error" in msg
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # python_expr

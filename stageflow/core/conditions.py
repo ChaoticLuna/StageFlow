@@ -331,6 +331,12 @@ def _shell_test(params: dict) -> Tuple[bool, str]:
     elif op == "stdout_not_empty":
         ok = bool(output)
         return ok, f"stdout not empty: {ok}"
+    elif op == "stdout_matches":
+        try:
+            ok = bool(re.search(str(expected), output))
+        except re.error as e:
+            return False, f"Regex error: {e}"
+        return ok, f"stdout matches /{expected}/: {ok}"
     elif op == "gt":
         try:
             ok = float(output) > float(expected)
