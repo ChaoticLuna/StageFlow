@@ -233,7 +233,8 @@ class StateMachine:
         """Execute lifecycle hooks (on_enter/on_exit) for a stage.
 
         Hooks are defined in the stage config under `on_enter` or `on_exit`.
-        Each hook is a dict with a single key: {'shell': 'command'} or {'python': 'expr'}.
+        Each hook is a dict with a single key: {'shell': 'command'}, {'python': 'expr'},
+        or {'webhook': {url, method, body, headers}}.
         Hook failures are logged but do not block the transition.
         """
         stage = self.registry.get_stage(stage_name)
@@ -259,10 +260,57 @@ class StateMachine:
                         message = result.stderr.decode("utf-8", errors="replace").strip()[:200]
                 elif hook_kind == "python":
                     exec(hook_value, {"base_path": str(self.base_path), "stage": stage_name, "sm": self})
+                elif hook_kind == "webhook":
+                    success, message = self._execute_webhook(hook_value)
             except Exception as e:
                 success = False
                 message = str(e)[:200]
             self.audit.log_hook_execution(stage_name, hook_type, hook_kind, success, message)
+
+    def _interpolate_vars(self, value):
+        """Recursively replace {{var.key}} in strings, dicts, and lists."""
+        vars_ = self.get_all_vars()
+        if isinstance(value, str):
+            result = value
+            for key, val in vars_.items():
+                result = result.replace(f"{{{{var.{key}}}}}", str(val))
+            return result
+        if isinstance(value, dict):
+            return {k: self._interpolate_vars(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._interpolate_vars(v) for v in value]
+        return value
+
+    def _execute_webhook(self, config: dict) -> tuple[bool, str]:
+        """Execute a webhook HTTP request. Returns (success, message)."""
+        import json
+        import urllib.request
+        import urllib.error
+
+        url = self._interpolate_vars(config.get("url", ""))
+        method = config.get("method", "POST").upper()
+        body = self._interpolate_vars(config.get("body", {}))
+        headers = self._interpolate_vars(config.get("headers", {}))
+        timeout = config.get("timeout", 10)
+
+        data = None
+        if body and method in ("POST", "PUT", "PATCH"):
+            data = json.dumps(body).encode("utf-8")
+
+        req = urllib.request.Request(url, data=data, method=method)
+        req.add_header("Content-Type", "application/json")
+        for key, val in headers.items():
+            req.add_header(key, str(val))
+
+        try:
+            resp = urllib.request.urlopen(req, timeout=timeout)
+            resp_body = resp.read().decode("utf-8", errors="replace")[:500]
+            return True, f"HTTP {resp.status}: {resp_body}"
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="replace")[:200]
+            return False, f"HTTP {e.code}: {err_body}"
+        except Exception as e:
+            return False, str(e)[:200]
 
     def force_transition_to(self, target: str) -> Tuple[bool, List[str]]:
         """Force a transition without condition checks."""

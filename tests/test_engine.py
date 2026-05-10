@@ -543,3 +543,263 @@ class TestPauseResume:
         audit_path = temp_dir / ".claude" / "audit.jsonl"
         content = audit_path.read_text(encoding="utf-8")
         assert '"event": "resume"' in content
+
+
+class TestWebhookHooks:
+    def test_webhook_on_enter_is_called(self, state_machine, registry, temp_dir):
+        import json
+        import threading
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+
+        received = []
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(inner):
+                length = int(inner.headers.get("Content-Length", 0))
+                body = inner.rfile.read(length).decode("utf-8") if length else ""
+                received.append({"path": inner.path, "body": body, "headers": dict(inner.headers)})
+                inner.send_response(200)
+                inner.send_header("Content-Type", "application/json")
+                inner.end_headers()
+                inner.wfile.write(b'{"status":"ok"}')
+            def log_message(inner, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.handle_request, daemon=True)
+        thread.start()
+
+        registry.register_stage(
+            "webhook_stage",
+            tools=["Read"],
+            on_enter=[{
+                "webhook": {
+                    "url": f"http://127.0.0.1:{port}/hook",
+                    "method": "POST",
+                    "body": {"stage": "webhook_stage", "action": "entered"},
+                }
+            }],
+        )
+        registry.register_transition("start", "webhook_stage",
+                                    conditions=[{"always": True}])
+
+        state_machine.initialize("start")
+        state_machine.transition_to("webhook_stage")
+
+        import time
+        time.sleep(0.1)
+        thread.join(timeout=2)
+        server.server_close()
+
+        assert state_machine.current_stage == "webhook_stage"
+        assert len(received) == 1, f"Expected 1 webhook call, got {len(received)}"
+        body = json.loads(received[0]["body"])
+        assert body["stage"] == "webhook_stage"
+        assert body["action"] == "entered"
+
+    def test_webhook_failure_does_not_block_transition(self, state_machine, registry, temp_dir):
+        registry.register_stage(
+            "bad_webhook_stage",
+            tools=["Read"],
+            on_enter=[{
+                "webhook": {
+                    "url": "http://127.0.0.1:1/nonexistent",  # nothing listening
+                    "method": "POST",
+                    "timeout": 1,
+                }
+            }],
+        )
+        registry.register_transition("start", "bad_webhook_stage",
+                                    conditions=[{"always": True}])
+
+        state_machine.initialize("start")
+        ok, msgs = state_machine.transition_to("bad_webhook_stage")
+        assert ok is True
+        assert state_machine.current_stage == "bad_webhook_stage"
+
+    def test_webhook_variable_interpolation_url(self, state_machine, registry, temp_dir):
+        import json
+        import threading
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+
+        received = []
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(inner):
+                length = int(inner.headers.get("Content-Length", 0))
+                body = inner.rfile.read(length).decode("utf-8") if length else ""
+                received.append({"path": inner.path, "body": body})
+                inner.send_response(200)
+                inner.send_header("Content-Type", "application/json")
+                inner.end_headers()
+                inner.wfile.write(b'{}')
+            def log_message(inner, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.handle_request, daemon=True)
+        thread.start()
+
+        registry.register_stage(
+            "var_stage",
+            tools=["Read"],
+            on_enter=[{
+                "webhook": {
+                    "url": f"http://127.0.0.1:{port}/{{{{var.task_id}}}}",
+                    "method": "POST",
+                    "body": {"msg": "Processing {{var.task_id}}"},
+                }
+            }],
+        )
+        registry.register_transition("start", "var_stage",
+                                    conditions=[{"always": True}])
+
+        state_machine.initialize("start")
+        state_machine.set_var("task_id", "TASK-042")
+        state_machine.transition_to("var_stage")
+
+        import time
+        time.sleep(0.1)
+        thread.join(timeout=2)
+        server.server_close()
+
+        assert len(received) == 1
+        assert received[0]["path"] == "/TASK-042"
+        body = json.loads(received[0]["body"])
+        assert body["msg"] == "Processing TASK-042"
+
+    def test_webhook_variable_interpolation_headers(self, state_machine, registry, temp_dir):
+        import json
+        import threading
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+
+        received = []
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(inner):
+                length = int(inner.headers.get("Content-Length", 0))
+                body = inner.rfile.read(length).decode("utf-8") if length else ""
+                received.append({"headers": dict(inner.headers), "body": body})
+                inner.send_response(200)
+                inner.send_header("Content-Type", "application/json")
+                inner.end_headers()
+                inner.wfile.write(b'{}')
+            def log_message(inner, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.handle_request, daemon=True)
+        thread.start()
+
+        registry.register_stage(
+            "header_stage",
+            tools=["Read"],
+            on_enter=[{
+                "webhook": {
+                    "url": f"http://127.0.0.1:{port}/hook",
+                    "method": "POST",
+                    "body": {},
+                    "headers": {"X-Token": "{{var.api_token}}"},
+                }
+            }],
+        )
+        registry.register_transition("start", "header_stage",
+                                    conditions=[{"always": True}])
+
+        state_machine.initialize("start")
+        state_machine.set_var("api_token", "secret-123")
+        state_machine.transition_to("header_stage")
+
+        import time
+        time.sleep(0.1)
+        thread.join(timeout=2)
+        server.server_close()
+
+        assert len(received) == 1
+        assert received[0]["headers"].get("X-Token") == "secret-123"
+
+    def test_webhook_audit_logged_on_enter(self, state_machine, registry, temp_dir):
+        import threading
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(inner):
+                inner.send_response(200)
+                inner.send_header("Content-Type", "application/json")
+                inner.end_headers()
+                inner.wfile.write(b'{"ok":true}')
+            def log_message(inner, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.handle_request, daemon=True)
+        thread.start()
+
+        registry.register_stage(
+            "audit_webhook",
+            tools=["Read"],
+            on_enter=[{
+                "webhook": {
+                    "url": f"http://127.0.0.1:{port}/audit",
+                    "method": "POST",
+                }
+            }],
+        )
+        registry.register_transition("start", "audit_webhook",
+                                    conditions=[{"always": True}])
+
+        state_machine.initialize("start")
+        state_machine.transition_to("audit_webhook")
+
+        import time
+        time.sleep(0.1)
+        thread.join(timeout=2)
+        server.server_close()
+
+        audit_path = temp_dir / ".claude" / "audit.jsonl"
+        content = audit_path.read_text(encoding="utf-8")
+        assert '"hook_type": "on_enter"' in content
+        assert '"hook_kind": "webhook"' in content
+
+    def test_webhook_default_method_is_post(self, state_machine, registry, temp_dir):
+        import threading
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+
+        received = []
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(inner):
+                received.append(inner.command)
+                inner.send_response(200)
+                inner.send_header("Content-Type", "application/json")
+                inner.end_headers()
+                inner.wfile.write(b'{}')
+            def log_message(inner, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.handle_request, daemon=True)
+        thread.start()
+
+        registry.register_stage(
+            "default_method_stage",
+            tools=["Read"],
+            on_enter=[{
+                "webhook": {
+                    "url": f"http://127.0.0.1:{port}/test",
+                }
+            }],
+        )
+        registry.register_transition("start", "default_method_stage",
+                                    conditions=[{"always": True}])
+
+        state_machine.initialize("start")
+        state_machine.transition_to("default_method_stage")
+
+        import time
+        time.sleep(0.1)
+        thread.join(timeout=2)
+        server.server_close()
+
+        assert len(received) == 1
