@@ -143,7 +143,8 @@ CONDITION_DEFS = [
         {"name": "delay", "label": "Delay (seconds)", "kind": "number", "default": 5}
     ]},
     {"type": "command_exists", "label": "Command Exists", "description": "Check that a CLI command is available", "params": [
-        {"name": "command", "label": "Command name", "kind": "text", "placeholder": "pytest", "required": True}
+        {"name": "command", "label": "Command name", "kind": "text", "placeholder": "pytest", "required": True},
+        {"name": "op", "label": "Check", "kind": "select", "options": ["exists", "version"], "default": "exists"}
     ]},
     {"type": "diff_contains", "label": "Diff Contains", "description": "Check git diff for a pattern (security gate)", "params": [
         {"name": "pattern", "label": "Pattern (regex)", "kind": "text", "placeholder": "eval\\(", "required": True},
