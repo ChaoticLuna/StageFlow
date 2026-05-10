@@ -223,6 +223,9 @@ transitions:
       - file_contains:
           path: artifacts/verify/test_results.md
           pattern: "(PASS|通过|All tests passed)"
+      - shell_test:
+          command: "python -m pytest --tb=short"
+          op: exit_zero
     on_fail: implement
 
   # ── Verify → Implement (retry loop) ─────────────────────────────────
