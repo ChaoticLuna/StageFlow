@@ -64,14 +64,14 @@ CONDITION_DEFS = [
     {"type": "json_field", "label": "JSON Field", "description": "Check a field in a JSON file", "params": [
         {"name": "path", "label": "JSON file path", "kind": "text", "required": True},
         {"name": "field", "label": "Field name", "kind": "text", "required": True},
-        {"name": "op", "label": "Operator", "kind": "select", "options": ["exists", "not_empty", "equals", "not_equals"], "default": "exists"},
-        {"name": "value", "label": "Expected value", "kind": "text", "placeholder": "(only for equals/not_equals)"}
+        {"name": "op", "label": "Operator", "kind": "select", "options": ["exists", "not_empty", "equals", "not_equals", "gt", "lt", "in", "matches"], "default": "exists"},
+        {"name": "value", "label": "Expected value", "kind": "text", "placeholder": "(for comparison ops)"}
     ]},
     {"type": "yaml_field", "label": "YAML Field", "description": "Check a field in a YAML file", "params": [
         {"name": "path", "label": "YAML file path", "kind": "text", "required": True},
         {"name": "field", "label": "Field name", "kind": "text", "required": True},
-        {"name": "op", "label": "Operator", "kind": "select", "options": ["exists", "not_empty", "equals", "not_equals"], "default": "exists"},
-        {"name": "value", "label": "Expected value", "kind": "text", "placeholder": "(only for equals/not_equals)"}
+        {"name": "op", "label": "Operator", "kind": "select", "options": ["exists", "not_empty", "equals"], "default": "exists"},
+        {"name": "value", "label": "Expected value", "kind": "text", "placeholder": "(only for equals)"}
     ]},
     {"type": "shell_test", "label": "Shell Test", "description": "Run a shell command and check the result", "params": [
         {"name": "command", "label": "Command", "kind": "text", "placeholder": "pytest -q", "required": True},
@@ -83,8 +83,8 @@ CONDITION_DEFS = [
     ]},
     {"type": "env_var", "label": "Environment Variable", "description": "Check an environment variable", "params": [
         {"name": "name", "label": "Variable name", "kind": "text", "placeholder": "CI", "required": True},
-        {"name": "op", "label": "Operator", "kind": "select", "options": ["equals", "not_equals", "exists", "not_exists"], "default": "exists"},
-        {"name": "value", "label": "Expected value", "kind": "text", "placeholder": "(only for equals/not_equals)"}
+        {"name": "op", "label": "Operator", "kind": "select", "options": ["exists", "not_empty", "equals"], "default": "exists"},
+        {"name": "value", "label": "Expected value", "kind": "text", "placeholder": "(only for equals)"}
     ]},
     {"type": "all_of", "label": "All Of (AND)", "description": "All sub-conditions must pass", "params": [
         {"name": "conditions", "label": "Sub-conditions", "kind": "json", "placeholder": "[{\"always\": true}]", "required": True}
@@ -96,8 +96,8 @@ CONDITION_DEFS = [
         {"name": "condition", "label": "Condition to negate", "kind": "json", "placeholder": "{\"file_exists\": \"x.md\"}", "required": True}
     ]},
     {"type": "git_status", "label": "Git Status", "description": "Check the git working tree status", "params": [
-        {"name": "op", "label": "Check", "kind": "select", "options": ["clean", "dirty", "branch", "branch_equals"], "default": "clean"},
-        {"name": "value", "label": "Branch name", "kind": "text", "placeholder": "(only for branch/branch_equals)"}
+        {"name": "op", "label": "Check", "kind": "select", "options": ["clean", "files_changed", "branch"], "default": "clean"},
+        {"name": "value", "label": "Expected value", "kind": "text", "placeholder": "(branch name for branch, min count for files_changed)"}
     ]},
     {"type": "http_status", "label": "HTTP Status", "description": "Check an HTTP endpoint response", "params": [
         {"name": "url", "label": "URL", "kind": "text", "placeholder": "https://api.example.com/health", "required": True},
@@ -112,7 +112,7 @@ CONDITION_DEFS = [
     {"type": "compare_files", "label": "Compare Files", "description": "Compare two files", "params": [
         {"name": "path1", "label": "File 1 path", "kind": "text", "required": True},
         {"name": "path2", "label": "File 2 path", "kind": "text", "required": True},
-        {"name": "op", "label": "Comparison", "kind": "select", "options": ["identical", "different", "size_equal", "checksum_equal"], "default": "identical"}
+        {"name": "op", "label": "Comparison", "kind": "select", "options": ["identical", "different"], "default": "identical"}
     ]},
     {"type": "json_schema", "label": "JSON Schema", "description": "Validate a JSON file against a JSON Schema", "params": [
         {"name": "path", "label": "Data file path", "kind": "text", "required": True},
