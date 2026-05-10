@@ -2,7 +2,7 @@
 
 > **最后更新**: 2026-05-10
 > **当前 Agent**: Claude (via Claude Code)
-> **交接原因**: task-012 完成 — FastAPI 后端桥接
+> **交接原因**: task-013 完成 — LLM 工作流生成器
 
 ---
 
