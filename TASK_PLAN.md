@@ -120,7 +120,7 @@
 |---|------|------|------|
 | 11.1 | GitHub Actions 集成示例 | ✅ | CI/CD + Python matrix → task-063 |
 | 11.2 | Docker 镜像 | ✅ | python:3.12-slim + entrypoint → task-063 |
-| 11.3 | VS Code 扩展 | ⬜ | 阶段状态栏指示器 |
+| 11.3 | VS Code 扩展 | ✅ | vscode-extension/ — status bar + quick pick → task-074 |
 | 11.4 | Linear/Notion 任务同步 | ⬜ | Issue 自动链接 |
 | 11.5 | 多项目共享配置 | ✅ | config extends inheritance → task-064 |
 

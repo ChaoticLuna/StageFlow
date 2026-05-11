@@ -1,0 +1,40 @@
+{
+  "name": "stageflow-status",
+  "displayName": "StageFlow Status",
+  "description": "Display StageFlow stage in VS Code status bar",
+  "version": "0.1.0",
+  "publisher": "stageflow",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "stageflow.showNextStages",
+        "title": "StageFlow: Show Next Stages"
+      },
+      {
+        "command": "stageflow.forceNext",
+        "title": "StageFlow: Force Next Stage"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
+  }
+}

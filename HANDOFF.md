@@ -2,7 +2,35 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-073 完成 — git_status has_commits bug fix (928 tests, 84% coverage)
+> **交接原因**: task-074 完成 — VS Code extension (943 tests, 84% coverage)
+
+---
+
+## task-074 会话总结 (2026-05-11)
+
+### 做了什么
+1. **Created VS Code extension** under `vscode-extension/`:
+   - `package.json` — activation on `onStartupFinished`, contributes `stageflow.showNextStages` and `stageflow.forceNext` commands
+   - `tsconfig.json` — strict TypeScript, ES2020, commonjs module
+   - `.vscodeignore` — excludes source files from package
+   - `src/extension.ts` — full extension logic:
+     - Finds `.claude/current_stage.json` in workspace root
+     - Displays current stage in VS Code status bar (left aligned, priority 100)
+     - Color-coded per stage: analyze=blue, implement=orange, verify=green, done=gray
+     - FileSystemWatcher updates status bar on state file changes
+     - Click handler: QuickPick shows current stage, available next stages, recent history (last 3), and Force Next option
+     - `Force Next Stage` command with modal confirmation
+     - `runStageflowCommand()` helper executes `python scripts/stage_next.py` in workspace root
+2. **Dependencies**: `@types/vscode`, `@types/node`, `typescript` — compiles clean with `tsc -p ./`
+3. **TASK_PLAN.md**: Marked 11.3 (VS Code 扩展) as ✅ complete
+
+### 当前状态快照
+```
+Tests:           943 passed, 0 failed, 1 skipped
+fix_plan.md:     74/74 tasks complete
+New files:       vscode-extension/{package.json, tsconfig.json, .vscodeignore, src/extension.ts}
+TypeScript:      compiles clean, 0 errors
+```
 
 ---
 

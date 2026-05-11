@@ -195,6 +195,12 @@
 
 ---
 
+## Phase 25: VS Code 扩展 (TASK_PLAN 11.3)
+
+- [x] **task-074**: Create VS Code extension project under `vscode-extension/` — package.json with activation events, TypeScript config. Implement `extension.ts`: reads `.claude/current_stage.json` via a file watcher, displays current stage name in the VS Code status bar. Clicking the status bar item shows available next stages. Stage names color-coded: analyze=blue, implement=orange, verify=green, done=gray, default=white.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |
