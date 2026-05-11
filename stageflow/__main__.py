@@ -42,7 +42,10 @@ def cmd_status(args):
     if info["stage_info"]:
         print(f"  Description   : {info['stage_info'].get('description', 'N/A')}")
         tools = info['stage_info'].get('tools', [])
-        print(f"  Tools         : {len(tools)} allowed")
+        if not tools:
+            print(f"  Tools         : (all allowed)")
+        else:
+            print(f"  Tools         : {len(tools)} allowed")
         if hasattr(args, 'verbose') and args.verbose:
             for t in tools:
                 print(f"    - {t}")
@@ -52,6 +55,63 @@ def cmd_status(args):
         print(f"  Retry Counts  : {info['retry_count']}")
     if info["iterations"]:
         print(f"  Iterations    : {info['iterations']}")
+
+    if hasattr(args, 'verbose') and args.verbose and info["current_stage"]:
+        _print_verbose_details(reg, sm, info)
+
+
+def _print_verbose_details(reg, sm, info):
+    current = info["current_stage"]
+    si = info.get("stage_info", {}) or {}
+
+    # ── Transitions from current stage ──
+    transitions = reg.get_transitions_from(current)
+    if transitions:
+        print(f"\n  ── Transitions from '{current}' ──")
+        for t in transitions:
+            print(f"  {t.from_stage} -> {t.to_stage}:")
+            if t.description:
+                print(f"    Description: {t.description}")
+            if t.conditions:
+                print(f"    Conditions ({len(t.conditions)}):")
+                for c in t.conditions:
+                    key = next(iter(c))
+                    val = c[key]
+                    if isinstance(val, dict):
+                        flat = ", ".join(f"{k}={v}" for k, v in val.items())
+                        print(f"      - {key}: {flat}")
+                    else:
+                        print(f"      - {key}: {val}")
+            if t.on_fail:
+                print(f"    On Fail: rollback to '{t.on_fail}'")
+    else:
+        print(f"\n  ── No transitions from '{current}' ──")
+
+    # ── Lifecycle hooks ──
+    for hook_type in ("on_enter", "on_exit"):
+        hooks = si.get(hook_type, [])
+        label = "On Enter" if hook_type == "on_enter" else "On Exit"
+        if hooks:
+            print(f"\n  ── {label} Hooks ({len(hooks)}) ──")
+            for h in hooks:
+                kind = next(iter(h))
+                val = h[kind]
+                if isinstance(val, dict):
+                    from json import dumps
+                    print(f"    - {kind}: {dumps(val, default=str)}")
+                else:
+                    print(f"    - {kind}: {val}")
+        else:
+            print(f"\n  ── {label} Hooks: (none) ──")
+
+    # ── Variable dump ──
+    variables = info.get("variables", {})
+    if variables:
+        print(f"\n  ── Variables ({len(variables)}) ──")
+        for key, val in variables.items():
+            print(f"    {key}: {val}")
+    else:
+        print(f"\n  ── Variables: (none) ──")
 
 
 def cmd_next(args):

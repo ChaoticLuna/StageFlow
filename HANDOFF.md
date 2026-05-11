@@ -2,7 +2,33 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-058 完成 — engine.py 100% coverage
+> **交接原因**: task-059 完成 — --verbose status expansion
+
+---
+
+## task-059 会话总结 (2026-05-11)
+
+### 做了什么
+1. **Expanded `--verbose` output** in `stageflow/__main__.py` cmd_status:
+   - **Transition details**: conditions listed per transition (with flat key=value rendering for dict params), on_fail targets, descriptions
+   - **Hook information**: on_enter and on_exit hooks shown with type and value
+   - **Variable dump**: all variables with their values
+   - **Empty tools**: now shows "(all allowed)" instead of "0 allowed"
+   - Extracted `_print_verbose_details()` helper function for clean separation
+2. **Added 3 tests** to `tests/test_main.py` (56 → 58):
+   - `test_status_verbose_shows_details` — verifies transitions/hooks/variables sections present
+   - `test_status_verbose_short_flag` — `-v` short flag works
+   - `test_status_verbose_uninitialized` — no crash when state is uninitialized
+
+### 当前状态快照
+```
+Tests:           883 passing, 0 failing, 1 skipped
+test_main.py:    58 tests (was 56)
+__main__.py:     cmd_status + _print_verbose_details helper
+```
+
+### 已知问题
+- Stage guard keeps resetting state file to "analyze" during test runs
 
 ---
 

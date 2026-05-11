@@ -189,9 +189,26 @@ class TestStageflowCLI:
         r = _stageflow("check", "analyze")
         assert r.returncode in (0, 1), f"rc={r.returncode}: {r.stderr}"
 
-    def test_status_verbose(self):
+    def test_status_verbose_shows_details(self):
+        """--verbose shows transitions, hooks, and variables sections."""
         r = _stageflow("status", "--verbose")
         assert r.returncode == 0, r.stderr
+        assert "Transitions from" in r.stdout
+        assert "Conditions" in r.stdout or "No transitions" in r.stdout
+        assert "Hooks" in r.stdout
+        assert "Variables" in r.stdout
+
+    def test_status_verbose_short_flag(self):
+        """-v short flag should work same as --verbose."""
+        r = _stageflow("status", "-v")
+        assert r.returncode == 0, r.stderr
+        assert "Transitions from" in r.stdout or "No transitions" in r.stdout
+
+    def test_status_verbose_uninitialized(self, uninitialized_state):
+        """--verbose with uninitialized state should not error."""
+        r = _stageflow("status", "--verbose")
+        assert r.returncode == 0, r.stderr
+        assert "(not initialized)" in r.stdout
 
     # ── force / hard reset paths ──────────────────────────────────────
 
