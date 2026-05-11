@@ -206,7 +206,8 @@ class LinearClient:
         if not issue:
             return {"error": f"Issue '{issue_id}' not found"}
 
-        team_id_to_use = team_id or issue.get("team", {}).get("id")
+        team = issue.get("team") or {}
+        team_id_to_use = team_id or team.get("id")
         if not team_id_to_use:
             return {"error": "No team ID available to look up states"}
 

@@ -2,7 +2,32 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-076 完成 — Notion integration (987 tests, 84% coverage)
+> **交接原因**: Coverage improvement for Linear + Notion integrations (998 tests)
+
+---
+
+## Coverage 补充 + Bug Fix 会话总结 (2026-05-11)
+
+### 做了什么
+1. **Added 8 coverage tests to `tests/test_linear.py`** — `TestLinearCoverage` class:
+   - `test_get_issue_by_identifier_error`, `test_update_issue_with_description_and_state`
+   - `test_update_issue_error`, `test_sync_stage_issue_not_found_null`
+   - `test_sync_stage_no_team_id`, `test_sync_stage_team_states_error`
+   - `test_add_comment_error`, `test_search_issues_error`
+   - Linear coverage: 99% (109 stmts, 1 miss at _load_env import line)
+2. **Added 3 coverage tests to `tests/test_notion.py`**:
+   - `test_create_page_with_children`, `test_query_database_with_sorts`, `test_sync_stage_page_error`
+   - Notion coverage: 99% (76 stmts, 1 miss)
+3. **Fixed bug in `linear.py:209`** — `issue.get("team", {}).get("id")` crashed when `team` is `None`
+   because `dict.get()` returns the default only for missing keys, not for `None` values.
+   Fixed to: `(issue.get("team") or {}).get("id")`
+
+### 当前状态快照
+```
+Tests:           998 passed, 0 failed, 1 skipped (999 collected)
+fix_plan.md:     76/76 tasks complete
+All TASK_PLAN:   100% complete
+```
 
 ---
 

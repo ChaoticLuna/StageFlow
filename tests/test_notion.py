@@ -121,6 +121,17 @@ class TestNotionDatabase:
             )
         assert result["results"] == []
 
+    def test_query_database_with_sorts(self, monkeypatch):
+        monkeypatch.setenv("NOTION_API_KEY", "test")
+        mock = {"results": [], "has_more": False}
+        with patch("urllib.request.urlopen", _mock_urlopen(mock)):
+            client = NotionClient()
+            result = client.query_database(
+                "db-1",
+                sorts=[{"property": "Name", "direction": "ascending"}],
+            )
+        assert result["results"] == []
+
     def test_get_database(self, monkeypatch):
         monkeypatch.setenv("NOTION_API_KEY", "test")
         mock = {
@@ -149,6 +160,20 @@ class TestNotionCreate:
                 "Name": {"title": [{"text": {"content": "New Task"}}]},
             })
         assert result["id"] == "new-page"
+
+    def test_create_page_with_children(self, monkeypatch):
+        monkeypatch.setenv("NOTION_API_KEY", "test")
+        mock = {"id": "new-page-2", "properties": {}}
+        with patch("urllib.request.urlopen", _mock_urlopen(mock)):
+            client = NotionClient()
+            result = client.create_page("db-1", {
+                "Name": {"title": [{"text": {"content": "Task with content"}}]},
+            }, children=[{
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {"rich_text": [{"text": {"content": "Details"}}]},
+            }])
+        assert result["id"] == "new-page-2"
 
 
 class TestNotionSync:
@@ -196,6 +221,21 @@ class TestNotionSync:
             result = client.sync_stage_to_status("page-y", "implement")
         assert "error" in result
         assert "Status" in result["error"]
+
+    def test_sync_stage_page_error(self, monkeypatch):
+        import urllib.error
+        import io
+        monkeypatch.setenv("NOTION_API_KEY", "test")
+        def raise_404(request, timeout=None):
+            raise urllib.error.HTTPError(
+                "url", 404, "Not Found", {},
+                io.BytesIO(json.dumps({"message": "Page not found"}).encode())
+            )
+        with patch("urllib.request.urlopen", raise_404):
+            client = NotionClient()
+            result = client.sync_stage_to_status("bad-page", "implement")
+        assert "error" in result
+        assert result["status"] == 404
 
     def test_sync_stage_custom_map(self, monkeypatch):
         monkeypatch.setenv("NOTION_API_KEY", "test")

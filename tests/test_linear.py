@@ -356,6 +356,97 @@ class TestLinearMisc:
         assert DEFAULT_STAGE_STATE_MAP["done"] == "Done"
 
 
+class TestLinearCoverage:
+    def test_get_issue_by_identifier_error(self, monkeypatch):
+        monkeypatch.setenv("LINEAR_API_KEY", "test")
+        mock_resp = {"errors": [{"message": "No such identifier"}]}
+        with patch("urllib.request.urlopen", _mock_urlopen(mock_resp)):
+            client = LinearClient()
+            result = client.get_issue_by_identifier("MISSING-999")
+        assert "error" in result
+
+    def test_update_issue_with_description_and_state(self, monkeypatch):
+        monkeypatch.setenv("LINEAR_API_KEY", "test")
+        mock_resp = {
+            "data": {
+                "issueUpdate": {
+                    "issue": {"id": "abc-5", "title": "T", "state": {"name": "Done"}},
+                    "success": True,
+                }
+            }
+        }
+        with patch("urllib.request.urlopen", _mock_urlopen(mock_resp)):
+            client = LinearClient()
+            result = client.update_issue("abc-5", description="Updated desc", state_id="st-done")
+        assert result["result"]["success"] is True
+
+    def test_update_issue_error(self, monkeypatch):
+        monkeypatch.setenv("LINEAR_API_KEY", "test")
+        mock_resp = {"errors": [{"message": "Invalid input"}]}
+        with patch("urllib.request.urlopen", _mock_urlopen(mock_resp)):
+            client = LinearClient()
+            result = client.update_issue("abc-x", title="Bad")
+        assert "error" in result
+
+    def test_sync_stage_issue_not_found_null(self, monkeypatch):
+        monkeypatch.setenv("LINEAR_API_KEY", "test")
+        mock_resp = {"data": {"issue": None}}
+        with patch("urllib.request.urlopen", _mock_urlopen(mock_resp)):
+            client = LinearClient()
+            result = client.sync_stage_to_state("unknown-id", "implement")
+        assert "error" in result
+        assert "not found" in result["error"].lower()
+
+    def test_sync_stage_no_team_id(self, monkeypatch):
+        monkeypatch.setenv("LINEAR_API_KEY", "test")
+        mock_resp = {"data": {"issue": {"id": "iss-no-team", "team": None}}}
+        with patch("urllib.request.urlopen", _mock_urlopen(mock_resp)):
+            client = LinearClient()
+            result = client.sync_stage_to_state("iss-no-team", "implement")
+        assert "error" in result
+        assert "team" in result["error"].lower()
+
+    def test_sync_stage_team_states_error(self, monkeypatch):
+        monkeypatch.setenv("LINEAR_API_KEY", "test")
+        call_count = [0]
+        responses = [
+            {"data": {"issue": {"id": "iss-err", "team": {"id": "team-bad"}}}},
+            {"errors": [{"message": "Team access denied"}]},
+        ]
+        def multi(response_list):
+            def opener(request, timeout=None):
+                idx = call_count[0]
+                call_count[0] += 1
+                class M:
+                    def read(s):
+                        return json.dumps(response_list[idx]).encode("utf-8")
+                    def __enter__(s): return s
+                    def __exit__(s, *a): pass
+                return M()
+            return opener
+
+        with patch("urllib.request.urlopen", multi(responses)):
+            client = LinearClient()
+            result = client.sync_stage_to_state("iss-err", "implement")
+        assert "error" in result
+
+    def test_add_comment_error(self, monkeypatch):
+        monkeypatch.setenv("LINEAR_API_KEY", "test")
+        mock_resp = {"errors": [{"message": "Issue not found"}]}
+        with patch("urllib.request.urlopen", _mock_urlopen(mock_resp)):
+            client = LinearClient()
+            result = client.add_comment("bad-id", "comment text")
+        assert "error" in result
+
+    def test_search_issues_error(self, monkeypatch):
+        monkeypatch.setenv("LINEAR_API_KEY", "test")
+        mock_resp = {"errors": [{"message": "Search failed"}]}
+        with patch("urllib.request.urlopen", _mock_urlopen(mock_resp)):
+            client = LinearClient()
+            result = client.search_issues("query")
+        assert "error" in result
+
+
 class TestLoadEnv:
     def test_load_env_valid_file(self, temp_dir):
         env_file = temp_dir / ".env"
