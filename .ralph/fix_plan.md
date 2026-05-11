@@ -180,6 +180,15 @@
 
 ---
 
+## Phase 23: 条件覆盖率 (Conditions Coverage)
+
+- [x] **task-069**: Cover `yaml_field` missed lines (368-369, 376) + `time_range` (623-624, 634) + `http_status` (604-605). Added 5 tests: invalid_yaml_parse_error, navigate_non_dict_field, default_status_code_check, before_bound_blocks, invalid_timezone_fallback. 267→272 tests, 58→50 missed (92%→93%).
+- [ ] **task-070**: Cover remaining handlers — `git_status` (571), `shell_test` timeout (404), parallel exception (210-211), `retry`/`diff_contains` (936-951, 960-961), system checks (1008, 1012-1033, 1053-1060). ~5-8 tests across 6+ handlers. Note: lines 152, 183, 516 are unreachable (defensive dup of _parse_condition wrapping).
+- [ ] **task-071**: Continue coverage on any remaining missed lines after task-070.
+- [ ] **task-072**: Final coverage sweep — target whatever remains < 95%.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |

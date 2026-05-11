@@ -490,6 +490,26 @@ class TestYamlField:
         assert not passed
         assert "not installed" in msg
 
+    def test_invalid_yaml_parse_error(self, temp_dir):
+        """lines 368-369: invalid YAML raises exception during safe_load."""
+        self._write_yaml(temp_dir, "bad.yaml", "key: {unclosed: [}")
+        passed, msg = evaluate("yaml_field", {
+            "base_path": str(temp_dir), "path": "bad.yaml",
+            "field": "key", "op": "exists"
+        })
+        assert not passed
+        assert "Invalid YAML" in msg
+
+    def test_navigate_non_dict_field(self, temp_dir):
+        """line 376: intermediate field is not a dict (e.g., scalar)."""
+        self._write_yaml(temp_dir, "flat.yaml", "a: scalar_value\n")
+        passed, msg = evaluate("yaml_field", {
+            "base_path": str(temp_dir), "path": "flat.yaml",
+            "field": "a.b.c", "op": "exists"
+        })
+        assert not passed
+        assert "Cannot navigate" in msg
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # shell_test
@@ -1485,6 +1505,15 @@ class TestHttpStatus:
         })
         assert passed
 
+    def test_default_status_code_check(self, temp_dir, http_server):
+        """lines 604-605: default op checks status code against expected (200)."""
+        url = f"http://127.0.0.1:{http_server}"
+        passed, msg = evaluate("http_status", {
+            "url": url, "timeout": 5
+        })
+        assert passed
+        assert "200" in msg
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # time_range
@@ -1512,6 +1541,17 @@ class TestTimeRange:
         passed, msg = evaluate("time_range", {"after": "23:59", "tz": "UTC"})
         assert not passed
         assert "before" in msg
+
+    def test_before_bound_blocks(self, temp_dir):
+        """line 634: before bound in the past blocks transition."""
+        passed, msg = evaluate("time_range", {"before": "00:01", "tz": "UTC"})
+        assert not passed
+        assert "after" in msg
+
+    def test_invalid_timezone_fallback(self, temp_dir):
+        """lines 623-624: invalid timezone name triggers tz=None fallback."""
+        passed, msg = evaluate("time_range", {"tz": "Mars/Olympus"})
+        assert passed  # no bounds = always passes, just testing tz fallback doesn't crash
 
 
 # ═══════════════════════════════════════════════════════════════════════════
