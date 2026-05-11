@@ -1052,6 +1052,122 @@ class TestEvaluateAll:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Parallel condition evaluation (evaluate_all with parallel=True)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestParallelEvaluation:
+    def test_parallel_all_pass(self, temp_dir):
+        for i in range(10):
+            (temp_dir / f"p{i}.txt").write_text("")
+        conditions = [{"file_exists": f"p{i}.txt"} for i in range(10)]
+        ok, msgs = evaluate_all(conditions, str(temp_dir), parallel=True)
+        assert ok
+        assert len(msgs) == 10
+        assert all("[PASS]" in m for m in msgs)
+
+    def test_parallel_mixed_results(self, temp_dir):
+        (temp_dir / "exists.txt").write_text("")
+        conditions = [
+            {"file_exists": "exists.txt"},
+            {"file_exists": "missing.txt"},
+            {"always": True},
+        ]
+        ok, msgs = evaluate_all(conditions, str(temp_dir), parallel=True)
+        assert not ok
+        assert "[PASS]" in msgs[0]
+        assert any("[FAIL]" in m for m in msgs)
+
+    def test_parallel_hard_failure(self, temp_dir):
+        (temp_dir / "a.txt").write_text("")
+        conditions = [
+            {"file_exists": "a.txt"},
+            {"always": True},
+            {"severity": "hard", "never": "hard block"},
+            {"always": True},
+        ]
+        ok, msgs = evaluate_all(conditions, str(temp_dir), parallel=True)
+        assert not ok
+        assert any("HARD_FAIL" in m for m in msgs)
+
+    def test_parallel_warn_does_not_block(self, temp_dir):
+        conditions = [
+            {"always": True},
+            {"severity": "warn", "never": "just a warning"},
+            {"always": True},
+        ]
+        ok, msgs = evaluate_all(conditions, str(temp_dir), parallel=True)
+        assert ok
+        assert any("WARN" in m for m in msgs)
+
+    def test_parallel_single_condition(self, temp_dir):
+        ok, msgs = evaluate_all(
+            [{"always": True}], str(temp_dir), parallel=True
+        )
+        assert ok
+        assert len(msgs) == 1
+
+    def test_parallel_empty_list(self):
+        ok, msgs = evaluate_all([], ".", parallel=True)
+        assert ok
+        assert msgs == []
+
+    def test_parallel_with_cache(self, temp_dir):
+        (temp_dir / "cache.txt").write_text("")
+        conditions = [{"file_exists": "cache.txt"}, {"always": True}]
+        ok1, _ = evaluate_all(conditions, str(temp_dir), parallel=True)
+        ok2, _ = evaluate_all(conditions, str(temp_dir), parallel=True, cache_ttl=60)
+        assert ok1 and ok2
+
+    def test_parallel_with_timeout(self):
+        conditions = [{"always": True}, {"always": True}]
+        ok, msgs = evaluate_all(conditions, ".", parallel=True, timeout=5)
+        assert ok
+        assert len(msgs) == 2
+
+    def test_parallel_with_timeout_expired(self):
+        conditions = [
+            {"shell_test": {"command": "python -c \"import time; time.sleep(5)\"",
+             "op": "exit_zero"}},
+            {"shell_test": {"command": "python -c \"import time; time.sleep(5)\"",
+             "op": "exit_zero"}},
+        ]
+        ok, msgs = evaluate_all(conditions, ".", parallel=True, timeout=0.5)
+        assert not ok
+        assert any("TIMEOUT" in m for m in msgs)
+
+    def test_parallel_with_variables(self, temp_dir):
+        (temp_dir / "var_test.txt").write_text("hello")
+        v1 = temp_dir / "{{var.fname}}"
+        v1.write_text("hello")  # placeholder
+        ok, msgs = evaluate_all(
+            [{"file_exists": "{{var.fname}}"}, {"always": True}],
+            str(temp_dir),
+            parallel=True,
+            variables={"fname": "var_test.txt"},
+        )
+        assert ok
+        assert len(msgs) == 2
+
+    def test_parallel_many_conditions(self, temp_dir):
+        n = 30
+        conditions = [{"always": True} for _ in range(n)]
+        ok, msgs = evaluate_all(conditions, str(temp_dir), parallel=True)
+        assert ok
+        assert len(msgs) == n
+
+    def test_parallel_no_wasted_eval_after_hard_fail(self, temp_dir):
+        """Hard failure should produce result but all conditions submitted to pool.
+        Result processing stops on first hard fail in order."""
+        conditions = [
+            {"severity": "hard", "never": "blocked immediately"},
+            {"always": True},
+        ]
+        ok, msgs = evaluate_all(conditions, str(temp_dir), parallel=True)
+        assert not ok
+        assert any("HARD_FAIL" in m for m in msgs)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Unknown condition & list_conditions
 # ═══════════════════════════════════════════════════════════════════════════
 

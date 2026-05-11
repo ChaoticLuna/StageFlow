@@ -2,7 +2,41 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-060 完成 — final suite, stats update, fix_plan.md 全清
+> **交接原因**: task-061 完成 — parallel condition evaluation (TASK_PLAN 9.3)
+
+---
+
+## task-061 会话总结 (2026-05-11)
+
+### 做了什么
+1. **Added `parallel` parameter to `evaluate_all()`** — when `parallel=True` and len(conditions) > 1, conditions are evaluated concurrently via `ThreadPoolExecutor`
+2. **Added `_evaluate_single()`** — extracts evaluation logic for a single condition, thread-safe
+3. **Added `_evaluate_parallel()`** — submits all conditions to thread pool, collects results in original order, applies severity rules (hard/warn/normal) in order
+4. **Timeout integration** — existing timeout wrapper works with both sequential and parallel evaluators via the `evaluator` variable pattern
+5. **Worker count**: `min(len(conditions), os.cpu_count() or 4)`
+6. **Added 12 tests** to `tests/test_conditions.py` (255 → 267):
+   - `test_parallel_all_pass` — 10 file_exists conditions
+   - `test_parallel_mixed_results` — mixed pass/fail
+   - `test_parallel_hard_failure` — hard severity stops processing
+   - `test_parallel_warn_does_not_block` — warn severity doesn't stop
+   - `test_parallel_single_condition` — single condition falls through
+   - `test_parallel_empty_list` — empty conditions list
+   - `test_parallel_with_cache` — caching works with parallel
+   - `test_parallel_with_timeout` — timeout fast path
+   - `test_parallel_with_timeout_expired` — timeout cuts off slow parallel
+   - `test_parallel_with_variables` — variable resolution before parallelization
+   - `test_parallel_many_conditions` — 30 conditions in parallel
+   - `test_parallel_no_wasted_eval_after_hard_fail` — hard fail result processing
+
+### 当前状态快照
+```
+Tests:           895 passed, 0 failing, 1 skipped (907 collected)
+conditions.py:   +_evaluate_single, +_evaluate_parallel
+test_conditions: 267 tests (was 255)
+```
+
+### 已知问题
+- Stage guard keeps resetting state file to "analyze" during test runs
 
 ---
 

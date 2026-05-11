@@ -91,12 +91,14 @@ def evaluate(name: str, params: dict) -> Tuple[bool, str]:
 def evaluate_all(conditions: list[dict], base_path: str = ".",
                  cache_ttl: Optional[float] = None,
                  variables: Optional[dict] = None,
-                 timeout: Optional[float] = None) -> Tuple[bool, list[str]]:
+                 timeout: Optional[float] = None,
+                 parallel: bool = False) -> Tuple[bool, list[str]]:
     """Evaluate a list of conditions. Returns (all_passed, messages).
 
     Results are cached by (conditions, base_path, variables) hash for configurable TTL.
     Pass cache_ttl=0 to disable caching for this call.
     Pass timeout (seconds) to fail gracefully if evaluation takes too long.
+    Pass parallel=True to evaluate independent conditions concurrently via thread pool.
 
     String parameter values may contain {{var.key}} patterns that are resolved
     against the `variables` dict (e.g., from StateMachine's variable store).
@@ -120,12 +122,15 @@ def evaluate_all(conditions: list[dict], base_path: str = ".",
             if time.time() - timestamp < ttl:
                 return result
 
+    if parallel and len(conditions) > 1:
+        evaluator = _evaluate_parallel
+    else:
+        evaluator = _evaluate_loop
+
     if timeout and timeout > 0:
         from concurrent.futures import ThreadPoolExecutor, TimeoutError
         with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(
-                _evaluate_loop, conditions, base_path, ttl, cache_key
-            )
+            future = executor.submit(evaluator, conditions, base_path, ttl, cache_key)
             try:
                 return future.result(timeout=timeout)
             except TimeoutError:
@@ -134,7 +139,7 @@ def evaluate_all(conditions: list[dict], base_path: str = ".",
                     _CONDITION_CACHE[cache_key] = (result, time.time())
                 return result
 
-    return _evaluate_loop(conditions, base_path, ttl, cache_key)
+    return evaluator(conditions, base_path, ttl, cache_key)
 
 
 def _evaluate_loop(conditions, base_path, ttl, cache_key):
@@ -150,6 +155,62 @@ def _evaluate_loop(conditions, base_path, ttl, cache_key):
         cond_params.setdefault("base_path", base_path)
         passed, msg = evaluate(cond_type, cond_params)
 
+        if severity == "warn":
+            tag = "PASS" if passed else "WARN"
+            messages.append(f"[{tag}] {cond_type}: {msg}")
+        elif not passed:
+            tag = "HARD_FAIL" if severity == "hard" else "FAIL"
+            messages.append(f"[{tag}] {cond_type}: {msg}")
+            result = (False, messages)
+            if ttl > 0 and cache_key:
+                _CONDITION_CACHE[cache_key] = (result, time.time())
+            return result
+        else:
+            messages.append(f"[PASS] {cond_type}: {msg}")
+
+    result = (True, messages)
+    if ttl > 0 and cache_key:
+        _CONDITION_CACHE[cache_key] = (result, time.time())
+    return result
+
+
+def _evaluate_single(cond: dict, base_path: str) -> tuple:
+    """Evaluate a single condition. Returns (severity, cond_type, passed, message).
+    Designed to be called from threads in parallel evaluation mode."""
+    severity = _get_severity(cond)
+    cond_type, cond_params = _parse_condition(cond)
+    if not isinstance(cond_params, dict):
+        cond_params = {"value": cond_params}
+    else:
+        cond_params = dict(cond_params)
+    cond_params.setdefault("base_path", base_path)
+    passed, msg = evaluate(cond_type, cond_params)
+    return severity, cond_type, passed, msg
+
+
+def _evaluate_parallel(conditions, base_path, ttl, cache_key):
+    """Evaluate conditions concurrently via ThreadPoolExecutor.
+    Results are collected in original order and processed with severity rules."""
+    import os
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    n_workers = min(len(conditions), (os.cpu_count() or 4))
+    messages = []
+
+    with ThreadPoolExecutor(max_workers=n_workers) as executor:
+        future_to_idx = {
+            executor.submit(_evaluate_single, cond, base_path): i
+            for i, cond in enumerate(conditions)
+        }
+        results = [None] * len(conditions)
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                results[idx] = future.result()
+            except Exception as e:
+                results[idx] = ("hard", "internal", False, str(e)[:200])
+
+    for severity, cond_type, passed, msg in results:
         if severity == "warn":
             tag = "PASS" if passed else "WARN"
             messages.append(f"[{tag}] {cond_type}: {msg}")
