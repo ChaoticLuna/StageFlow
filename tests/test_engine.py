@@ -145,6 +145,16 @@ class TestTransitions:
         state_machine.force_transition_to("start")
         assert state_machine.get_retry_count("start") == 2
 
+    def test_can_transition_to_uninitialized_valid_stage(self, state_machine):
+        ok, msgs = state_machine.can_transition_to("start")
+        assert ok is True
+        assert "Initial stage" in msgs[0]
+
+    def test_can_transition_to_uninitialized_unknown_stage(self, state_machine):
+        ok, msgs = state_machine.can_transition_to("ghost_stage")
+        assert ok is False
+        assert "Unknown stage" in msgs[0]
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TestToolRestrictions
@@ -193,6 +203,23 @@ class TestToolRestrictions:
         assert allowed
         assert "All tools allowed" in msg
 
+    def test_tool_allowed_star_wildcard(self, state_machine, registry):
+        registry.register_stage("star_stage", tools=["Bash(*)"])
+        state_machine.initialize("star_stage")
+        allowed1, _ = state_machine.is_tool_allowed("Bash(git status)")
+        assert allowed1
+        allowed2, _ = state_machine.is_tool_allowed("Bash(ls -la)")
+        assert allowed2
+
+    def test_tool_allowed_unknown_current_stage(self, registry, temp_dir):
+        state_path = temp_dir / ".claude" / "current_stage.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps({"current_stage": "ghost"}), encoding="utf-8")
+        sm = StateMachine(registry, str(temp_dir))
+        allowed, msg = sm.is_tool_allowed("Read")
+        assert not allowed
+        assert "Unknown stage" in msg
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TestStageVariables
@@ -232,6 +259,21 @@ class TestStageVariables:
         sm2 = StateMachine(registry, str(temp_dir))
         assert sm2.get_var("persistent") is True
         assert sm2.get_var("name") == "test"
+
+    def test_interpolate_vars_in_list(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.set_var("x", "alpha")
+        state_machine.set_var("y", "beta")
+        result = state_machine._interpolate_vars(
+            ["{{var.x}}/path", "{{var.y}}/other", "static"]
+        )
+        assert result == ["alpha/path", "beta/other", "static"]
+
+    def test_interpolate_vars_scalar_passthrough(self, state_machine):
+        state_machine.initialize("start")
+        assert state_machine._interpolate_vars(42) == 42
+        assert state_machine._interpolate_vars(None) is None
+        assert state_machine._interpolate_vars(True) is True
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -485,6 +527,58 @@ class TestLifecycleHooks:
         assert not hook_exit_file.exists(), (
             "Force transition should skip on_exit hooks"
         )
+
+    def test_shell_hook_executes_successfully(self, state_machine, registry, temp_dir):
+        hook_file = temp_dir / "shell_hook_flag.txt"
+        registry.register_stage(
+            "shell_hook_stage",
+            tools=["Read"],
+            on_enter=[{
+                "shell": f"echo entered > {hook_file}"
+            }],
+        )
+        registry.register_transition(
+            "start", "shell_hook_stage",
+            conditions=[{"always": True}],
+        )
+        state_machine.initialize("start")
+        ok, msgs = state_machine.transition_to("shell_hook_stage")
+        assert ok, f"Transition failed: {msgs}"
+        assert hook_file.exists(), "Shell hook should have created the file"
+
+    def test_shell_hook_failure_does_not_block_transition(self, state_machine, registry):
+        registry.register_stage(
+            "bad_shell_stage",
+            tools=["Read"],
+            on_enter=[{
+                "shell": "exit 1"
+            }],
+        )
+        registry.register_transition(
+            "start", "bad_shell_stage",
+            conditions=[{"always": True}],
+        )
+        state_machine.initialize("start")
+        ok, msgs = state_machine.transition_to("bad_shell_stage")
+        assert ok is True
+        assert state_machine.current_stage == "bad_shell_stage"
+
+    def test_python_hook_exception_does_not_block(self, state_machine, registry):
+        registry.register_stage(
+            "bad_py_stage",
+            tools=["Read"],
+            on_enter=[{
+                "python": "raise RuntimeError('hook exploded')"
+            }],
+        )
+        registry.register_transition(
+            "start", "bad_py_stage",
+            conditions=[{"always": True}],
+        )
+        state_machine.initialize("start")
+        ok, msgs = state_machine.transition_to("bad_py_stage")
+        assert ok is True
+        assert state_machine.current_stage == "bad_py_stage"
 
 
 class TestPauseResume:
@@ -799,6 +893,48 @@ class TestWebhookHooks:
         assert '"hook_type": "on_enter"' in content
         assert '"hook_kind": "webhook"' in content
 
+    def test_webhook_http_error_handled(self, state_machine, registry, temp_dir):
+        import threading
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(inner):
+                inner.send_response(500)
+                inner.send_header("Content-Type", "text/plain")
+                inner.end_headers()
+                inner.wfile.write(b"Internal Server Error")
+            def log_message(inner, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.handle_request, daemon=True)
+        thread.start()
+
+        registry.register_stage(
+            "http_error_stage",
+            tools=["Read"],
+            on_enter=[{
+                "webhook": {
+                    "url": f"http://127.0.0.1:{port}/error",
+                    "method": "POST",
+                    "timeout": 2,
+                }
+            }],
+        )
+        registry.register_transition("start", "http_error_stage",
+                                    conditions=[{"always": True}])
+
+        state_machine.initialize("start")
+        ok, msgs = state_machine.transition_to("http_error_stage")
+        assert ok is True
+        assert state_machine.current_stage == "http_error_stage"
+
+        import time
+        time.sleep(0.1)
+        thread.join(timeout=2)
+        server.server_close()
+
     def test_webhook_default_method_is_post(self, state_machine, registry, temp_dir):
         import threading
         from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -1100,3 +1236,19 @@ class TestTransitionReason:
         state_machine.initialize("start")
         state_machine.transition_to("next", reason="")
         assert "reason" not in state_machine.history[-1]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TestRepr — __repr__ coverage (line 461)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestRepr:
+    def test_repr_uninitialized(self, state_machine):
+        assert repr(state_machine) == "StateMachine(stage=None, transitions=0)"
+
+    def test_repr_with_stage_and_history(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.transition_to("middle")
+        r = repr(state_machine)
+        assert "stage='middle'" in r
+        assert "transitions=1" in r

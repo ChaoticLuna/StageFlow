@@ -2,7 +2,36 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-057 完成 — conditions.py edge branch coverage
+> **交接原因**: task-058 完成 — engine.py 100% coverage
+
+---
+
+## task-058 会话总结 (2026-05-11)
+
+### 做了什么
+1. **Added 12 tests** to `tests/test_engine.py` (71 → 83):
+   - `test_can_transition_to_uninitialized_valid_stage` — lines 140-141 (uninitialized state, valid target)
+   - `test_can_transition_to_uninitialized_unknown_stage` — lines 140-142 (uninitialized state, unknown target)
+   - `test_shell_hook_executes_successfully` — lines 287-294 (shell hook subprocess.run path)
+   - `test_shell_hook_failure_does_not_block_transition` — lines 287-294 (shell hook non-zero exit)
+   - `test_python_hook_exception_does_not_block` — lines 299-301 (Exception handler in hooks)
+   - `test_interpolate_vars_in_list` — line 315 (list interpolation)
+   - `test_interpolate_vars_scalar_passthrough` — line 316 (scalar passthrough)
+   - `test_webhook_http_error_handled` — lines 344-345 (HTTPError handler for webhooks)
+   - `test_tool_allowed_star_wildcard` — line 429 (_match_tool_args "*" constraint)
+   - `test_tool_allowed_unknown_current_stage` — line 397 (registry.get_stage returns None)
+   - `test_repr_uninitialized` + `test_repr_with_stage_and_history` — line 461 (__repr__)
+
+### 当前状态快照
+```
+Tests:           881 passing, 0 failing, 1 skipped
+Coverage:        engine.py 93% → 100% (19 → 0 missed lines)
+test_engine.py:  83 tests (was 71)
+```
+
+### 已知问题
+- Stage guard keeps resetting state file to "analyze" during test runs
+- Need to force-advance after running tests that modify state
 
 ---
 
