@@ -384,6 +384,24 @@ class TestJsonField:
         assert not passed
         assert "Unknown op" in msg
 
+    def test_gt_field_missing_obj_none(self, temp_dir):
+        self._write_json(temp_dir, "cfg.json", {"other": 1})
+        passed, msg = evaluate("json_field", {
+            "base_path": str(temp_dir), "path": "cfg.json",
+            "field": "missing", "op": "gt", "value": 5
+        })
+        assert not passed
+        assert "None" in msg
+
+    def test_lt_expected_none(self, temp_dir):
+        self._write_json(temp_dir, "cfg.json", {"count": 10})
+        passed, msg = evaluate("json_field", {
+            "base_path": str(temp_dir), "path": "cfg.json",
+            "field": "count", "op": "lt", "value": None
+        })
+        assert not passed
+        assert "None" in msg
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # yaml_field
@@ -460,6 +478,17 @@ class TestYamlField:
         })
         assert not passed
         assert "Unknown op" in msg
+
+    def test_pyyaml_not_installed(self, monkeypatch, temp_dir):
+        self._write_yaml(temp_dir, "cfg.yaml", "x: 1\n")
+        import sys
+        monkeypatch.setitem(sys.modules, "yaml", None)
+        passed, msg = evaluate("yaml_field", {
+            "base_path": str(temp_dir), "path": "cfg.yaml",
+            "field": "x", "op": "exists"
+        })
+        assert not passed
+        assert "not installed" in msg
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -653,6 +682,37 @@ class TestShellTest:
             "stream": "stderr"
         })
         assert passed
+
+    def test_lt_non_numeric(self, temp_dir):
+        passed, msg = evaluate("shell_test", {
+            "base_path": str(temp_dir),
+            "command": "echo hello",
+            "op": "lt",
+            "value": 5
+        })
+        assert not passed
+
+    def test_eq_non_numeric(self, temp_dir):
+        passed, msg = evaluate("shell_test", {
+            "base_path": str(temp_dir),
+            "command": "echo world",
+            "op": "eq",
+            "value": 10
+        })
+        assert not passed
+
+    def test_command_invalid_cwd(self, temp_dir):
+        import os
+        bad_path = str(temp_dir / "nonexistent_dir_xyz")
+        if os.path.exists(bad_path):
+            os.rmdir(bad_path)
+        passed, msg = evaluate("shell_test", {
+            "base_path": bad_path,
+            "command": "echo test",
+            "op": "exit_zero"
+        })
+        assert not passed
+        assert "error" in msg.lower()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1229,6 +1289,25 @@ class TestGitStatus:
         assert not passed
         assert "Unknown git op" in msg
 
+    def test_has_commits_no_upstream(self, temp_dir):
+        import subprocess
+        subprocess.run("git init", shell=True, cwd=str(temp_dir), capture_output=True)
+        subprocess.run("git config user.email test@test.com", shell=True, cwd=str(temp_dir), capture_output=True)
+        subprocess.run("git config user.name Test", shell=True, cwd=str(temp_dir), capture_output=True)
+        (temp_dir / "f.txt").write_text("hi")
+        subprocess.run("git add . && git commit -m init", shell=True, cwd=str(temp_dir), capture_output=True)
+        passed, msg = evaluate("git_status", {"base_path": str(temp_dir), "op": "has_commits"})
+        assert not passed
+
+    def test_invalid_cwd_exception(self, temp_dir):
+        import os
+        bad_path = str(temp_dir / "nonexistent_dir_xyz")
+        if os.path.exists(bad_path):
+            os.rmdir(bad_path)
+        passed, msg = evaluate("git_status", {"base_path": bad_path, "op": "clean"})
+        assert not passed
+        assert "error" in msg.lower()
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # http_status
@@ -1273,6 +1352,22 @@ class TestHttpStatus:
         })
         assert not passed
         assert "Unknown op" not in msg
+
+    def test_body_contains_success(self, temp_dir, http_server):
+        url = f"http://127.0.0.1:{http_server}"
+        passed, msg = evaluate("http_status", {
+            "url": url, "op": "body_contains",
+            "pattern": "OK", "timeout": 5
+        })
+        assert passed
+
+    def test_header_equals_success(self, temp_dir, http_server):
+        url = f"http://127.0.0.1:{http_server}"
+        passed, msg = evaluate("http_status", {
+            "url": url, "op": "header_equals",
+            "header": "Content-Type", "expected": "text/plain", "timeout": 5
+        })
+        assert passed
 
 
 # ═══════════════════════════════════════════════════════════════════════════

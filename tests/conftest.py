@@ -19,6 +19,9 @@ from __future__ import annotations
 
 import json
 import shutil
+import socket
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -198,6 +201,40 @@ def make_n_stage_config(temp_dir):
     def _make(n: int) -> Path:
         return create_config_with_n_stages(n, temp_dir)
     return _make
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HTTP server fixture for http_status tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+@pytest.fixture
+def http_server():
+    """Start a simple HTTP server on a random port and return the port number."""
+    import http.server
+
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"OK")
+            self.wfile.flush()
+
+        def log_message(self, format, *args):
+            pass  # suppress stderr noise during tests
+
+    # Bind to port 0 to get a random available port
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+
+    server = http.server.HTTPServer(("127.0.0.1", port), _Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    time.sleep(0.05)  # let the server start
+    yield port
+    server.shutdown()
 
 
 # ═══════════════════════════════════════════════════════════════════════════

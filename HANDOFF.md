@@ -2,7 +2,37 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-056 完成 — __main__.py coverage improvement
+> **交接原因**: task-057 完成 — conditions.py edge branch coverage
+
+---
+
+## task-057 会话总结 (2026-05-11)
+
+### 做了什么
+1. **新增 10 tests** 到 `tests/test_conditions.py` (255 → 265):
+   - `TestJsonField::test_gt_field_missing_obj_none` — gt op with obj=None (line 273)
+   - `TestJsonField::test_lt_expected_none` — lt op with expected=None (line 278)
+   - `TestYamlField::test_pyyaml_not_installed` — ImportError handler (lines 295-296)
+   - `TestShellTest::test_lt_non_numeric` — lt op ValueError catch (lines 373-374)
+   - `TestShellTest::test_eq_non_numeric` — eq op ValueError catch (lines 379-380)
+   - `TestShellTest::test_command_invalid_cwd` — generic Exception handler (lines 344-345)
+   - `TestGitStatus::test_has_commits_no_upstream` — has_commits error path (lines 504-509)
+   - `TestGitStatus::test_invalid_cwd_exception` — generic Exception handler (lines 515-516)
+   - `TestHttpStatus::test_body_contains_success` — body_contains success path (lines 532-536)
+   - `TestHttpStatus::test_header_equals_success` — header_equals success path (lines 537-542)
+2. **Added `http_server` fixture** to `tests/conftest.py` — starts a minimal HTTP server on a random port for http_status success-path testing
+
+### 当前状态快照
+```
+Tests:           869 passing, 0 failing, 1 skipped
+Coverage:        conditions.py 88% → 92% (82 → 53 missed)
+test_conditions: 265 tests (was 255)
+conftest.py:     +1 fixture (http_server)
+```
+
+### 已知问题
+- Stage guard keeps resetting state file to "analyze" during test runs
+- Need to force-advance after running tests that modify state
 
 ---
 
