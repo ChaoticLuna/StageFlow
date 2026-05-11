@@ -282,6 +282,9 @@ def cmd_cond(args):
     if args.params:
         import json
         params = json.loads(args.params)
+    if not isinstance(params, dict):
+        params = {"value": params}
+    params.setdefault("base_path", str(PROJECT_ROOT))
     ok, msg = evaluate(name, params)
     print(f"Condition '{name}': {'PASS' if ok else 'FAIL'}")
     print(f"  {msg}")

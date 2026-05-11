@@ -1,8 +1,37 @@
 # StageFlow — Agent Handoff 文档
 
-> **最后更新**: 2026-05-10 21:00
-> **当前 Agent**: Claude (via Claude Code)
-> **交接原因**: task-025-LOOP 完成 — 时间门控循环截止 (≥21:00)
+> **最后更新**: 2026-05-11
+> **当前 Agent**: Ralph (Claude Code)
+> **交接原因**: task-056 完成 — __main__.py coverage improvement
+
+---
+
+## task-056 会话总结 (2026-05-11)
+
+### 做了什么
+1. **新增 24 tests** 到 `tests/test_main.py` (32 → 56 tests):
+   - 3 force/reset paths: `test_next_force`, `test_reset_hard`, `test_jump_force`
+   - 3 uninitialized paths: `test_back_uninitialized`, `test_jump_uninitialized`, `test_check_uninitialized` (+JSON variant)
+   - 7 cond tests with valid params: `file_exists` (pass/fail), `file_not_exists`, `env_var`, `command_exists` (pass/fail), `always`
+   - 1 graph test with current stage highlighting: `test_graph_with_known_stage`
+   - 1 main module test: `test_main_no_command_shows_help`
+   - 8 generate CLI tests: list-templates, basic, prompt-only, template, bad template, validate, output file, no-args
+2. **Fixed `cmd_cond` in `__main__.py`**: Now injects `base_path` into params and handles non-dict JSON values (matching `_evaluate_loop` behavior)
+3. **Added 2 pytest fixtures**: `uninitialized_state` (temp remove state file), `known_state_file` (write known state for graph highlighting test)
+
+### 当前状态快照
+```
+Tests:           859 passing, 0 failing, 1 skipped
+test_main.py:    56 tests (was 32)
+__main__.py:     cmd_cond now injects base_path + handles non-dict params
+```
+
+### 已知问题
+- Stage guard keeps resetting state file to "analyze" during test runs (test_reset_hard/reset_runs touch state file)
+- Need to force-advance after running tests that modify state
+
+---
+
 
 ---
 
