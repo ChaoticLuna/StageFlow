@@ -2,7 +2,30 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-068 完成 — Phase 22 coverage finishing (927 tests, 84% coverage)
+> **交接原因**: task-073 完成 — git_status has_commits bug fix (928 tests, 84% coverage)
+
+---
+
+## task-073 会话总结 (2026-05-11)
+
+### 做了什么
+1. **Fixed `git_status` has_commits bug** in `stageflow/core/conditions.py` line 565:
+   - Changed `"git rev-list --count HEAD..@{u}"` to `"git rev-list --count @{u}..HEAD"`
+   - `HEAD..@{u}` counts commits in upstream NOT in HEAD (behind count) — semantically wrong
+   - `@{u}..HEAD` counts commits in HEAD NOT in upstream (ahead count) — unpushed commits
+2. **Added `test_has_commits_with_upstream`** test:
+   - Creates bare remote repo, sets up tracking, pushes initial commit
+   - Verifies `has_commits` returns False after push (no unpushed)
+   - Makes new local commit, verifies `has_commits` returns True (unpushed detected)
+   - Uses `git init -b main` for explicit branch name
+   - Covers conditions.py line 571 (successful upstream resolution path)
+
+### 当前状态快照
+```
+Tests:           928 passed, 0 failed, 1 skipped
+fix_plan.md:     73/73 tasks complete
+conditions.py:   git_status has_commits now correctly counts unpushed commits
+```
 
 ---
 

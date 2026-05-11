@@ -1435,6 +1435,31 @@ class TestGitStatus:
         passed, msg = evaluate("git_status", {"base_path": str(temp_dir), "op": "has_commits"})
         assert not passed
 
+    def test_has_commits_with_upstream(self, temp_dir):
+        import subprocess
+        # create a bare repo to act as remote
+        remote_dir = temp_dir.parent / "remote.git"
+        if remote_dir.exists():
+            import shutil
+            shutil.rmtree(str(remote_dir))
+        subprocess.run(f'git init --bare "{remote_dir}"', shell=True, capture_output=True)
+        # init local repo with explicit main branch
+        subprocess.run("git init -b main", shell=True, cwd=str(temp_dir), capture_output=True)
+        subprocess.run("git config user.email test@test.com", shell=True, cwd=str(temp_dir), capture_output=True)
+        subprocess.run("git config user.name Test", shell=True, cwd=str(temp_dir), capture_output=True)
+        (temp_dir / "f.txt").write_text("hi")
+        subprocess.run("git add . && git commit -m init", shell=True, cwd=str(temp_dir), capture_output=True)
+        subprocess.run(f'git remote add origin "{remote_dir}"', shell=True, cwd=str(temp_dir), capture_output=True)
+        push = subprocess.run("git push -u origin main", shell=True, cwd=str(temp_dir), capture_output=True, text=True)
+        # no unpushed commits after push
+        passed, msg = evaluate("git_status", {"base_path": str(temp_dir), "op": "has_commits"})
+        assert not passed, f"Should have no unpushed commits after push; push rc={push.returncode} err={push.stderr}: {msg}"
+        # make new local commit — now has unpushed commits
+        (temp_dir / "f.txt").write_text("hi2")
+        subprocess.run("git add . && git commit -m second", shell=True, cwd=str(temp_dir), capture_output=True)
+        passed, msg = evaluate("git_status", {"base_path": str(temp_dir), "op": "has_commits"})
+        assert passed, f"Should have unpushed commits: {msg}"
+
     def test_invalid_cwd_exception(self, temp_dir):
         import os
         bad_path = str(temp_dir / "nonexistent_dir_xyz")

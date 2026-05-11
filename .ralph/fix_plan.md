@@ -189,6 +189,12 @@
 
 ---
 
+## Phase 24: Runtime bug fixes
+
+- [x] **task-073**: Fix `git_status` has_commits bug — swap `HEAD..@{u}` to `@{u}..HEAD` in conditions.py line 565 so it correctly counts unpushed commits. Add `test_has_commits_with_upstream` test that sets up bare remote, pushes, makes local commit, verifies detection. Covers line 571.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |

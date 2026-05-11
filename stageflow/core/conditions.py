@@ -562,7 +562,7 @@ def _git_status(params: dict) -> Tuple[bool, str]:
             ok = branch == str(expected)
             return ok, f"Git branch '{branch}' == '{expected}': {ok}"
         elif op == "has_commits":
-            r = subprocess.run("git rev-list --count HEAD..@{u}",
+            r = subprocess.run("git rev-list --count @{u}..HEAD",
                                shell=True, capture_output=True, text=True,
                                cwd=base_path, timeout=10)
             if r.returncode != 0:
