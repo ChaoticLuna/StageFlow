@@ -165,10 +165,12 @@ class TestPathGuard:
         assert not allowed, f"NotebookEdit outside allowed roots: {msg}"
 
     def test_write_without_file_path(self, registry, temp_dir):
+        """line 38: _check_write_path returns True when tool_input has no file_path."""
         sm = StateMachine(registry, str(temp_dir))
         sm.initialize("start")
         guard = StageGuard(str(registry.config_path), str(temp_dir))
-        allowed, msg = guard.check("Write", {})
+        # Non-empty tool_input with no file_path/notebook_path triggers line 38
+        allowed, msg = guard.check("Write", {"some_other_arg": "value"})
         assert allowed, f"Write without file_path should pass: {msg}"
 
     def test_write_absolute_path_outside_project(self, registry, temp_dir):

@@ -48,7 +48,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # Always-allow tools (to prevent deadlocks)
 ALWAYS_ALLOW = {
     "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TaskOutput",
-    "Read", "AskUserQuestion",
+    "TodoWrite", "Read", "AskUserQuestion",
 }
 # Always-allow Bash commands (operational scripts)
 ALWAYS_ALLOW_BASH = {
@@ -77,11 +77,12 @@ def main():
         print(json.dumps({"decision": "allow", "reason": f"{tool_name} is always allowed"}))
         return 0
 
-    # Always allow operational scripts via Bash
-    if tool_name == "Bash":
+    # Always allow operational scripts via Bash or PowerShell
+    if tool_name in ("Bash", "PowerShell"):
         cmd = tool_input.get("command", "")
+        stripped = _strip_cd(cmd)
         for prefix in ALWAYS_ALLOW_BASH:
-            if cmd.strip().startswith(prefix):
+            if stripped.startswith(prefix):
                 print(json.dumps({"decision": "allow",
                                   "reason": f"Bash({cmd[:60]}) is always allowed"}))
                 return 0
@@ -136,11 +137,12 @@ def main():
         return 0
 
     # Check pattern match (e.g., "Bash(git *)" matches "Bash(git status)")
-    if tool_name == "Bash":
+    if tool_name in ("Bash", "PowerShell"):
         cmd = tool_input.get("command", "")
         for allowed in allowed_tools:
-            if allowed.startswith("Bash("):
-                pattern = allowed[5:-1].strip()  # Extract pattern inside Bash(...)
+            if allowed.startswith("Bash(") or allowed.startswith("PowerShell("):
+                start = allowed.index("(")
+                pattern = allowed[start+1:-1].strip()  # Extract pattern inside Bash(...) or PowerShell(...)
                 if _match_pattern(pattern, cmd.strip()):
                     print(json.dumps({"decision": "allow",
                                       "reason": f"Bash({cmd[:60]}) matches '{allowed}' in stage '{current_stage}'"}))
@@ -154,11 +156,22 @@ def main():
     return 1
 
 
-def _match_pattern(pattern: str, actual: str) -> bool:
-    """Match a glob-like pattern against a command string."""
+def _strip_cd(cmd: str) -> str:
+    """Strip Windows cd prefix that Claude Code prepends to shell commands."""
     import re
-    regex = "^" + pattern.replace("*", ".*").replace("?", ".") + "$"
-    return bool(re.match(regex, actual))
+    return re.sub(
+        r'^(cd\s+(/d\s+)?["\']?[A-Za-z]:[^;]*["\']?\s*;\s*)+',
+        '', cmd.strip(), flags=re.IGNORECASE
+    )
+
+
+def _match_pattern(pattern: str, actual: str) -> bool:
+    """Match a glob-like pattern against a command string. No end anchor —
+    Windows Claude Code may append '2>&1 | ...' after the meaningful command."""
+    import re
+    stripped = _strip_cd(actual)
+    regex = "^" + pattern.replace("*", ".*").replace("?", ".")
+    return bool(re.search(regex, stripped))
 
 
 def _log_violation(tool_name: str, stage: str, reason: str):

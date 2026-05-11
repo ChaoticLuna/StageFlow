@@ -104,6 +104,31 @@ class TestAuditLogger:
         s = logger.get_summary()
         assert s["total_events"] == 0
 
+    def test_truncate_file_missing_early_return(self, tmp_path):
+        """line 43: _truncate when log file doesn't exist."""
+        logger = AuditLogger(str(tmp_path), max_entries=10)
+        logger._write({"event": "test"})  # creates the log file
+        logger.log_path.unlink()
+        logger._write_count = 25
+        logger._truncate()  # should return early at line 43, no error
+
+    def test_truncate_under_limit_resets_count(self, tmp_path):
+        """lines 46-47: _truncate when entries are within max limit."""
+        logger = AuditLogger(str(tmp_path), max_entries=100)
+        for i in range(5):
+            logger._write({"event": "test", "i": i})
+        logger._write_count = 250  # trigger truncation
+        logger._truncate()
+        assert logger._write_count == 5  # reset to actual line count
+
+    def test_summary_includes_current_stage_times(self, tmp_path):
+        """line 155: get_summary reports un-exited stage timers."""
+        logger = AuditLogger(str(tmp_path))
+        logger.log_stage_enter("active_stage")
+        summary = logger.get_summary()
+        assert "active_stage" in summary["current_stage_times"]
+        assert summary["current_stage_times"]["active_stage"] >= 0
+
     def test_get_summary_corrupt_lines_skipped(self, tmp_path):
         logger = AuditLogger(str(tmp_path))
         logger.log_path.parent.mkdir(parents=True, exist_ok=True)

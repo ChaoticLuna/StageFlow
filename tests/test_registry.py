@@ -496,6 +496,19 @@ class TestValidateSchema:
         assert valid
         assert errors == []
 
+    def test_load_invalid_config_warns_through_registry(self, temp_dir):
+        """lines 146-148: _load warns when schema validation fails."""
+        import warnings
+        invalid_yaml = temp_dir / "invalid.yaml"
+        invalid_yaml.write_text(yaml.dump({
+            "stages": [{"name": "dup", "tools": []}, {"name": "dup", "tools": []}],
+        }))
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            reg = StageRegistry(str(invalid_yaml))
+            schema_warnings = [x for x in w if "config error" in str(x.message).lower() or "duplicate" in str(x.message).lower()]
+        assert len(schema_warnings) >= 1, f"Expected schema warning, got {[str(x.message) for x in w]}"
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Stage class
@@ -508,6 +521,12 @@ class TestStageClass:
         assert d["name"] == "test"
         assert d["tools"] == ["A"]
         assert d["description"] == "Desc"
+
+    def test_to_dict_with_max_iterations(self):
+        """line 36: to_dict includes max_iterations when set."""
+        stage = Stage("test", {"tools": ["A"], "max_iterations": 5})
+        d = stage.to_dict()
+        assert d["max_iterations"] == 5
 
     def test_allow_tools_alias(self):
         stage = Stage("test", {"allow_tools": ["X", "Y"]})
@@ -781,3 +800,22 @@ class TestConfigExtends:
         reg = StageRegistry(str(child_path))
         assert "stage1" in reg.all_stages
         assert "stage2" in reg.all_stages
+
+    def test_extends_depth_exceeded_warns(self, temp_dir):
+        """lines 123-125: depth > _MAX_EXTENDS_DEPTH triggers warning."""
+        import warnings
+        # Create 7 files: 1 → 2 → 3 → 4 → 5 → 6 → 7 (depth 6 > 5 limit at file 7)
+        paths = []
+        for i in range(7):
+            p = temp_dir / f"chain_{i}.yaml"
+            paths.append(p)
+        # Write innermost first
+        paths[0].write_text(yaml.dump({"stages": [{"name": f"s0", "tools": ["Read"]}]}))
+        for i in range(1, 7):
+            paths[i].write_text(yaml.dump({"extends": f"chain_{i-1}.yaml", "stages": [{"name": f"s{i}", "tools": ["Read"]}]}))
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            reg = StageRegistry(str(paths[6]))
+            depth_warnings = [x for x in w if "extends" in str(x.message) and "depth exceeded" in str(x.message)]
+        assert len(depth_warnings) >= 1, f"Expected depth exceeded warning, got {[str(x.message) for x in w]}"
+

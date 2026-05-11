@@ -2,9 +2,47 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-064 完成 — config inheritance (TASK_PLAN 11.5)
+> **交接原因**: task-068 完成 — Phase 22 coverage finishing (927 tests, 84% coverage)
 
 ---
+
+## task-068 会话总结 (2026-05-11)
+
+### 做了什么
+1. **Updated TASK_PLAN.md** — marked 9.3, 9.6, 11.1, 11.2, 11.5 as complete (already done via fix_plan.md tasks 061-064)
+2. **Added Phase 22 to fix_plan.md** — 4 coverage improvement tasks
+3. **task-065: mcp_server.py 58% → 96%** (+8 tests, 11→19 total):
+   - TestMCPServe: 2 tests mocking FastMCP.run and create_mcp_server
+   - TestMCPToolsInnerFunctions: 6 tests calling tool closure bodies via `_tool_manager.get_tool().fn()`
+   - Only missed: `if __name__ == "__main__"` guard (line 80)
+4. **task-066: audit.py 95% → 100%** (+3 tests, 15→18 total):
+   - `_truncate()` early return when log file doesn't exist (line 43)
+   - `_truncate()` reset count when entries under max limit (lines 46-47)
+   - `get_summary()` current_stage_times for un-exited stages (line 155)
+5. **task-067: guard.py 97% → 99%** (fixed 1 test):
+   - `test_write_without_file_path` now passes non-empty dict to trigger `_check_write_path` line 38
+   - Only missed: `if __name__ == "__main__"` guard (line 130)
+6. **task-068: registry.py 96% → 100%** (+3 tests, 90→93 total):
+   - `test_to_dict_with_max_iterations` — Stage.to_dict with max_iterations (line 36)
+   - `test_extends_depth_exceeded_warns` — 7-file chain exceeding MAX_EXTENDS_DEPTH=5 (lines 123-125)
+   - `test_load_invalid_config_warns_through_registry` — duplicate stage name triggers schema validation warnings in _load (lines 146-148)
+
+### 当前状态快照
+```
+Tests:           927 passed, 0 failed, 1 skipped
+Coverage:        84% overall
+Core coverage:   engine 100%, schema 100%, audit 100%, registry 100%
+                 guard 99%, mcp_server 96%, conditions 92%
+mypy:            clean
+fix_plan.md:     68/68 tasks complete
+TASK_PLAN:       only 11.3 (VS Code ext) + 11.4 (Linear/Notion) remain
+```
+
+### 已知问题
+- Stage guard keeps resetting state file to "analyze" during test runs
+
+---
+
 
 ## task-064 会话总结 (2026-05-11)
 

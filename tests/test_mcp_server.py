@@ -53,6 +53,93 @@ class TestMCPToolsDirectly:
         assert len(msgs) == 2
 
 
+class TestMCPServe:
+    """Test the serve() function without actually starting a blocking stdio server."""
+
+    def test_serve_creates_mcp_and_calls_run(self):
+        from unittest.mock import patch, MagicMock
+        with patch('stageflow.mcp_server.create_mcp_server') as mock_create:
+            mock_mcp = MagicMock()
+            mock_create.return_value = mock_mcp
+            from stageflow.mcp_server import serve
+            serve()
+            mock_create.assert_called_once()
+            mock_mcp.run.assert_called_once_with(transport="stdio")
+
+    def test_serve_calls_run_with_stdio(self):
+        from unittest.mock import patch
+        with patch('mcp.server.fastmcp.FastMCP.run') as mock_run:
+            from stageflow.mcp_server import serve
+            serve()
+            mock_run.assert_called_once_with(transport="stdio")
+
+
+class TestMCPToolsInnerFunctions:
+    """Exercise the tool closure bodies inside create_mcp_server() via fn directly."""
+
+    def test_evaluate_tool_body_success(self):
+        from stageflow.mcp_server import create_mcp_server
+        mcp = create_mcp_server()
+        tool = mcp._tool_manager.get_tool("stageflow_evaluate")
+        result = tool.fn(name="always", params={"value": True})
+        assert result["passed"] is True
+        assert result["condition"] == "always"
+
+    def test_evaluate_tool_body_failure(self):
+        from stageflow.mcp_server import create_mcp_server
+        mcp = create_mcp_server()
+        tool = mcp._tool_manager.get_tool("stageflow_evaluate")
+        result = tool.fn(name="never", params={"value": "no"})
+        assert result["passed"] is False
+        assert "no" in result["message"]
+
+    def test_list_conditions_tool_body(self):
+        from stageflow.mcp_server import create_mcp_server
+        mcp = create_mcp_server()
+        tool = mcp._tool_manager.get_tool("stageflow_list_conditions")
+        result = tool.fn()
+        assert isinstance(result, list)
+        assert "always" in result
+        assert "never" in result
+
+    def test_evaluate_all_tool_body(self):
+        from stageflow.mcp_server import create_mcp_server
+        mcp = create_mcp_server()
+        tool = mcp._tool_manager.get_tool("stageflow_evaluate_all")
+        result = tool.fn(
+            conditions=[{"always": True}, {"always": True}],
+            base_path=".",
+            parallel=False,
+            timeout=0,
+        )
+        assert result["all_passed"] is True
+        assert result["conditions_count"] == 2
+        assert len(result["messages"]) == 2
+
+    def test_evaluate_all_tool_body_with_parallel(self):
+        from stageflow.mcp_server import create_mcp_server
+        mcp = create_mcp_server()
+        tool = mcp._tool_manager.get_tool("stageflow_evaluate_all")
+        result = tool.fn(
+            conditions=[{"always": True}, {"always": True}],
+            parallel=True,
+            timeout=5,
+        )
+        assert result["all_passed"] is True
+        assert result["conditions_count"] == 2
+
+    def test_evaluate_all_tool_body_mixed_result(self):
+        from stageflow.mcp_server import create_mcp_server
+        mcp = create_mcp_server()
+        tool = mcp._tool_manager.get_tool("stageflow_evaluate_all")
+        result = tool.fn(
+            conditions=[{"always": True}, {"never": "fail"}],
+            base_path=".",
+        )
+        assert result["all_passed"] is False
+        assert len(result["messages"]) == 2
+
+
 class TestMCPModuleImports:
     def test_serve_function_exists(self):
         from stageflow.mcp_server import serve

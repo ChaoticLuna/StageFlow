@@ -1,8 +1,8 @@
 # StageFlow — Task Plan
 
-> **最后更新**: 2026-05-10
-> **当前阶段**: Phase 4 — 测试体系
-> **Ralph 状态**: 活跃 — 读取 `.ralph/fix_plan.md` 执行任务
+> **最后更新**: 2026-05-11
+> **当前阶段**: Phase 11 — 生态与集成 (仅剩 11.3, 11.4)
+> **Ralph 状态**: 活跃 — fix_plan.md 64/64 完成，增补 coverage 任务中
 
 ---
 
@@ -99,10 +99,10 @@
 |---|------|------|------|
 | 9.1 | 暂停/恢复执行 | ✅ | engine pause/resume → task-019 |
 | 9.2 | Webhook 通知 | ✅ | on_enter/on_exit webhook → task-020 |
-| 9.3 | 并行条件评估 | ⬜ | 多条件并发执行 |
+| 9.3 | 并行条件评估 | ✅ | ThreadPoolExecutor + 12 tests → task-061 |
 | 9.4 | 软性门控（warn 不阻止） | ✅ | condition severity 分级 → task-024 |
 | 9.5 | Web UI 状态面板 | ✅ | FastAPI 状态/审计 API → task-024 |
-| 9.6 | MCP Server 集成 | ⬜ | 通过 MCP 协议暴露条件评估 |
+| 9.6 | MCP Server 集成 | ✅ | FastMCP + 3 tools + 11 tests → task-062 |
 
 ## Phase 10: Harness 工程调研 🆕
 
@@ -118,11 +118,11 @@
 
 | # | 任务 | 状态 | 产出 |
 |---|------|------|------|
-| 11.1 | GitHub Actions 集成示例 | ⬜ | CI/CD YAML 模板 |
-| 11.2 | Docker 镜像 | ⬜ | 容器化部署 |
+| 11.1 | GitHub Actions 集成示例 | ✅ | CI/CD + Python matrix → task-063 |
+| 11.2 | Docker 镜像 | ✅ | python:3.12-slim + entrypoint → task-063 |
 | 11.3 | VS Code 扩展 | ⬜ | 阶段状态栏指示器 |
 | 11.4 | Linear/Notion 任务同步 | ⬜ | Issue 自动链接 |
-| 11.5 | 多项目共享配置 | ⬜ | 继承/引用机制 |
+| 11.5 | 多项目共享配置 | ✅ | config extends inheritance → task-064 |
 
 ---
 

@@ -171,6 +171,15 @@
 
 ---
 
+## Phase 22: 覆盖率扫尾 (Coverage Finishing)
+
+- [x] **task-065**: Improve `mcp_server.py` coverage (58% → 96%). Added 8 tests: TestMCPServe (2 tests for serve() with mock), TestMCPToolsInnerFunctions (6 tests calling tool fn directly via _tool_manager.get_tool()). Only missed line is `if __name__ == "__main__"` guard (line 80). 11→19 tests in test_mcp_server.py.
+- [x] **task-066**: Improve `audit.py` coverage (95% → 100%). Added 3 tests: _truncate early return when file missing (line 43), _truncate reset count when under limit (lines 46-47), get_summary current_stage_times (line 155). 15→18 tests in test_audit.py.
+- [x] **task-067**: Improve `guard.py` coverage (97% → 99%). Fixed test_write_without_file_path to pass non-empty tool_input dict (triggers line 38 _check_write_path early return). Only missed line is `if __name__ == "__main__"` guard (line 130).
+- [x] **task-068**: Improve `registry.py` coverage (96% → 100%). Added 3 tests: to_dict with max_iterations (line 36), extends depth exceeded warning (lines 123-125), _load schema validation warning via registry (lines 146-148). 90→93 tests in test_registry.py.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |
