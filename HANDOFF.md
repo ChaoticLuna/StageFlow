@@ -2,7 +2,41 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-074 完成 — VS Code extension (943 tests, 84% coverage)
+> **交接原因**: task-075 完成 — Linear integration (967 tests, 84% coverage)
+
+---
+
+## task-075 会话总结 (2026-05-11)
+
+### 做了什么
+1. **Created `stageflow/integrations/linear.py`** — Linear.app GraphQL API integration:
+   - `LinearClient(api_key)` class — reads key from param, `LINEAR_API_KEY` env var, or `.env` file
+   - `get_issue(id)` — fetch issue by UUID or key
+   - `get_issue_by_identifier(identifier)` — fetch by human-readable ID (e.g., "ENG-42")
+   - `get_team_states(team_id)` — fetch workflow states for a team
+   - `update_issue_state(issue_id, state_id)` — move issue to a workflow state
+   - `update_issue(issue_id, title, description, state_id)` — general update
+   - `sync_stage_to_state(issue_id, stage_name)` — map StageFlow stage → Linear state automaticaly
+   - `add_comment(issue_id, body)` — add a comment to an issue
+   - `search_issues(query_str, limit)` — search issues by text
+   - `DEFAULT_STAGE_STATE_MAP` — sensible defaults (analyze→In Progress, verify→In Review, done→Done)
+2. **Created `tests/test_linear.py`** — 24 tests covering:
+   - Client initialization (explicit key, env var, dotenv, missing key raises)
+   - Get issue by ID/identifier, GraphQL error handling
+   - Get team states, error path
+   - Update issue state/fields, GraphQL error
+   - Sync: success, unknown state name, issue not found, custom map
+   - Comment, search, HTTP error handling
+   - `_load_env`: valid, missing, comments/blanks, malformed lines
+3. **Uses `urllib.request`** (stdlib) — no external HTTP dependency
+
+### 当前状态快照
+```
+Tests:           967 passed, 0 failed, 1 skipped
+fix_plan.md:     75/75 tasks complete
+New module:      stageflow/integrations/linear.py (LinearClient)
+New tests:       tests/test_linear.py (24 tests)
+```
 
 ---
 
