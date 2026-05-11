@@ -1,8 +1,8 @@
 # StageFlow — Task Plan
 
 > **最后更新**: 2026-05-11
-> **当前阶段**: Phase 11 — 生态与集成 (仅剩 11.3, 11.4)
-> **Ralph 状态**: 活跃 — fix_plan.md 64/64 完成，增补 coverage 任务中
+> **当前阶段**: Phase 11 — 生态与集成 ✅ (全部完成)
+> **Ralph 状态**: 活跃 — fix_plan.md 76/76 完成
 
 ---
 
@@ -121,7 +121,7 @@
 | 11.1 | GitHub Actions 集成示例 | ✅ | CI/CD + Python matrix → task-063 |
 | 11.2 | Docker 镜像 | ✅ | python:3.12-slim + entrypoint → task-063 |
 | 11.3 | VS Code 扩展 | ✅ | vscode-extension/ — status bar + quick pick → task-074 |
-| 11.4 | Linear/Notion 任务同步 | ✅ | Linear integration → task-075 (Notion pending) |
+| 11.4 | Linear/Notion 任务同步 | ✅ | Linear + Notion → tasks 075-076 |
 | 11.5 | 多项目共享配置 | ✅ | config extends inheritance → task-064 |
 
 ---

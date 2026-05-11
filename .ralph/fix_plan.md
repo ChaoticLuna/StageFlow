@@ -204,6 +204,7 @@
 ## Phase 26: 外部集成 (TASK_PLAN 11.4)
 
 - [x] **task-075**: Linear issue sync — create `stageflow/integrations/linear.py` with `LinearClient` class. GraphQL API wrapper: query/create/update issues, map StageFlow stages to Linear statuses. Read API key from `LINEAR_API_KEY` env var or `.env`. Write 8+ tests with mocked HTTP responses. Result: 24 tests, 967 total passing.
+- [x] **task-076**: Notion page sync — create `stageflow/integrations/notion.py` with `NotionClient` class. REST API wrapper: query databases, update pages, map StageFlow stages to Notion status properties. Read API key from `NOTION_API_KEY` env var or `.env`. Write 8+ tests with mocked HTTP responses. Result: 20 tests, 987 total passing.
 
 ---
 

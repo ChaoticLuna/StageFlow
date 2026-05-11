@@ -2,7 +2,31 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-075 完成 — Linear integration (967 tests, 84% coverage)
+> **交接原因**: task-076 完成 — Notion integration (987 tests, 84% coverage)
+
+---
+
+## task-076 会话总结 (2026-05-11)
+
+### 做了什么
+1. **Created `stageflow/integrations/notion.py`** — Notion REST API integration:
+   - `NotionClient(api_key)` — reads key from param, `NOTION_API_KEY` env var, or `.env`
+   - `get_page(id)` — fetch page by ID
+   - `update_page_properties(id, props)` — PATCH page properties
+   - `query_database(db_id, filter, sorts)` — query database pages
+   - `get_database(db_id)` — get database schema
+   - `create_page(db_id, properties)` — create new page in database
+   - `sync_stage_to_status(page_id, stage)` — map StageFlow stage → Notion status
+   - `append_blocks(page_id, blocks)` — append content blocks
+   - `search_pages(query)` — search across workspace
+2. **Created `tests/test_notion.py`** — 20 tests (init, get page, not found, update, query, filter, database schema, create, sync, missing property, custom map, append blocks, search, status map, env loading)
+
+### 当前状态快照
+```
+Tests:           987 passed, 0 failed, 1 skipped
+fix_plan.md:     76/76 tasks complete
+All TASK_PLAN:   Phase 11 now 100% complete
+```
 
 ---
 
