@@ -183,9 +183,9 @@
 ## Phase 23: 条件覆盖率 (Conditions Coverage)
 
 - [x] **task-069**: Cover `yaml_field` missed lines (368-369, 376) + `time_range` (623-624, 634) + `http_status` (604-605). Added 5 tests: invalid_yaml_parse_error, navigate_non_dict_field, default_status_code_check, before_bound_blocks, invalid_timezone_fallback. 267→272 tests, 58→50 missed (92%→93%).
-- [ ] **task-070**: Cover remaining handlers — `git_status` (571), `shell_test` timeout (404), parallel exception (210-211), `retry`/`diff_contains` (936-951, 960-961), system checks (1008, 1012-1033, 1053-1060). ~5-8 tests across 6+ handlers. Note: lines 152, 183, 516 are unreachable (defensive dup of _parse_condition wrapping).
-- [ ] **task-071**: Continue coverage on any remaining missed lines after task-070.
-- [ ] **task-072**: Final coverage sweep — target whatever remains < 95%.
+- [x] **task-070**: Cover 4 handlers — `json_schema` without jsonschema (line 696), `diff_contains` staged_only path (885-886), `json_count` list indexing/string/scalar/max exceeded (936-951, 960-961). Added 9 tests. 272→281 tests, 50→37 missed (93%→95%). Note: lines 152, 183, 516, 821 are unreachable (defensive dup of _parse_condition wrapping at line 250). Lines 40/46 are coverage tool quirks. Lines 404/904-905 need 30s timeout or git error — impractical in tests.
+- [ ] **task-071**: Target remaining accessible: `git_status` has_commits (571), `json_count` non-dict/list nav error (942), `command_exists` version exception (860-861). ~3-4 tests. Remaining system check lines (1008-1060) need real psutil/docker — heavy deps.
+- [ ] **task-072**: Final sweep — conditions.py ≥95% achieved. Target next module.
 
 ---
 

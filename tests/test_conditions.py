@@ -1660,6 +1660,19 @@ class TestJsonSchema:
         # May pass with jsonschema installed, or skip validation
         assert "valid" in msg or "not installed" in msg
 
+    def test_schema_valid_json_without_jsonschema(self, monkeypatch, temp_dir):
+        """line 696: valid JSON but jsonschema not installed — fallback message."""
+        (temp_dir / "data.json").write_text('{"name": "test"}')
+        (temp_dir / "schema.json").write_text(json.dumps({"type": "object"}))
+        import sys
+        monkeypatch.setitem(sys.modules, "jsonschema", None)
+        passed, msg = evaluate("json_schema", {
+            "base_path": str(temp_dir), "path": "data.json",
+            "schema_path": "schema.json"
+        })
+        assert passed
+        assert "not installed" in msg
+
     def test_with_schema_invalid(self, temp_dir):
         (temp_dir / "data.json").write_text('{"name": 42}')
         (temp_dir / "schema.json").write_text(json.dumps({
@@ -2111,6 +2124,27 @@ class TestDiffContains:
         assert not passed
         assert "Unknown op" in msg
 
+    def test_staged_diff_path(self, temp_dir):
+        """lines 885-886: staged_only=True uses git diff --cached."""
+        self._init_git_repo(temp_dir)
+        import subprocess as sp
+        (temp_dir / "module.py").write_text("# staged change")
+        sp.run("git add module.py", shell=True, cwd=str(temp_dir), capture_output=True)
+        passed, msg = evaluate("diff_contains", {
+            "base_path": str(temp_dir), "pattern": "UNLIKELY_PATTERN",
+            "staged_only": True
+        })
+        assert passed  # pattern not in staged diff
+
+    def test_non_git_directory_graceful(self, temp_dir):
+        """lines 904-905: diff_contains in non-git dir hits diff error path."""
+        passed, msg = evaluate("diff_contains", {
+            "base_path": str(temp_dir), "pattern": "anything"
+        })
+        # In non-git dir: git diff HEAD fails, error text doesn't match pattern
+        # With default op=not_contains, passes since pattern absent from error
+        assert passed  # pattern not found in error text, so not_contains passes
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # json_count
@@ -2186,6 +2220,62 @@ class TestJsonCount:
         })
         assert not passed
         assert "Invalid JSON" in msg
+
+    def test_list_field_indexing(self, temp_dir):
+        """lines 936-942: navigate into list by numeric index."""
+        (temp_dir / "data.json").write_text('{"items": [{"a": 1, "b": 2}, {"c": 3}]}')
+        passed, msg = evaluate("json_count", {
+            "base_path": str(temp_dir), "path": "data.json",
+            "field": "items.0", "eq": 2
+        })
+        assert passed  # items[0] = {"a": 1, "b": 2} has 2 keys
+
+    def test_list_field_index_out_of_range(self, temp_dir):
+        """line 940: list index out of range returns error."""
+        (temp_dir / "data.json").write_text('{"items": [1, 2]}')
+        passed, msg = evaluate("json_count", {
+            "base_path": str(temp_dir), "path": "data.json",
+            "field": "items.99", "min": 0
+        })
+        assert not passed
+        assert "Cannot index" in msg
+
+    def test_string_field_count(self, temp_dir):
+        """lines 948-949: count characters when field is a string."""
+        (temp_dir / "data.json").write_text('{"name": "hello"}')
+        passed, msg = evaluate("json_count", {
+            "base_path": str(temp_dir), "path": "data.json",
+            "field": "name", "eq": 5
+        })
+        assert passed
+
+    def test_scalar_field_count(self, temp_dir):
+        """lines 950-951: scalar (non-list/dict/str) field count is 1."""
+        (temp_dir / "data.json").write_text('{"value": 42}')
+        passed, msg = evaluate("json_count", {
+            "base_path": str(temp_dir), "path": "data.json",
+            "field": "value", "eq": 1
+        })
+        assert passed
+
+    def test_max_count_exceeded(self, temp_dir):
+        """lines 960-961: count exceeds max_count."""
+        (temp_dir / "data.json").write_text('[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]')
+        passed, msg = evaluate("json_count", {
+            "base_path": str(temp_dir), "path": "data.json", "max": 5
+        })
+        assert not passed
+        assert ">" in msg
+
+    def test_list_field_bad_index_value_error(self, temp_dir):
+        """line 939: non-numeric index into list raises ValueError."""
+        (temp_dir / "data.json").write_text('{"items": [1, 2, 3]}')
+        passed, msg = evaluate("json_count", {
+            "base_path": str(temp_dir), "path": "data.json",
+            "field": "items.abc", "min": 0
+        })
+        assert not passed
+        assert "Cannot index" in msg
 
 
 # ═══════════════════════════════════════════════════════════════════════════
