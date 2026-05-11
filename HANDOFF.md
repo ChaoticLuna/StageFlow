@@ -2,7 +2,28 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-062 完成 — MCP Server integration (TASK_PLAN 9.6)
+> **交接原因**: task-063 完成 — CI/CD + Docker (TASK_PLAN 11.1-11.2)
+
+---
+
+## task-063 会话总结 (2026-05-11)
+
+### 做了什么
+1. **Created `.github/workflows/ci.yml`** — GitHub Actions CI:
+   - Triggers on push/PR to main
+   - Python 3.10/3.11/3.12 matrix
+   - Steps: install deps, pytest, mypy, coverage
+2. **Created `Dockerfile`** — python:3.12-slim, installs stageflow via `pip install -e .`
+   - Entrypoint: `python -m stageflow`, default CMD: `status`
+3. **Created `.dockerignore`** — excludes __pycache__, .git, .claude, node_modules, etc.
+4. **Updated `pyproject.toml`** — added `mcp` optional dependency group
+
+### 当前状态快照
+```
+Tests:           906 passed, 0 failing, 1 skipped
+New files:       .github/workflows/ci.yml, Dockerfile, .dockerignore
+pyproject.toml:  +mcp optional dep
+```
 
 ---
 

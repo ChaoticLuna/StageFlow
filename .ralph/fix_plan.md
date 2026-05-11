@@ -159,6 +159,12 @@
 
 ---
 
+## Phase 20: CI/CD 与容器化
+
+- [x] **task-063**: GitHub Actions CI + Docker (TASK_PLAN 11.1-11.2). Create `.github/workflows/ci.yml` (Python 3.10/3.11/3.12 matrix, pytest + mypy + coverage). Create `Dockerfile` (python:3.12-slim, entrypoint `python -m stageflow`). Create `.dockerignore`. Add `mcp` optional dependency to pyproject.toml.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |

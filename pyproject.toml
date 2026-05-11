@@ -29,6 +29,9 @@ anthropic = [
 psutil = [
     "psutil>=5.9.0",
 ]
+mcp = [
+    "mcp>=0.9.0",
+]
 editor = [
     "fastapi>=0.100",
     "uvicorn>=0.20",
