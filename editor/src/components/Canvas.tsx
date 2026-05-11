@@ -265,39 +265,45 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     pushUndo();
     const currentNodes = reactFlow.getNodes() as StageNodeType[];
     const currentEdges = reactFlow.getEdges() as Edge<EdgeData>[];
-    const inDegree = new Map<string, number>();
     const outEdges = new Map<string, string[]>();
+    const nodeIds = new Set(currentNodes.map((n) => n.id));
     for (const n of currentNodes) {
-      inDegree.set(n.id, 0);
       outEdges.set(n.id, []);
     }
     for (const e of currentEdges) {
-      inDegree.set(e.target, (inDegree.get(e.target) ?? 0) + 1);
+      if (!nodeIds.has(e.source) || !nodeIds.has(e.target)) continue;
       const outs = outEdges.get(e.source) ?? [];
       outs.push(e.target);
       outEdges.set(e.source, outs);
     }
 
     const layers = new Map<string, number>();
-    const queue: string[] = [];
-    for (const [id, deg] of inDegree) {
-      if (deg === 0) {
-        layers.set(id, 0);
-        queue.push(id);
+    const visiting = new Set<string>();
+    const maxDepth = Math.max(currentNodes.length, 1);
+
+    const assignLayer = (id: string, layer: number) => {
+      if (visiting.has(id) || layer > maxDepth) return;
+      const prev = layers.get(id);
+      if (prev !== undefined && prev >= layer) return;
+      layers.set(id, layer);
+      visiting.add(id);
+      for (const nextId of outEdges.get(id) ?? []) {
+        assignLayer(nextId, layer + 1);
       }
-    }
-    if (queue.length === 0 && currentNodes.length > 0) {
-      layers.set(currentNodes[0].id, 0);
-      queue.push(currentNodes[0].id);
+      visiting.delete(id);
+    };
+
+    const targets = new Set(currentEdges.map((e) => e.target));
+    const roots = currentNodes.filter((n) => !targets.has(n.id));
+    const starts = roots.length > 0 ? roots : currentNodes;
+    for (const node of starts) {
+      assignLayer(node.id, 0);
     }
 
-    while (queue.length > 0) {
-      const u = queue.shift()!;
-      const layer = layers.get(u)!;
-      for (const v of outEdges.get(u) ?? []) {
-        const next = Math.max(layers.get(v) ?? 0, layer + 1);
-        layers.set(v, next);
-        queue.push(v);
+    const fallbackLayer = Math.max(0, ...Array.from(layers.values())) + 1;
+    for (const node of currentNodes) {
+      if (!layers.has(node.id)) {
+        layers.set(node.id, fallbackLayer);
       }
     }
 

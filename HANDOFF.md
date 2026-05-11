@@ -2,7 +2,24 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: Coverage improvement for Linear + Notion integrations (998 tests)
+> **交接原因**: Linear + Notion integrations at 100% coverage (1000 tests)
+
+---
+
+## 100% integration coverage 会话总结 (2026-05-11)
+
+### 做了什么
+1. **Added `test_load_env_default_path` to `test_linear.py`** — covers default `Path(".env")` branch (line 32) via `monkeypatch.chdir`. Linear: 100% coverage (109 stmts, 0 missed).
+2. **Added `test_load_env_default_path` to `test_notion.py`** — same pattern. Notion: 100% coverage (76 stmts, 0 missed).
+3. **Both integrations now at 100%** — 33 linear tests, 24 notion tests.
+
+### 当前状态快照
+```
+Tests:           1000 passed, 0 failed, 1 skipped (1001 collected)
+fix_plan.md:     76/76 tasks complete
+All TASK_PLAN:   100% complete
+Coverage:        linear 100%, notion 100%, core modules 95-100%
+```
 
 ---
 

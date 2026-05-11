@@ -469,3 +469,10 @@ class TestLoadEnv:
         env_file.write_text("NO_EQUALS\nKEY=val\n")
         result = _load_env(env_file)
         assert result == {"KEY": "val"}
+
+    def test_load_env_default_path(self, temp_dir, monkeypatch):
+        monkeypatch.chdir(temp_dir)
+        env_file = temp_dir / ".env"
+        env_file.write_text("LINEAR_KEY=default_path_val\n")
+        result = _load_env()
+        assert result == {"LINEAR_KEY": "default_path_val"}

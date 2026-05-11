@@ -313,3 +313,10 @@ class TestLoadEnvNotion:
         env_file.write_text('# config\nNOTION_API_KEY="key123"\n\nDEBUG=1\n')
         result = _load_env(env_file)
         assert result == {"NOTION_API_KEY": "key123", "DEBUG": "1"}
+
+    def test_load_env_default_path(self, temp_dir, monkeypatch):
+        monkeypatch.chdir(temp_dir)
+        env_file = temp_dir / ".env"
+        env_file.write_text("NOTION_KEY=default_path_val\n")
+        result = _load_env()
+        assert result == {"NOTION_KEY": "default_path_val"}

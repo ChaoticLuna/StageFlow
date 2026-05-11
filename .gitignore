@@ -9,12 +9,30 @@
 .ralph/.response_analysis
 .ralph/.circuit_breaker_state
 .ralph/.circuit_breaker_history
+.ralph/.last_output_length
+.ralph/.loop_start_sha
+.ralph/.token_count
+.ralph/progress.json
 
 # Ralph logs and generated docs
 .ralph/logs/*
 !.ralph/logs/.gitkeep
 .ralph/docs/generated/*
 !.ralph/docs/generated/.gitkeep
+
+# Claude/StageFlow runtime state
+.claude/audit.jsonl
+.claude/current_stage.json
+.claude/guard_violations.jsonl
+.claude/benchmark_report.md
+.claude/settings.local.json
+.claude/settings.local.bak.json
+
+# Python build/test artifacts
+.coverage
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
 
 # General logs
 *.log

@@ -1,9 +1,0 @@
-pyyaml>=6.0
-
-[dev]
-pytest>=7.0
-pytest-cov
-
-[editor]
-fastapi>=0.100
-uvicorn>=0.20
