@@ -653,3 +653,131 @@ class TestRegistryRepr:
     def test_empty_registry_repr(self, empty_registry):
         r = repr(empty_registry)
         assert "0" in r
+
+
+# ============================================================================
+# Config inheritance (extends)
+# ============================================================================
+
+class TestConfigExtends:
+    def test_child_inherits_parent_stages(self, temp_dir):
+        parent_path = temp_dir / "parent.yaml"
+        parent_path.write_text(yaml.dump({
+            "stages": [
+                {"name": "base_analyze", "tools": ["Read"], "meta": {"description": "from parent"}},
+                {"name": "base_plan", "tools": ["Grep"]},
+            ],
+            "transitions": [
+                {"from": "base_analyze", "to": "base_plan", "conditions": [{"always": True}]},
+            ],
+        }))
+        child_path = temp_dir / "child.yaml"
+        child_path.write_text(yaml.dump({
+            "extends": "parent.yaml",
+            "stages": [
+                {"name": "custom_stage", "tools": ["Write"]},
+            ],
+            "transitions": [
+                {"from": "base_plan", "to": "custom_stage", "conditions": [{"always": True}]},
+            ],
+        }))
+        reg = StageRegistry(str(child_path))
+        assert "base_analyze" in reg.all_stages
+        assert "base_plan" in reg.all_stages
+        assert "custom_stage" in reg.all_stages
+        assert len(reg.all_stages) == 3
+
+    def test_child_overrides_parent_stage(self, temp_dir):
+        parent_path = temp_dir / "parent.yaml"
+        parent_path.write_text(yaml.dump({
+            "stages": [
+                {"name": "shared", "tools": ["Read"], "meta": {"description": "parent version"}},
+            ],
+        }))
+        child_path = temp_dir / "child.yaml"
+        child_path.write_text(yaml.dump({
+            "extends": "parent.yaml",
+            "stages": [
+                {"name": "shared", "tools": ["Write", "Edit"], "meta": {"description": "child version"}},
+            ],
+        }))
+        reg = StageRegistry(str(child_path))
+        assert len(reg.all_stages) == 1
+        stage = reg.get_stage("shared")
+        assert stage.tools == ["Write", "Edit"]
+        assert stage.description == "child version"
+
+    def test_child_overrides_parent_transition(self, temp_dir):
+        parent_path = temp_dir / "parent.yaml"
+        parent_path.write_text(yaml.dump({
+            "stages": [
+                {"name": "start", "tools": ["Read"]},
+                {"name": "end", "tools": []},
+            ],
+            "transitions": [
+                {"from": "start", "to": "end", "conditions": [{"always": True}],
+                 "description": "parent transition"},
+            ],
+        }))
+        child_path = temp_dir / "child.yaml"
+        child_path.write_text(yaml.dump({
+            "extends": "parent.yaml",
+            "transitions": [
+                {"from": "start", "to": "end", "conditions": [{"never": "blocked"}],
+                 "description": "child version"},
+            ],
+        }))
+        reg = StageRegistry(str(child_path))
+        transitions = reg.get_transitions_from("start")
+        assert len(transitions) == 1
+        assert transitions[0].description == "child version"
+        assert len(transitions[0].conditions) == 1
+        assert "never" in transitions[0].conditions[0]
+
+    def test_extends_missing_parent_warns(self, temp_dir):
+        child_path = temp_dir / "child.yaml"
+        child_path.write_text(yaml.dump({
+            "extends": "nonexistent.yaml",
+            "stages": [{"name": "only_me", "tools": ["Read"]}],
+        }))
+        with pytest.warns(UserWarning, match="extended config not found"):
+            reg = StageRegistry(str(child_path))
+        assert len(reg.all_stages) == 1
+        assert "only_me" in reg.all_stages
+
+    def test_extends_depth_limit(self, temp_dir):
+        a = temp_dir / "a.yaml"
+        b = temp_dir / "b.yaml"
+        c = temp_dir / "c.yaml"
+        a.write_text(yaml.dump({"stages": [{"name": "deep_a", "tools": ["Read"]}]}))
+        b.write_text(yaml.dump({"extends": "a.yaml", "stages": [{"name": "deep_b", "tools": ["Grep"]}]}))
+        c.write_text(yaml.dump({"extends": "b.yaml", "stages": [{"name": "deep_c", "tools": ["Write"]}]}))
+        reg = StageRegistry(str(c))
+        assert "deep_a" in reg.all_stages
+        assert "deep_b" in reg.all_stages
+        assert "deep_c" in reg.all_stages
+        assert len(reg.all_stages) == 3
+
+    def test_merge_configs_static_method(self):
+        parent = {"stages": [{"name": "a", "tools": ["Read"]}]}
+        child = {"stages": [{"name": "b", "tools": ["Write"]}]}
+        merged = StageRegistry._merge_configs(parent, child)
+        assert len(merged["stages"]) == 2
+        names = {s["name"] for s in merged["stages"]}
+        assert names == {"a", "b"}
+
+    def test_extends_with_groups(self, temp_dir):
+        parent_path = temp_dir / "parent.yaml"
+        parent_path.write_text(yaml.dump({
+            "stages": [{"name": "stage1", "tools": ["Read"]}],
+            "groups": ["core"],
+        }))
+        child_path = temp_dir / "child.yaml"
+        child_path.write_text(yaml.dump({
+            "extends": "parent.yaml",
+            "stages": [{"name": "stage2", "tools": ["Write"]}],
+            "groups": ["extras"],
+        }))
+        reg = StageRegistry(str(child_path))
+        assert "stage1" in reg.all_stages
+        assert "stage2" in reg.all_stages

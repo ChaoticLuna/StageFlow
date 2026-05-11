@@ -20,7 +20,7 @@ StageFlow 是一套**声明式、可扩展的阶段化状态机框架**，用于
 ```
 Framework files:  17 modules (~2,100 lines)
 Test files:      21 files (~12,000 lines)
-Tests:           906 passed, 0 failed (907 collected, 1 skipped)
+Tests:           913 passed, 0 failed (914 collected, 1 skipped)
 Coverage:        84% overall (core: engine 100%, schema 100%, registry 97%, guard 97%)
 mypy:            clean (17 source files, 0 issues)
 Conditions:       30 types
@@ -310,7 +310,7 @@ auto_workflow/
 ├── tests/
 │   ├── conftest.py            # Fixtures + Pytest 插件
 │   ├── test_conditions.py     # 256 tests
-│   ├── test_registry.py       # 83 tests
+│   ├── test_registry.py       # 90 tests
 │   ├── test_engine.py         # 83 tests
 │   ├── test_guard.py          # 23 tests
 │   ├── test_edge_cases.py     # 11 tests

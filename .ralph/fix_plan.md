@@ -165,6 +165,12 @@
 
 ---
 
+## Phase 21: 共享配置继承
+
+- [x] **task-064**: Multi-project config inheritance (TASK_PLAN 11.5). Add `extends` field to YAML config. `StageRegistry._resolve_extends()` recursively merges parent configs (max depth 5). `_merge_configs()` merges stages by name, transitions by (from,to). Child overrides parent. Groups concatenated. +7 tests in test_registry.py (83→90). 913 total tests.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |

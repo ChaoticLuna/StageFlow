@@ -2,7 +2,32 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-063 完成 — CI/CD + Docker (TASK_PLAN 11.1-11.2)
+> **交接原因**: task-064 完成 — config inheritance (TASK_PLAN 11.5)
+
+---
+
+## task-064 会话总结 (2026-05-11)
+
+### 做了什么
+1. **Added config inheritance (`extends`) to StageRegistry** — `registry.py`:
+   - `_resolve_extends(config, depth)` — recursively resolves parent configs (max depth 5)
+   - `_merge_configs(parent, child)` — merges stages (by name), transitions (by from,to), groups (concatenation)
+   - Child overrides parent; missing parent warns gracefully
+2. **Added 7 tests** to `tests/test_registry.py` (83 → 90):
+   - Inherits parent stages and transitions
+   - Child overrides parent stage (tools, description)
+   - Child overrides parent transition (conditions, description)
+   - Missing parent warns with UserWarning
+   - Depth limit respected across 3-level chain
+   - Static `_merge_configs` method tested directly
+   - Groups concatenation from parent + child
+
+### 当前状态快照
+```
+Tests:           913 passed, 0 failing, 1 skipped
+registry.py:     +_resolve_extends, +_merge_configs, +_MAX_EXTENDS_DEPTH
+test_registry:   90 tests (was 83)
+```
 
 ---
 

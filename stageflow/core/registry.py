@@ -92,10 +92,53 @@ class StageRegistry:
         if self.config_path.exists():
             self._load()
 
+    _MAX_EXTENDS_DEPTH = 5
+
+    @staticmethod
+    def _merge_configs(parent: dict, child: dict) -> dict:
+        """Merge child config into parent config. Child stages/transitions override parent ones by name."""
+        merged = dict(parent)
+        merged.pop("extends", None)
+
+        parent_stages = {s["name"]: s for s in parent.get("stages", [])}
+        for s in child.get("stages", []):
+            parent_stages[s["name"]] = s
+        merged["stages"] = list(parent_stages.values())
+
+        parent_trans = {(t["from"], t["to"]): t for t in parent.get("transitions", [])}
+        for t in child.get("transitions", []):
+            parent_trans[(t["from"], t["to"])] = t
+        merged["transitions"] = list(parent_trans.values())
+
+        merged["groups"] = parent.get("groups", []) + child.get("groups", [])
+
+        return merged
+
+    def _resolve_extends(self, config: dict, depth: int = 0) -> dict:
+        """Resolve `extends` references, merging parent configs up to _MAX_EXTENDS_DEPTH."""
+        extends = config.get("extends")
+        if not extends or not isinstance(extends, str):
+            return config
+        if depth >= self._MAX_EXTENDS_DEPTH:
+            import warnings
+            warnings.warn(f"StageFlow: 'extends' depth exceeded {self._MAX_EXTENDS_DEPTH} for {extends}")
+            return config
+        parent_path = (self.config_path.parent / extends).resolve()
+        if not parent_path.exists():
+            import warnings
+            warnings.warn(f"StageFlow: extended config not found: {parent_path}")
+            return config
+        with open(parent_path, "r", encoding="utf-8") as f:
+            parent_config = yaml.safe_load(f) or {}
+        parent_config = self._resolve_extends(parent_config, depth + 1)
+        return self._merge_configs(parent_config, config)
+
     def _load(self):
         """Load stages and transitions from YAML config, with schema validation."""
         with open(self.config_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f) or {}
+
+        config = self._resolve_extends(config)
 
         from .schema import validate_stages_config
         valid, errors = validate_stages_config(config)
