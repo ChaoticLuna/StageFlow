@@ -155,7 +155,7 @@
 ## Phase 19: 并行与 MCP (Parallel & MCP)
 
 - [x] **task-061**: Implement parallel condition evaluation (TASK_PLAN 9.3). Add `parallel` param to `evaluate_all()`. Use `ThreadPoolExecutor` with `_evaluate_single()` + `_evaluate_parallel()`. Respect severity ordering in result processing. ~10-15 tests. **Result: 12 new tests (255→267 in test_conditions.py). Added `_evaluate_single`, `_evaluate_parallel` to conditions.py. 895 total tests passing.**
-- [ ] **task-062**: MCP Server 集成 (TASK_PLAN 9.6) — FastMCP server exposing condition evaluation as tools.
+- [x] **task-062**: MCP Server 集成 (TASK_PLAN 9.6) — FastMCP server exposing condition evaluation as tools. **Result: 11 new tests (test_mcp_server.py). Created stageflow/mcp_server.py with 3 MCP tools (evaluate, list, evaluate_all). CLI: `python -m stageflow mcp`. 906 total tests.**
 
 ---
 

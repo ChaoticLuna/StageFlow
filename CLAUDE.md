@@ -20,7 +20,7 @@ StageFlow 是一套**声明式、可扩展的阶段化状态机框架**，用于
 ```
 Framework files:  17 modules (~2,100 lines)
 Test files:      21 files (~12,000 lines)
-Tests:           883 passed, 0 failed (884 collected, 1 skipped)
+Tests:           906 passed, 0 failed (907 collected, 1 skipped)
 Coverage:        84% overall (core: engine 100%, schema 100%, registry 97%, guard 97%)
 mypy:            clean (17 source files, 0 issues)
 Conditions:       30 types
@@ -284,7 +284,8 @@ auto_workflow/
 │   │   ├── registry.py        # StageRegistry + 动态 CRUD
 │   │   ├── engine.py          # StateMachine + 多重重试 + 生命周期
 │   │   ├── guard.py           # Tool Guard + Claude Hook
-│   │   └── audit.py           # AuditLogger
+│   │   ├── audit.py           # AuditLogger
+│   │   └── mcp_server.py      # MCP Server (FastMCP)
 │   ├── config/
 │   │   └── stages.yaml        # 10 阶段 + 11 转移声明
 │   ├── generator/
@@ -328,6 +329,7 @@ auto_workflow/
 │   ├── test_perf.py           # 7 tests
 │   ├── test_server.py         # 49 tests
 │   ├── test_audit.py          # 15 tests
+│   ├── test_mcp_server.py     # 11 tests
 │   └── test_stress.py         # 18 tests
 ├── .claude/
 │   ├── settings.json          # PreToolUse Hook 配置

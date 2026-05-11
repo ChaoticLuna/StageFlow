@@ -420,6 +420,12 @@ def cmd_generate(args):
     return 0
 
 
+def cmd_mcp(args):
+    from .mcp_server import serve
+    serve()
+    return 0
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(
@@ -483,6 +489,8 @@ Examples:
     p.add_argument("--prompt-only", action="store_true", help="Print the LLM prompt instead of generating")
     p.add_argument("--list-templates", action="store_true", help="List available templates and exit")
 
+    p = sub.add_parser("mcp", help="Start MCP server (stdio transport)")
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -492,7 +500,7 @@ Examples:
         "status": cmd_status, "next": cmd_next, "back": cmd_back,
         "jump": cmd_jump, "reset": cmd_reset, "graph": cmd_graph,
         "list": cmd_list, "init": cmd_init, "check": cmd_check,
-        "cond": cmd_cond, "generate": cmd_generate,
+        "cond": cmd_cond, "generate": cmd_generate, "mcp": cmd_mcp,
     }
     return commands[args.command](args)
 

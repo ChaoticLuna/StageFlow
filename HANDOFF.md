@@ -2,7 +2,35 @@
 
 > **最后更新**: 2026-05-11
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-061 完成 — parallel condition evaluation (TASK_PLAN 9.3)
+> **交接原因**: task-062 完成 — MCP Server integration (TASK_PLAN 9.6)
+
+---
+
+## task-062 会话总结 (2026-05-11)
+
+### 做了什么
+1. **Created `stageflow/mcp_server.py`** — MCP server exposing StageFlow conditions as tools:
+   - `stageflow_evaluate(name, params)` — evaluate a single condition
+   - `stageflow_list_conditions()` — list all registered condition types
+   - `stageflow_evaluate_all(conditions, base_path, parallel, timeout)` — evaluate batch
+2. **CLI integration**: `python -m stageflow mcp` starts the server on stdio transport
+3. **Installed `mcp` SDK** as a runtime dependency
+4. **Added 11 tests** to `tests/test_mcp_server.py`:
+   - MCPServerCreation: FastMCP instance, tool registration (2 tests)
+   - MCPToolsDirectly: evaluate pass/fail, list_conditions, evaluate_all parallel (4 tests)
+   - MCPModuleImports: serve/create_mcp_server callable (2 tests)
+   - MCPCLIIntegration: subprocess help, main help listing, import safety (3 tests)
+
+### 当前状态快照
+```
+Tests:           906 passed, 0 failing, 1 skipped
+New module:      stageflow/mcp_server.py (3 MCP tools)
+New test file:   tests/test_mcp_server.py (11 tests)
+CLI:             python -m stageflow mcp
+```
+
+### 已知问题
+- Stage guard keeps resetting state file to "analyze"
 
 ---
 
