@@ -184,8 +184,8 @@
 
 - [x] **task-069**: Cover `yaml_field` missed lines (368-369, 376) + `time_range` (623-624, 634) + `http_status` (604-605). Added 5 tests: invalid_yaml_parse_error, navigate_non_dict_field, default_status_code_check, before_bound_blocks, invalid_timezone_fallback. 267→272 tests, 58→50 missed (92%→93%).
 - [x] **task-070**: Cover 4 handlers — `json_schema` without jsonschema (line 696), `diff_contains` staged_only path (885-886), `json_count` list indexing/string/scalar/max exceeded (936-951, 960-961). Added 9 tests. 272→281 tests, 50→37 missed (93%→95%). Note: lines 152, 183, 516, 821 are unreachable (defensive dup of _parse_condition wrapping at line 250). Lines 40/46 are coverage tool quirks. Lines 404/904-905 need 30s timeout or git error — impractical in tests.
-- [ ] **task-071**: Target remaining accessible: `git_status` has_commits (571), `json_count` non-dict/list nav error (942), `command_exists` version exception (860-861). ~3-4 tests. Remaining system check lines (1008-1060) need real psutil/docker — heavy deps.
-- [ ] **task-072**: Final sweep — conditions.py ≥95% achieved. Target next module.
+- [x] **task-071**: Covered `json_count` non-dict/list nav error (line 942) — `test_navigate_into_scalar_field`. Attempted `git_status` has_commits (line 571) but discovered handler bug: `HEAD..@{u}` counts commits behind, not ahead — needs semantic fix. Remaining ~18 missed are unreachable dups (152,183,516,821), coverage quirks (40,46), hardcoded 30s timeout (404), or system deps (860-861, 904-905, 1008-1060). 281→282 tests, 37→36 missed (95%).
+- [ ] **task-072**: Final sweep — conditions.py 95% stable. Assess remaining modules or update docs.
 
 ---
 

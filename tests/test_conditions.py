@@ -2277,6 +2277,16 @@ class TestJsonCount:
         assert not passed
         assert "Cannot index" in msg
 
+    def test_navigate_into_scalar_field(self, temp_dir):
+        """line 942: field navigation fails on non-dict, non-list node."""
+        (temp_dir / "data.json").write_text('{"a": {"b": 42}}')
+        passed, msg = evaluate("json_count", {
+            "base_path": str(temp_dir), "path": "data.json",
+            "field": "a.b.c", "min": 0
+        })
+        assert not passed
+        assert "Cannot navigate" in msg
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Condition Severity Levels (warn / soft / hard)
