@@ -2,6 +2,8 @@
 """StageFlow CLI — unified command-line interface for the state machine.
 
 Usage:
+    stageflow init [path]         Bootstrap a StageFlow project
+    stageflow start [stage]       Begin a new run
     stageflow status              Show current stage and status
     stageflow next [target]       Advance to next stage
     stageflow back [target]       Go back to previous stage
@@ -9,13 +11,13 @@ Usage:
     stageflow reset [stage]       Reset to initial or specified stage
     stageflow graph               Generate Mermaid graph of the state machine
     stageflow list                List all stages and transitions
-    stageflow init <stage>        Initialize state machine at a stage
     stageflow check <target>      Dry-run: check conditions without advancing
     stageflow cond <type>         Test a condition type
 """
 
 from __future__ import annotations
 
+import json as _json
 import sys
 from pathlib import Path
 
@@ -28,11 +30,36 @@ from stageflow.core.engine import StateMachine
 from stageflow.core.conditions import evaluate, list_conditions
 
 
-import json as _json
+
+def _get_sm():
+    """Create a StateMachine using project discovery for correct config/state paths."""
+    from stageflow.core.discovery import discover_project
+    root = discover_project()
+    if root is not None:
+        reg = StageRegistry(str(root.config_path))
+        rel_state = str(root.state_path.relative_to(root.path))
+        return reg, StateMachine(reg, str(root.path), state_file=rel_state)
+    else:
+        reg = StageRegistry()
+        return reg, StateMachine(reg)
+
+
+def _require_sm():
+    """Get StateMachine for a project-requiring command, or print error and return None."""
+    from stageflow.core.discovery import discover_project
+    root = discover_project()
+    if root is None:
+        print("Not a StageFlow project (or any parent directory).", file=sys.stderr)
+        print("Run 'stageflow init' to create one here.", file=sys.stderr)
+        return None, None, None
+    reg = StageRegistry(str(root.config_path))
+    rel_state = str(root.state_path.relative_to(root.path))
+    sm = StateMachine(reg, str(root.path), state_file=rel_state)
+    return reg, sm, root
+
 
 def cmd_status(args):
-    reg = StageRegistry()
-    sm = StateMachine(reg)
+    reg, sm = _get_sm()
     info = sm.status()
     if getattr(args, 'json', False):
         print(_json.dumps(info, indent=2, default=str))
@@ -115,11 +142,12 @@ def _print_verbose_details(reg, sm, info):
 
 
 def cmd_next(args):
-    reg = StageRegistry()
-    sm = StateMachine(reg)
+    reg, sm, root = _require_sm()
+    if sm is None:
+        return 1
     if sm.current_stage is None:
-        first = reg.stage_names[0] if reg.stage_names else "pick"
-        ok, msgs = sm.initialize(first)
+        print("No active run. Use 'stageflow start' to begin a run.", file=sys.stderr)
+        return 1
     elif args.force:
         target = args.target or reg.get_next_stages(sm.current_stage)[0]
         ok, msgs = sm.force_transition_to(target)
@@ -152,10 +180,12 @@ def cmd_next(args):
 
 
 def cmd_back(args):
-    reg = StageRegistry()
-    sm = StateMachine(reg)
+    reg, sm, root = _require_sm()
+    if sm is None:
+        return 1
     if sm.current_stage is None:
-        return cmd_init(args)
+        print("No active run. Use 'stageflow start' to begin a run.", file=sys.stderr)
+        return 1
     incoming = reg.get_transitions_to(sm.current_stage)
     target = args.target or (incoming[0].from_stage if incoming else reg.stage_names[0])
     ok, msgs = sm.force_transition_to(target)
@@ -165,8 +195,9 @@ def cmd_back(args):
 
 
 def cmd_jump(args):
-    reg = StageRegistry()
-    sm = StateMachine(reg)
+    reg, sm, root = _require_sm()
+    if sm is None:
+        return 1
     if sm.current_stage is None:
         ok, msgs = sm.initialize(args.target)
     elif args.force:
@@ -179,8 +210,9 @@ def cmd_jump(args):
 
 
 def cmd_reset(args):
-    reg = StageRegistry()
-    sm = StateMachine(reg)
+    reg, sm, root = _require_sm()
+    if sm is None:
+        return 1
     if getattr(args, 'clean_artifacts', False):
         sm.clean_run_artifacts()
     if args.hard:
@@ -199,17 +231,8 @@ def cmd_reset(args):
 
 def cmd_graph(args):
     """Generate Mermaid flowchart of all stages and transitions."""
-    reg = StageRegistry()
-
-    # Determine current stage from state file
-    state_file = PROJECT_ROOT / ".claude" / "current_stage.json"
-    import json
-    current_stage = None
-    if state_file.exists():
-        try:
-            current_stage = json.loads(state_file.read_text()).get("current_stage")
-        except Exception:
-            pass
+    reg, sm = _get_sm()
+    current_stage = sm.current_stage
 
     print("```mermaid")
     print("flowchart TD")
@@ -265,7 +288,7 @@ def cmd_graph(args):
 
 
 def cmd_list(args):
-    reg = StageRegistry()
+    reg, sm = _get_sm()
     if getattr(args, 'json', False):
         stages_list = []
         for name in reg.stage_names:
@@ -300,17 +323,243 @@ def cmd_list(args):
 
 
 def cmd_init(args):
-    reg = StageRegistry()
-    sm = StateMachine(reg)
-    ok, msgs = sm.initialize(args.stage)
+    """Bootstrap a StageFlow project in the target directory.
+
+    Creates .stageflow/config/stages.yaml, .claude/settings.json,
+    and artifacts/runs/. Does NOT start an active run unless --start is given.
+    """
+    target = Path(args.path).resolve() if args.path else Path.cwd().resolve()
+
+    from stageflow.core.discovery import discover_project
+
+    existing = discover_project(target)
+    if existing is not None and existing.path != target:
+        print(f"Already inside a StageFlow project at {existing.path}", file=sys.stderr)
+        print("Nested projects must be created from outside the parent project.", file=sys.stderr)
+        return 1
+
+    stageflow_dir = target / ".stageflow"
+    if stageflow_dir.is_dir() and not getattr(args, 'force', False):
+        print(f"StageFlow project already initialized at {target}")
+        return 0
+
+    stageflow_dir.mkdir(parents=True, exist_ok=True)
+    (stageflow_dir / "config").mkdir(parents=True, exist_ok=True)
+    (target / "artifacts" / "runs").mkdir(parents=True, exist_ok=True)
+
+    default_yaml = _get_default_stages_yaml()
+    (stageflow_dir / "config" / "stages.yaml").write_text(default_yaml, encoding="utf-8")
+
+    hook_settings = {
+        "hooks": {
+            "PreToolUse": [{
+                "command": "stageflow hook",
+                "matcher": "",
+                "timeout": 10
+            }]
+        }
+    }
+    settings_path = target / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(_json.dumps(hook_settings, indent=2) + "\n", encoding="utf-8")
+
+    print(f"Initialized StageFlow project at {target}")
+
+    if getattr(args, 'start', False):
+        reg = StageRegistry(str(stageflow_dir / "config" / "stages.yaml"))
+        sm = StateMachine(reg, str(target), state_file=".stageflow/current_stage.json")
+        first_stage = reg.stage_names[0] if reg.stage_names else "pick"
+        ok, msgs = sm.initialize(first_stage)
+        for m in msgs:
+            print(f"  {m}")
+        if not ok:
+            return 1
+
+    return 0
+
+
+def cmd_start(args):
+    """Begin a new StageFlow run at the specified or first stage."""
+    from stageflow.core.discovery import discover_project
+
+    root = discover_project()
+    if root is None:
+        print("Not a StageFlow project (or any parent directory).", file=sys.stderr)
+        print("Run 'stageflow init' to create one here.", file=sys.stderr)
+        return 1
+
+    reg = StageRegistry(str(root.config_path))
+    rel_state = str(root.state_path.relative_to(root.path))
+    sm = StateMachine(reg, str(root.path), state_file=rel_state)
+
+    if sm.current_stage is not None:
+        print(f"A run is already active (stage: {sm.current_stage}).", file=sys.stderr)
+        print("Use 'stageflow next' to advance or 'stageflow reset' to start over.", file=sys.stderr)
+        return 1
+
+    target = args.stage if args.stage else (reg.stage_names[0] if reg.stage_names else None)
+    if target is None:
+        print("No stages defined in project config.", file=sys.stderr)
+        return 1
+
+    ok, msgs = sm.initialize(target)
     for m in msgs:
         print(f"  {m}")
     return 0 if ok else 1
 
 
+def _get_default_stages_yaml() -> str:
+    """Return the default stages.yaml content shipped with the package."""
+    import os
+    pkg_yaml = Path(__file__).resolve().parent / "config" / "stages.yaml"
+    if pkg_yaml.exists():
+        return pkg_yaml.read_text(encoding="utf-8")
+    # Fallback: minimal built-in config
+    return """# StageFlow Default Configuration
+stages:
+  - name: pick
+    tools:
+      - Read
+      - Grep
+      - Glob
+      - WebSearch
+      - WebFetch
+      - Bash(git *)
+      - TaskCreate
+      - TaskUpdate
+    meta:
+      description: "Select an issue and gather context"
+
+  - name: analyze
+    tools:
+      - Read
+      - Grep
+      - Glob
+      - WebSearch
+      - Bash(git *)
+      - Bash(python *)
+      - TaskCreate
+      - TaskUpdate
+    meta:
+      description: "Analyze root cause and scope"
+
+  - name: plan
+    tools:
+      - Read
+      - Grep
+      - Glob
+      - Write
+      - Edit
+      - Bash(python *)
+      - Bash(git *)
+      - TaskCreate
+      - TaskUpdate
+    meta:
+      description: "Design solution and write task plan"
+
+  - name: implement
+    tools:
+      - Read
+      - Edit
+      - Write
+      - Grep
+      - Glob
+      - Bash(git *)
+      - Bash(python *)
+      - TaskCreate
+      - TaskUpdate
+    meta:
+      description: "Implement code changes"
+
+  - name: verify
+    tools:
+      - Read
+      - Grep
+      - Glob
+      - Bash(git *)
+      - Bash(python *)
+      - Bash(pytest *)
+      - TaskCreate
+      - TaskUpdate
+    meta:
+      description: "Run tests and verify"
+
+  - name: document
+    tools:
+      - Read
+      - Write
+      - Edit
+      - Grep
+      - Glob
+      - Bash(git *)
+      - TaskCreate
+      - TaskUpdate
+    meta:
+      description: "Write changelog and docs"
+
+  - name: done
+    tools: []
+    meta:
+      description: "Workflow complete"
+
+transitions:
+  - from: pick
+    to: analyze
+    conditions:
+      - file_exists: artifacts/runs/{{var.run_id}}/pick/issue_context.md
+
+  - from: analyze
+    to: plan
+    conditions:
+      - file_exists: artifacts/runs/{{var.run_id}}/analyze/findings.md
+      - file_contains:
+          path: artifacts/runs/{{var.run_id}}/analyze/findings.md
+          pattern: "## (根因|Root Cause|Analysis|分析)"
+    on_fail: analyze
+
+  - from: plan
+    to: implement
+    conditions:
+      - file_exists: artifacts/runs/{{var.run_id}}/plan/task_plan.md
+    on_fail: plan
+
+  - from: implement
+    to: verify
+    conditions:
+      - shell_test:
+          command: "git diff --name-only HEAD"
+          op: gt
+          value: 0
+    on_fail: implement
+
+  - from: verify
+    to: document
+    conditions:
+      - file_exists: artifacts/runs/{{var.run_id}}/verify/test_results.md
+      - file_contains:
+          path: artifacts/runs/{{var.run_id}}/verify/test_results.md
+          pattern: "(PASS|通过|All tests passed)"
+    on_fail: implement
+
+  - from: verify
+    to: implement
+    conditions:
+      - file_exists: artifacts/runs/{{var.run_id}}/verify/test_results.md
+      - file_contains:
+          path: artifacts/runs/{{var.run_id}}/verify/test_results.md
+          pattern: "(FAIL|失败|Error)"
+
+  - from: document
+    to: done
+    conditions:
+      - always: true
+"""
+
+
 def cmd_check(args):
-    reg = StageRegistry()
-    sm = StateMachine(reg)
+    reg, sm, root = _require_sm()
+    if sm is None:
+        return 1
     if sm.current_stage is None:
         if getattr(args, 'json', False):
             print(_json.dumps({"error": "Not initialized", "current_stage": None}))
@@ -475,8 +724,13 @@ Examples:
     p = sub.add_parser("list", help="List all stages and transitions")
     p.add_argument("--json", "-j", action="store_true", help="JSON output")
 
-    p = sub.add_parser("init", help="Initialize state machine")
-    p.add_argument("stage", help="Starting stage name")
+    p = sub.add_parser("init", help="Bootstrap a StageFlow project")
+    p.add_argument("path", nargs="?", help="Target directory (default: current directory)")
+    p.add_argument("--force", "-f", action="store_true", help="Overwrite existing config")
+    p.add_argument("--start", "-s", action="store_true", help="Start a run after initialization")
+
+    p = sub.add_parser("start", help="Begin a new StageFlow run")
+    p.add_argument("stage", nargs="?", help="Stage to start at (default: first stage in config)")
 
     p = sub.add_parser("check", help="Dry-run: check conditions for transition")
     p.add_argument("target", help="Target stage to check")
@@ -505,7 +759,8 @@ Examples:
     commands = {
         "status": cmd_status, "next": cmd_next, "back": cmd_back,
         "jump": cmd_jump, "reset": cmd_reset, "graph": cmd_graph,
-        "list": cmd_list, "init": cmd_init, "check": cmd_check,
+        "list": cmd_list, "init": cmd_init, "start": cmd_start,
+        "check": cmd_check,
         "cond": cmd_cond, "generate": cmd_generate, "mcp": cmd_mcp,
     }
     return commands[args.command](args)

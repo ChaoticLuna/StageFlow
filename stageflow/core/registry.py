@@ -180,7 +180,7 @@ class StageRegistry:
 
     @property
     def stage_names(self) -> List[str]:
-        return sorted(self._stages.keys())
+        return list(self._stages.keys())
 
     @property
     def all_stages(self) -> Dict[str, Stage]:

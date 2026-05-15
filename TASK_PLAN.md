@@ -1,8 +1,8 @@
 # StageFlow — Task Plan
 
-> **最后更新**: 2026-05-15
-> **当前阶段**: Phase 28 — Run/resume/artifact stabilization 🔄
-> **Ralph 状态**: 活跃 — fix_plan.md 83/87 完成
+> **最后更新**: 2026-05-16
+> **当前阶段**: Phase 29 — Git-like CLI (task-090 complete, tasks 091-092 in progress) 🔄
+> **Ralph 状态**: 活跃 — fix_plan.md 90/100 完成
 
 ---
 

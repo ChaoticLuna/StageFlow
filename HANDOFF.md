@@ -2,7 +2,48 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-089 — Phase 29 Root discovery module
+> **交接原因**: task-090 — Phase 29 Redefine stageflow init as project bootstrap
+
+---
+
+## task-090 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Rewrote cmd_init in __main__.py** — stageflow init is now project bootstrap:
+   - Creates .stageflow/config/stages.yaml (default 10-stage pipeline)
+   - Creates .claude/settings.json (PreToolUse hook pointing to stageflow hook)
+   - Creates artifacts/runs/ directory
+   - Does NOT create an active run unless --start is given
+   - --force overwrites config while preserving existing state
+   - Idempotent: prints already initialized on re-run
+   - Blocks nested project creation inside parent project
+2. **Added cmd_start** — explicit run startup:
+   - stageflow start begins at first YAML stage (insertion order)
+   - stageflow start <stage> starts at specific stage
+   - Fails if run already active or outside project
+3. **Added _get_sm() / _require_sm() helpers** — project-discovery-aware SM creation
+4. **Updated all CLI commands** to use discovered project root
+5. **Added state_file param to StateMachine.__init__** for custom state paths
+6. **Changed stage_names from sorted to insertion order** — first YAML stage = entry
+7. **Added TestNewInitAndStart** (15 tests): init, idempotent, force, start, nested blocking, etc.
+8. **Fixed 6 legacy tests** for new init/start semantics and insertion-order stage_names
+
+### 设计决策
+- init <path> not init <stage> — positional arg is now a directory path
+- --start convenience flag for bootstrap+run in one command
+- Insertion order for stage_names critical for entry stage semantics
+
+### 当前状态快照
+Phase 29:        task-090 complete
+Next task:       task-091 (partially implemented, needs review)
+fix_plan.md:     90/100 tasks complete
+Tests:           1105 passed, 1 skipped, 0 failed
+Uncommitted:     4 files (__main__.py, engine.py, registry.py, test_main.py)
+
+### 已知问题
+- Stage guard keeps resetting state file to analyze during work
+- Tasks 091-092 are partially implemented in uncommitted code
+- Next agent should review and commit incrementally
 
 ---
 

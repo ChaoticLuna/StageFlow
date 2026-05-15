@@ -118,10 +118,9 @@ class TestGetNextStages:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestStageNames:
-    def test_returns_sorted_names(self, registry):
+    def test_returns_insertion_order_names(self, registry):
         names = registry.stage_names
-        assert names == sorted(names)
-        assert names == ["end", "middle", "start"]
+        assert names == ["start", "middle", "end"]
 
     def test_empty_registry_returns_empty_list(self, empty_registry):
         assert empty_registry.stage_names == []

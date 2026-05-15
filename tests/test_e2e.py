@@ -347,10 +347,10 @@ class TestConditionsEnforcement:
 class TestConfigStructure:
     def test_all_10_stages_registered(self, real_registry):
         names = real_registry.stage_names
-        expected = sorted([
+        expected = [
             "pick", "analyze", "plan", "implement", "verify",
             "document", "mr", "review", "wrap_up", "done",
-        ])
+        ]
         assert names == expected
 
     def test_all_11_transitions_registered(self, real_registry):

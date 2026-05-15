@@ -132,7 +132,7 @@ class TestStageflowCLI:
 
     def test_resume_keeps_run_id_in_new_session(self):
         """A new StateMachine session retains the same run_id from disk."""
-        r1 = _stageflow("init", "pick")
+        r1 = _stageflow("reset", "pick")
         assert r1.returncode == 0, r1.stderr
         data1 = json.loads(_stageflow("status", "--json").stdout)
         rid1 = data1["variables"]["run_id"]
@@ -142,7 +142,7 @@ class TestStageflowCLI:
 
     def test_status_run_id_changes_after_reset(self):
         """Plain reset creates a new run_id (CLI-level)."""
-        _stageflow("init", "pick")
+        _stageflow("reset", "pick")
         data1 = json.loads(_stageflow("status", "--json").stdout)
         rid1 = data1["variables"]["run_id"]
 
@@ -157,7 +157,7 @@ class TestStageflowCLI:
 
     def test_status_run_id_preserved_after_reset_reuse(self):
         """reset --reuse-run preserves the same run_id (CLI-level)."""
-        _stageflow("init", "pick")
+        _stageflow("reset", "pick")
         data1 = json.loads(_stageflow("status", "--json").stdout)
         rid1 = data1["variables"]["run_id"]
 
@@ -228,7 +228,7 @@ class TestStageflowCLI:
         assert r.returncode in (0, 1), f"rc={r.returncode}: {r.stderr}"
 
     def test_init_runs(self):
-        r = _stageflow("init", "analyze")
+        r = _stageflow("reset", "analyze")
         assert r.returncode in (0, 1), f"rc={r.returncode}: {r.stderr}"
 
     def test_check_plain_output(self):
@@ -517,7 +517,7 @@ class TestMainInProcess:
         assert result in (0, None)
 
     def test_init(self, monkeypatch):
-        result = self._run(monkeypatch, "init", "analyze")
+        result = self._run(monkeypatch, "reset", "analyze")
         assert result in (0, 1, None)
 
     def test_check(self, monkeypatch):
@@ -587,3 +587,142 @@ class TestMainInProcess:
     def test_mcp_help(self, monkeypatch):
         result = self._run(monkeypatch, "mcp", "--help")
         assert result == 0
+
+
+class TestNewInitAndStart:
+    """Tests for the new stageflow init (project bootstrap) and stageflow start."""
+
+    @staticmethod
+    def _run(cwd, *args):
+        import subprocess, sys
+        return subprocess.run(
+            [sys.executable, "-m", "stageflow", *args],
+            capture_output=True, text=True, cwd=str(cwd), timeout=30,
+        )
+
+    def test_init_creates_structure(self, tmp_path):
+        r = self._run(tmp_path, "init")
+        assert r.returncode == 0, r.stderr
+        assert (tmp_path / ".stageflow" / "config" / "stages.yaml").is_file()
+        assert (tmp_path / ".claude" / "settings.json").is_file()
+        assert (tmp_path / "artifacts" / "runs").is_dir()
+        assert not (tmp_path / ".stageflow" / "current_stage.json").exists()
+
+    def test_init_idempotent(self, tmp_path):
+        r1 = self._run(tmp_path, "init")
+        assert r1.returncode == 0
+        r2 = self._run(tmp_path, "init")
+        assert r2.returncode == 0
+        assert "already initialized" in r2.stdout
+
+    def test_init_force_overwrite(self, tmp_path):
+        self._run(tmp_path, "init")
+        yaml_path = tmp_path / ".stageflow" / "config" / "stages.yaml"
+        original = yaml_path.read_text(encoding="utf-8")
+        yaml_path.write_text("# modified", encoding="utf-8")
+        r = self._run(tmp_path, "init", "--force")
+        assert r.returncode == 0
+        restored = yaml_path.read_text(encoding="utf-8")
+        assert restored == original
+
+    def test_init_start_starts_run(self, tmp_path):
+        r = self._run(tmp_path, "init", "--start")
+        assert r.returncode == 0, r.stderr
+        state = tmp_path / ".stageflow" / "current_stage.json"
+        assert state.is_file()
+        import json
+        data = json.loads(state.read_text())
+        assert data["current_stage"] == "pick"
+        assert "run_id" in data.get("variables", {})
+
+    def test_init_inside_existing_project_blocked(self, tmp_path):
+        self._run(tmp_path, "init")
+        inner = tmp_path / "subdir"
+        inner.mkdir()
+        r = self._run(inner, "init")
+        assert r.returncode == 1
+        assert "Already inside" in r.stderr
+
+    def test_start_after_init(self, tmp_path):
+        self._run(tmp_path, "init")
+        r = self._run(tmp_path, "start")
+        assert r.returncode == 0
+        import json
+        data = json.loads((tmp_path / ".stageflow" / "current_stage.json").read_text())
+        assert data["current_stage"] == "pick"
+
+    def test_start_with_custom_stage(self, tmp_path):
+        self._run(tmp_path, "init")
+        r = self._run(tmp_path, "start", "analyze")
+        assert r.returncode == 0
+        import json
+        data = json.loads((tmp_path / ".stageflow" / "current_stage.json").read_text())
+        assert data["current_stage"] == "analyze"
+
+    def test_start_fails_when_run_active(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._run(tmp_path, "start", "pick")
+        r = self._run(tmp_path, "start", "pick")
+        assert r.returncode == 1
+        assert "already active" in r.stderr
+
+    def test_start_outside_project_fails(self, tmp_path):
+        r = self._run(tmp_path, "start", "pick")
+        assert r.returncode == 1
+        assert "Not a StageFlow project" in r.stderr
+
+    def test_start_unknown_stage_rejected(self, tmp_path):
+        self._run(tmp_path, "init")
+        r = self._run(tmp_path, "start", "nonexistent_stage_xyz")
+        assert r.returncode == 1
+
+    def test_next_without_run_fails(self, tmp_path):
+        self._run(tmp_path, "init")
+        r = self._run(tmp_path, "next")
+        assert r.returncode == 1
+        assert "No active run" in r.stderr
+
+    def test_init_creates_valid_stages_yaml(self, tmp_path):
+        self._run(tmp_path, "init")
+        import yaml
+        yaml_path = tmp_path / ".stageflow" / "config" / "stages.yaml"
+        config = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+        assert "stages" in config
+        assert "transitions" in config
+        assert len(config["stages"]) >= 2
+
+    def test_status_works_in_new_project(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._run(tmp_path, "start", "pick")
+        r = self._run(tmp_path, "status")
+        assert r.returncode == 0
+        assert "pick" in r.stdout
+
+    def test_status_json_in_new_project(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._run(tmp_path, "start", "pick")
+        r = self._run(tmp_path, "status", "--json")
+        assert r.returncode == 0
+        import json
+        data = json.loads(r.stdout)
+        assert data["current_stage"] == "pick"
+
+    def test_next_advances_in_new_project(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._run(tmp_path, "start", "pick")
+        import json
+        state = json.loads((tmp_path / ".stageflow" / "current_stage.json").read_text())
+        run_id = state["variables"]["run_id"]
+        (tmp_path / "artifacts" / "runs" / run_id / "pick").mkdir(parents=True)
+        (tmp_path / "artifacts" / "runs" / run_id / "pick" / "issue_context.md").write_text("test")
+        r = self._run(tmp_path, "next")
+        assert r.returncode == 0
+
+    def test_init_preserves_existing_state_on_force(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._run(tmp_path, "start", "pick")
+        r = self._run(tmp_path, "init", "--force")
+        assert r.returncode == 0
+        import json
+        state = json.loads((tmp_path / ".stageflow" / "current_stage.json").read_text())
+        assert state["current_stage"] == "pick"

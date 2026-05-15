@@ -29,9 +29,10 @@ class StateMachine:
 
     STATE_FILE = ".claude/current_stage.json"
 
-    def __init__(self, registry: StageRegistry, base_path: str = "."):
+    def __init__(self, registry: StageRegistry, base_path: str = ".", state_file: str | None = None):
         self.registry = registry
         self.base_path = Path(base_path).resolve()
+        self._state_file = state_file  # None means use default STATE_FILE
         self._state = self._load_state()
         from .audit import AuditLogger
         self.audit = AuditLogger(str(self.base_path))
@@ -40,6 +41,8 @@ class StateMachine:
 
     @property
     def state_path(self) -> Path:
+        if self._state_file is not None:
+            return self.base_path / self._state_file
         return self.base_path / self.STATE_FILE
 
     def _load_state(self) -> dict:
