@@ -235,6 +235,7 @@ stageflow list [--json]                    # 列出所有阶段和转移
 stageflow check <target> [--json]          # 检查转移条件（dry-run）
 stageflow graph                            # 生成 Mermaid 流程图
 stageflow cond <type> [--params JSON] [--list]  # 测试条件类型
+stageflow root [--json]                       # 打印发现的项目根路径
 ```
 
 ### 其他

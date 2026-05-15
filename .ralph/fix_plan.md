@@ -268,6 +268,7 @@ Hard acceptance rules for this phase:
 - [x] **task-101**: Cleanup cruft. Delete `scripts/_fix_reset.py` (ad-hoc fix script from task-093, no longer needed). Add `artifacts/runs/` to `.gitignore` so test artifacts don't pollute git status.
 - [x] **task-102**: Add `stageflow root` command. Prints the discovered project root path (absolute). Works from any subdirectory. Outputs the path, marker type (new/legacy/legacy_state_only), and config/state file locations. JSON output with `--json`. This was deferred in task-096. Tests: from root, from nested subdir, outside project fails.
 - [x] **task-103**: Code quality audit. Scan all Python files under `stageflow/` for: dead code (unused functions/classes), imports that are never used, references to deleted functions or renamed modules, stale comments referencing old behavior. Fix any issues found. Run full test suite after fixes.
+- [x] **task-104**: Document `stageflow root` command. Add to CLAUDE.md CLI reference, docs/api_reference.md, and .ralph/AGENT.md. Include examples for plain and JSON output.
 
 ---
 

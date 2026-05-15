@@ -601,6 +601,17 @@ python -m stageflow cond file_exists --params '{"path": "README.md"}'
 python -m stageflow cond always
 ```
 
+### `root [--json]`
+
+Print the discovered project root path and metadata.
+
+```
+python -m stageflow root                         # Plain text output
+python -m stageflow root --json                  # JSON output
+```
+
+Output fields: `root`, `marker_type` (new/legacy/legacy_state_only), `config_path`, `state_path`, `artifacts_dir`, `audit_dir`. Exits with code 1 and "Not a StageFlow project" message outside a project.
+
 ### Other Commands
 
 ```
