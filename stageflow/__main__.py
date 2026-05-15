@@ -181,6 +181,8 @@ def cmd_jump(args):
 def cmd_reset(args):
     reg = StageRegistry()
     sm = StateMachine(reg)
+    if getattr(args, 'clean_artifacts', False):
+        sm.clean_run_artifacts()
     if args.hard:
         sm.reset()
         print("State machine fully reset.")
@@ -466,6 +468,7 @@ Examples:
     p.add_argument("stage", nargs="?", help="Stage to reset to")
     p.add_argument("--hard", action="store_true")
     p.add_argument("--reuse-run", action="store_true", help="Keep existing run_id instead of creating a new one")
+    p.add_argument("--clean-artifacts", action="store_true", help="Delete the current run's artifact directory before resetting")
 
     p = sub.add_parser("graph", help="Generate Mermaid flowchart")
 

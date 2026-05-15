@@ -2,7 +2,30 @@
 
 > **最后更新**: 2026-05-15
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-079 complete — agent prompts + status output now run-scoped
+> **交接原因**: task-080 complete — artifact cleanup controls added
+
+---
+
+## task-080 会话总结 (2026-05-15)
+
+### 做了什么
+1. **Added `clean_run_artifacts()` to `engine.py`** — deletes only `artifacts/runs/<run_id>/` directory, never the whole `artifacts/` tree. No-op when no run_id or directory doesn't exist.
+2. **Added `--clean-artifacts` flag to CLI** (`__main__.py`) — `python -m stageflow reset pick --clean-artifacts` cleans current run's artifacts before resetting. Works with `--reuse-run` and `--hard`.
+3. **Added `--clean-artifacts` flag to `scripts/stage_reset.py`** — same behavior as CLI.
+4. **Added 5 tests** in `TestCleanArtifacts` class (test_engine.py):
+   - `test_clean_removes_current_run_artifacts`
+   - `test_clean_preserves_old_run_dirs`
+   - `test_clean_noop_when_no_run_id`
+   - `test_clean_noop_when_dir_does_not_exist`
+   - `test_no_cleanup_without_flag`
+
+### 当前状态快照
+```
+Tests:           1017 passed, 0 failed, 1 skipped (1018 collected)
+New method:      StateMachine.clean_run_artifacts()
+CLI:             reset --clean-artifacts flag added
+fix_plan.md:     80/82 tasks complete
+```
 
 ---
 

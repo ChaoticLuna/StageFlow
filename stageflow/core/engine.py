@@ -393,6 +393,19 @@ class StateMachine:
         if self.state_path.exists():
             self.state_path.unlink()
 
+    def clean_run_artifacts(self):
+        """Delete the current run's artifact directory only.
+
+        Removes artifacts/runs/<run_id>/ if a run_id is set.
+        Other run directories and the artifacts/ tree are left untouched.
+        """
+        import shutil
+        run_id = self.get_var("run_id")
+        if run_id:
+            run_dir = self.base_path / "artifacts" / "runs" / run_id
+            if run_dir.exists():
+                shutil.rmtree(run_dir)
+
     # ── Tool Access Check ───────────────────────────────────────────────
 
     def is_tool_allowed(self, tool_name: str) -> Tuple[bool, str]:

@@ -24,6 +24,7 @@ def main():
     parser.add_argument("stage", nargs="?", help="Reset to this stage (default: first stage)")
     parser.add_argument("--hard", action="store_true", help="Completely wipe state")
     parser.add_argument("--reuse-run", action="store_true", help="Keep existing run_id instead of creating a new one")
+    parser.add_argument("--clean-artifacts", action="store_true", help="Delete the current run's artifact directory before resetting")
     args = parser.parse_args()
 
     base_path = str(Path(__file__).resolve().parent.parent)
@@ -32,6 +33,8 @@ def main():
     registry = StageRegistry(config_path)
     sm = StateMachine(registry, base_path)
 
+    if args.clean_artifacts:
+        sm.clean_run_artifacts()
     if args.hard:
         sm.reset()
         print("State machine fully reset.")

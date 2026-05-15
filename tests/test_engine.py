@@ -1301,3 +1301,65 @@ class TestRunIdentity:
         run_id = state_machine.get_var("run_id")
         assert run_id is not None
         assert len(run_id) == 36  # UUID format
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TestCleanArtifacts — --clean-artifacts (task-080)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestCleanArtifacts:
+    def test_clean_removes_current_run_artifacts(self, state_machine):
+        state_machine.initialize("start")
+        run_id = state_machine.get_var("run_id")
+        run_dir = state_machine.base_path / "artifacts" / "runs" / run_id
+        adir = run_dir / "analyze"
+        adir.mkdir(parents=True)
+        (adir / "findings.md").write_text("test", encoding="utf-8")
+        assert run_dir.exists()
+
+        state_machine.clean_run_artifacts()
+        assert not run_dir.exists(), "Current run dir should be deleted"
+
+    def test_clean_preserves_old_run_dirs(self, state_machine):
+        state_machine.initialize("start")
+        run_id_1 = state_machine.get_var("run_id")
+        # Create artifacts for run 1
+        run_dir_1 = state_machine.base_path / "artifacts" / "runs" / run_id_1
+        run_dir_1.mkdir(parents=True)
+        (run_dir_1 / "data.txt").write_text("run 1 data", encoding="utf-8")
+
+        # Start a fresh run (different run_id)
+        state_machine.reset()
+        state_machine.initialize("start")
+        run_id_2 = state_machine.get_var("run_id")
+        assert run_id_1 != run_id_2
+        run_dir_2 = state_machine.base_path / "artifacts" / "runs" / run_id_2
+        run_dir_2.mkdir(parents=True)
+        (run_dir_2 / "data.txt").write_text("run 2 data", encoding="utf-8")
+
+        # Clean current (run 2) artifacts
+        state_machine.clean_run_artifacts()
+        assert not run_dir_2.exists(), "Current run dir should be deleted"
+        assert run_dir_1.exists(), "Old run dir must remain"
+        assert (run_dir_1 / "data.txt").read_text(encoding="utf-8") == "run 1 data"
+
+    def test_clean_noop_when_no_run_id(self, state_machine):
+        # No run_id set — clean should not crash
+        state_machine._state["variables"] = {}
+        state_machine.clean_run_artifacts()  # Should not raise
+
+    def test_clean_noop_when_dir_does_not_exist(self, state_machine):
+        state_machine.initialize("start")
+        # Don't create any artifacts
+        state_machine.clean_run_artifacts()  # Should not raise
+
+    def test_no_cleanup_without_flag(self, state_machine):
+        state_machine.initialize("start")
+        run_id = state_machine.get_var("run_id")
+        run_dir = state_machine.base_path / "artifacts" / "runs" / run_id
+        run_dir.mkdir(parents=True)
+        (run_dir / "data.txt").write_text("keep me", encoding="utf-8")
+
+        # Normal reset without cleaning
+        state_machine.reset()
+        assert run_dir.exists(), "Artifacts preserved without --clean-artifacts flag"
