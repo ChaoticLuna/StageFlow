@@ -1,0 +1,1 @@
+Beta pipeline: process inventory data with warehouse filtering

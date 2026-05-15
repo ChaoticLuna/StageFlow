@@ -1,0 +1,1 @@
+Alpha pipeline: process sales data with regional aggregation

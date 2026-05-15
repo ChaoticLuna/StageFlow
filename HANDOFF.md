@@ -2,7 +2,57 @@
 
 > **最后更新**: 2026-05-15
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: cleanup — removed duplicate TestStageflowMainModule class
+> **交接原因**: task-084 — enhanced run-scoped artifact demo with real file environments
+
+---
+
+## task-084 会话总结 (2026-05-15)
+
+### 做了什么
+1. **Created real input environments** under examples/run_scoped_artifacts/:
+   - 	ask_a/input.txt — Alpha pipeline data
+   - 	ask_b/input.txt — Beta pipeline data (distinct content)
+2. **Rewrote 
+un_demo.py** — now reads from real task dirs, embeds input content in artifacts, proves 5 assertions:
+   - Assertion 1: Different run IDs
+   - Assertion 2: Run A artifacts do NOT unlock run B transitions
+   - Assertion 3: Run A stale review does NOT block run B done gate
+   - Assertion 4: Run B own changes_requested DOES block done gate
+   - Assertion 5: Output files contain correct task-specific data, no cross-contamination
+3. **Expanded 	ests/test_run_demo.py** from 5 to 15 tests across 6 classes:
+   - TestDemoExitAndBanner (2), TestInputEnvironments (3), TestRunIdentity (2),
+   - TestArtifactIsolation (3), TestOutputCorrectness (3), TestArtifactDirectories (2)
+
+### 测试结果
+- run_demo.py: ALL DEMOS PASSED (5/5 assertions)
+- test_run_demo.py: 15/15 passed
+- Full suite: 1063 passed, 1 skipped
+
+--- — Phase 27 audit + 31 in-process CLI tests + coverage push
+
+---
+
+## task-083 会话总结 (2026-05-15)
+
+### 做了什么
+1. **Audited Phase 27** — reviewed all components for correctness:
+   - `StateMachine.initialize()`: run_id creation + reuse_run correct
+   - `StateMachine.reset()`: proper state clearing
+   - `StateMachine.clean_run_artifacts()`: scoped to current run only
+   - CLI `cmd_reset`: --hard, --reuse-run, --clean-artifacts all correct
+   - stages.yaml: all 11 paths use {{var.run_id}}
+   - HybridWorkflow: {run_artifact_dir} interpolation correct
+   - Editor: templates + placeholders preserve {{var.run_id}}
+   - No bugs found. All behavior matches intended model.
+2. **Added `TestMainInProcess` class** — 31 in-process tests calling `main()` directly:
+   - Tests cover all CLI commands: status, list, next, back, jump, reset, graph, init, check, cond, generate, mcp
+   - Uses monkeypatch for sys.argv + SystemExit handling
+   - Contributes to coverage (subprocess tests don't)
+
+### 测试结果
+- 1053 passed, 1 skipped, 0 failed
+- __main__.py: 28% → 89% coverage
+- Overall: 86% → 96% coverage
 
 ---
 
