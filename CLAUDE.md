@@ -18,9 +18,9 @@ StageFlow 是一套**声明式、可扩展的阶段化状态机框架**，用于
 ## 项目统计
 
 ```
-Framework files:  17 modules (~2,100 lines)
-Test files:      21 files (~12,000 lines)
-Tests:           1017 passed, 0 failed (1018 collected, 1 skipped)
+Framework files:  18 modules (~2,500 lines)
+Test files:      22 files (~13,000 lines)
+Tests:           1154 passed, 0 failed (1155 collected, 1 skipped)
 Coverage:        84% overall (core: engine 100%, schema 100%, audit 100%, registry 100%)
 mypy:            clean (17 source files, 0 issues)
 Conditions:       30 types
@@ -32,21 +32,29 @@ Extensibility:    1,000 stages verified
 ## 快速开始
 
 ```bash
-# 安装
+# 安装（全局一次）
 pip install -e .
 
-# 查看状态
-python -m stageflow status
+# 在任何目录初始化 StageFlow 项目（类似 git init）
+stageflow init
 
-# 推进阶段
-python scripts/stage_next.py
+# 开始一个新的运行
+stageflow start
+
+# 查看当前状态
+stageflow status
+
+# 推进到下一阶段（框架自动判定条件）
+stageflow next
 
 # 可视化状态机
-python -m stageflow graph
+stageflow graph
 
 # 列出所有阶段和条件类型
-python -m stageflow list
+stageflow list
 ```
+
+StageFlow 像 Git 一样工作——从当前目录向上查找项目根。你可以在仓库的任何子目录中运行命令。找不到项目时，命令会提示你运行 `stageflow init`。
 
 ## 核心架构
 
@@ -57,11 +65,12 @@ stageflow/
 │   ├── registry.py      # 阶段注册表（动态增删 Stage/Transition）
 │   ├── engine.py        # 状态机引擎（转移判定、回退、变量、生命周期 Hook）
 │   ├── guard.py         # 工具守卫（Claude Code Hook 集成）
-│   └── audit.py         # 审计日志（JSONL 格式，阶段计时）
+│   ├── audit.py         # 审计日志（JSONL 格式，阶段计时）
+│   └── discovery.py     # 项目根发现（向上查找 .stageflow/ 或 legacy 标记）
 ├── config/
-│   └── stages.yaml      # 声明式阶段定义（唯一配置文件）
+│   └── stages.yaml      # 声明式阶段定义（默认配置）
 ├── artifacts/           # 各阶段产物目录
-└── __main__.py          # CLI 入口
+└── __main__.py          # CLI 入口（Git-like 命令）
 ```
 
 ## 声明式阶段配置
@@ -197,48 +206,65 @@ reg.register_transition("wrap_up", "deploy", conditions=[{"always": True}])
 ok, errors = reg.validate()
 ```
 
-## 阶段转移脚本
+## CLI 命令（Git-like）
 
-所有阶段转移必须通过专用脚本：
+所有命令从当前目录向上查找项目根，类似 Git。支持从仓库任意子目录运行。
 
-| 脚本 | 用途 |
-|------|------|
-| `python scripts/stage_next.py` | 进入下一阶段（自动选择） |
-| `python scripts/stage_next.py <target>` | 进入指定阶段 |
-| `python scripts/stage_next.py --force` | 强制进入（跳过条件） |
-| `python scripts/stage_next.py --dry-run` | 检查条件但不转移 |
-| `python scripts/stage_next.py --list` | 查看可进入的阶段 |
-| `python scripts/stage_status.py` | 查看当前阶段状态 |
-| `python scripts/stage_reset.py` | 重置到初始阶段 |
-| `python scripts/stage_reset.py --reuse-run` | 重置但保留 run_id |
-| `python scripts/stage_reset.py --clean-artifacts` | 重置并清理当前运行产物 |
-| `python scripts/stage_reset.py --hard` | 完全清除状态文件 |
-| `python scripts/stage_jump.py <target>` | 跳转到指定阶段 |
-| `python scripts/stage_back.py` | 回退到上一阶段 |
-
-## CLI 命令
+### 项目管理
 
 ```bash
-python -m stageflow status [--verbose | --json]   # 查看状态
-python -m stageflow next [target] [--force]       # 推进阶段
-python -m stageflow back [target]                 # 回退
-python -m stageflow jump <target> [--force]       # 跳转
-python -m stageflow reset [stage]                  # 重置（新运行）
-python -m stageflow reset [stage] --reuse-run     # 重置（保留 run_id）
-python -m stageflow reset [stage] --clean-artifacts  # 重置并清理产物
-python -m stageflow reset --hard                  # 完全清除状态
-python -m stageflow graph                          # 生成 Mermaid 流程图
-python -m stageflow list [--json]                  # 列出所有阶段和转移
-python -m stageflow check <target> [--json]        # 检查转移条件
-python -m stageflow cond <type> [--params JSON]    # 测试条件类型
+stageflow init [path] [--force] [--start]  # 初始化新项目（类似 git init）
+stageflow migrate [--force]                # 迁移 legacy 项目到新 .stageflow/ 格式
 ```
+
+### 运行控制
+
+```bash
+stageflow start [stage]                    # 开始新运行（默认使用 YAML 第一个阶段）
+stageflow next [target] [--force] [--dry-run]  # 推进到下一阶段（框架判定条件）
+stageflow back [target]                    # 回退到上一阶段
+stageflow jump <target> [--force --reason "..."]  # 跳转到指定阶段
+stageflow reset [--hard] [--clean-artifacts]   # 清除当前运行状态
+```
+
+### 信息查询
+
+```bash
+stageflow status [--verbose | --json]      # 查看当前状态
+stageflow list [--json]                    # 列出所有阶段和转移
+stageflow check <target> [--json]          # 检查转移条件（dry-run）
+stageflow graph                            # 生成 Mermaid 流程图
+stageflow cond <type> [--params JSON] [--list]  # 测试条件类型
+```
+
+### 其他
+
+```bash
+stageflow hook                             # Claude Code PreToolUse Hook 入口
+stageflow generate <desc> [--template T]   # LLM 工作流生成
+stageflow mcp                              # 启动 MCP Server
+```
+
+### 兼容脚本（Legacy）
+
+以下脚本保留以兼容旧工作流，推荐使用 CLI 命令替代：
+
+| 脚本 | CLI 等价 |
+|------|----------|
+| `python scripts/stage_next.py` | `stageflow next` |
+| `python scripts/stage_status.py` | `stageflow status` |
+| `python scripts/stage_reset.py` | `stageflow reset` |
+| `python scripts/stage_jump.py <target>` | `stageflow jump <target>` |
+| `python scripts/stage_back.py` | `stageflow back` |
 
 ## 框架特性
 
 ### 工具拦截
-- Claude Code PreToolUse Hook (`stage_guard.py`) 自动拦截非授权工具
+- 全局 Hook 入口 `stageflow hook` — 项目通过 `.claude/settings.json` 配置，无需复制 hook 脚本
+- Claude Code PreToolUse Hook 自动拦截非授权工具
+- 从当前工作目录发现项目根，支持在子目录中运行
 - 每阶段独立的工具白名单（支持通配符 `Bash(git *)`）
-- 违规日志自动记录到 `.claude/guard_violations.jsonl`
+- 违规日志自动记录到 `<项目根>/.stageflow/guard_violations.jsonl`
 
 ### 生命周期 Hook
 - `on_enter`: 进入阶段时执行的 Shell/Python 命令
@@ -261,13 +287,13 @@ python -m stageflow cond <type> [--params JSON]    # 测试条件类型
 - 可在条件中通过 `python_expr` 访问
 
 ### 运行身份与产物隔离 (Run Identity)
-- `initialize()` 自动生成唯一 `run_id` (UUID4)，存储在 `variables.run_id`
+- `stageflow start` 开始新运行，自动生成唯一 `run_id` (UUID4)，存储在 `variables.run_id`
 - 所有默认产物路径使用 `artifacts/runs/{{var.run_id}}/<stage>/` 隔离不同运行
-- `python -m stageflow reset <stage>` — 开始新运行（新 `run_id`），旧产物保留在磁盘
-- `python -m stageflow reset <stage> --reuse-run` — 保留当前 `run_id`，覆盖阶段状态
-- `python -m stageflow reset <stage> --clean-artifacts` — 删除当前运行产物目录后重置
-- 支持组合使用：`--reuse-run --clean-artifacts` = 清理当前运行产物后重新开始同一运行
-- **警告**: `reset` 仅重置 StageFlow 状态文件；产物保留在磁盘上，除非显式传递 `--clean-artifacts`
+- `stageflow reset` — 清除当前运行状态（不创建新运行）
+- `stageflow reset --clean-artifacts` — 清除状态并删除当前运行的产物目录
+- `stageflow reset --hard` — 完全清除状态文件
+- `stageflow start [stage]` — 在 reset 后开始新运行（新 `run_id`），旧产物保留在磁盘
+- **警告**: `reset` 仅清除 StageFlow 状态；产物保留在磁盘上，除非显式传递 `--clean-artifacts`
 
 ### 重试与回退
 - 每阶段独立的重试计数器
@@ -281,8 +307,8 @@ python -m stageflow cond <type> [--params JSON]    # 测试条件类型
 
 ## 工作约束（Claude 模型须知）
 
-1. **不能手动修改** `.claude/current_stage.json` — 状态由框架管理
-2. **不能跳过阶段** — 必须通过 `stage_next.py` 进入下一阶段
+1. **不能手动修改** 状态文件 — 状态由框架管理
+2. **不能跳过阶段** — 必须通过 `stageflow next` 进入下一阶段
 3. **阶段内工具受限** — 使用未授权工具会被 Hook 拦截
 4. **条件由框架判断** — 模型不能自行决定"条件已满足"
 5. **失败自动回退** — verify 失败回退 implement，多次失败回退 plan
@@ -301,6 +327,7 @@ auto_workflow/
 │   │   ├── engine.py          # StateMachine + 多重重试 + 生命周期
 │   │   ├── guard.py           # Tool Guard + Claude Hook
 │   │   ├── audit.py           # AuditLogger
+│   │   ├── discovery.py       # 项目根发现（向上查找 .stageflow/）
 │   │   └── mcp_server.py      # MCP Server (FastMCP)
 │   ├── config/
 │   │   └── stages.yaml        # 10 阶段 + 11 转移声明
@@ -325,10 +352,11 @@ auto_workflow/
 │   └── hooks_on.py
 ├── tests/
 │   ├── conftest.py            # Fixtures + Pytest 插件
-│   ├── test_conditions.py     # 267 tests
+│   ├── test_conditions.py     # 282 tests
 │   ├── test_registry.py       # 93 tests
 │   ├── test_engine.py         # 92 tests
 │   ├── test_guard.py          # 23 tests
+│   ├── test_discovery.py      # 18 tests
 │   ├── test_edge_cases.py     # 11 tests
 │   ├── test_e2e.py            # 25 tests
 │   ├── test_extensibility.py  # 28 tests
@@ -340,18 +368,24 @@ auto_workflow/
 │   ├── test_generator.py      # 50 tests
 │   ├── test_hooks_integration.py # 17 tests
 │   ├── test_hybrid.py         # 30 tests
-│   ├── test_main.py           # 58 tests
+│   ├── test_main.py           # 124 tests
 │   ├── test_orchestrator.py   # 33 tests
 │   ├── test_perf.py           # 7 tests
 │   ├── test_server.py         # 49 tests
-│   ├── test_audit.py          # 15 tests
-│   ├── test_mcp_server.py     # 11 tests
+│   ├── test_audit.py          # 18 tests
+│   ├── test_mcp_server.py     # 19 tests
 │   └── test_stress.py         # 18 tests
 ├── .claude/
-│   ├── settings.json          # PreToolUse Hook 配置
+│   ├── settings.json          # PreToolUse Hook 配置（指向 stageflow hook）
 │   ├── settings.local.json
+│   ├── current_stage.json     # Legacy 状态文件（新项目使用 .stageflow/）
 │   └── hooks/
-│       └── stage_guard.py     # Claude Code Hook 入口
+│       └── stage_guard.py     # Legacy Hook 入口（新项目使用 stageflow hook）
+├── .stageflow/                # 新项目元数据目录
+│   ├── config/
+│   │   └── stages.yaml        # 项目阶段配置
+│   ├── current_stage.json     # 当前运行状态
+│   └── guard_violations.jsonl # 工具违规日志
 ├── .ralph/                    # Ralph Agent 数据
 ├── pyproject.toml             # pip install -e .
 └── CLAUDE.md                  # 本文档

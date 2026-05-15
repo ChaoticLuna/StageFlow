@@ -518,28 +518,25 @@ python -m stageflow back               # Back to first incoming stage
 python -m stageflow back analyze       # Back to specific stage
 ```
 
-### `jump <target> [--force]`
+### `jump <target> [--force] [--reason "..."]`
 
-Jump directly to any stage.
+Jump directly to any stage. `--force` requires `--reason` for audit trail.
 
 ```
 python -m stageflow jump verify
-python -m stageflow jump implement --force
+python -m stageflow jump implement --force --reason "emergency rollback"
 ```
 
-### `reset [stage] [--hard] [--reuse-run] [--clean-artifacts]`
+### `reset [--hard] [--clean-artifacts]`
 
-Reset state machine. Without `--hard`, re-initializes at the first stage (or specified one).
+Clear the active run state. Use `stageflow start` to begin a new run afterward.
 
 **⚠ Warning**: `reset` changes StageFlow state only; artifacts are preserved on disk unless `--clean-artifacts` is passed.
 
 ```
-python -m stageflow reset                        # Reset to first stage (new run_id)
-python -m stageflow reset analyze                # Reset to specific stage
+python -m stageflow reset                        # Clear current run state
 python -m stageflow reset --hard                 # Full reset — delete state file
-python -m stageflow reset pick --reuse-run       # Reset but keep existing run_id
-python -m stageflow reset pick --clean-artifacts # Delete current run artifacts, then reset
-python -m stageflow reset pick --reuse-run --clean-artifacts  # Clean + reuse same run_id
+python -m stageflow reset --clean-artifacts      # Delete current run artifacts, then reset
 ```
 
 ### `graph`
@@ -558,12 +555,33 @@ List all stages, transitions, and conditions. Runs `validate()` and shows errors
 python -m stageflow list
 ```
 
-### `init <stage>`
+### `init [path] [--force] [--start]`
 
-Manually initialize the state machine at a stage.
+Bootstrap a new StageFlow project (like `git init`). Creates `.stageflow/config/stages.yaml`, `.claude/settings.json`, and `artifacts/runs/`. Does NOT start a run unless `--start` is given.
 
 ```
-python -m stageflow init pick
+python -m stageflow init                        # Initialize current directory
+python -m stageflow init /path/to/project       # Initialize specific directory
+python -m stageflow init --force                # Overwrite existing config
+python -m stageflow init --start                # Init and start a run at first stage
+```
+
+### `start [stage]`
+
+Begin a new StageFlow run. Without a stage argument, starts at the first YAML stage.
+
+```
+python -m stageflow start                       # Start at entry (first YAML stage)
+python -m stageflow start analyze               # Start at specific stage
+```
+
+### `migrate [--force]`
+
+Convert a legacy StageFlow project (stageflow/config/stages.yaml + .claude/current_stage.json) to new-style (.stageflow/). Preserves old files.
+
+```
+python -m stageflow migrate                     # Migrate discovered project
+python -m stageflow migrate --force             # Overwrite existing .stageflow/
 ```
 
 ### `check <target>`
@@ -583,11 +601,19 @@ python -m stageflow cond file_exists --params '{"path": "README.md"}'
 python -m stageflow cond always
 ```
 
-### Scripts
+### Other Commands
 
-Located in `scripts/`:
+```
+python -m stageflow hook                        # Claude Code PreToolUse Hook entrypoint
+python -m stageflow generate <desc>             # LLM workflow generator
+python -m stageflow mcp                         # Start MCP server (stdio)
+```
 
-| Script | Equivalent |
+### Legacy Scripts
+
+Located in `scripts/` (recommended: use `stageflow <command>` CLI instead):
+
+| Script | CLI Equivalent |
 |--------|------------|
 | `python scripts/stage_next.py [target]` | `stageflow next` |
 | `python scripts/stage_status.py` | `stageflow status` |
