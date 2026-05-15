@@ -72,9 +72,9 @@ Evaluate a list of conditions. Returns `(True, msgs)` only if all pass. Results 
 from stageflow.core.conditions import evaluate_all
 
 ok, msgs = evaluate_all([
-    {"file_exists": "artifacts/analyze/findings.md"},
-    {"file_contains": {"path": "artifacts/analyze/findings.md", "pattern": "Root Cause"}},
-], base_path=".", variables={"issue_id": "BUG-42"})
+    {"file_exists": "artifacts/runs/{{var.run_id}}/analyze/findings.md"},
+    {"file_contains": {"path": "artifacts/runs/{{var.run_id}}/analyze/findings.md", "pattern": "Root Cause"}},
+], base_path=".", variables={"run_id": "550e8400-e29b-...", "issue_id": "BUG-42"})
 ```
 
 | Parameter | Type | Default | Description |
@@ -313,8 +313,9 @@ ok, msgs = sm.transition_to("analyze")
 
 | Method | Signature | Returns | Description |
 |--------|-----------|---------|-------------|
-| `initialize` | `(stage: str)` | `Tuple[bool, list[str]]` | Set starting stage; runs `on_enter` hooks and logs `stage_enter` audit event |
+| `initialize` | `(stage: str, reuse_run: bool = False)` | `Tuple[bool, list[str]]` | Set starting stage; generates a UUID `run_id` in variables. If `reuse_run=True`, preserves the existing `run_id` from current state |
 | `reset` | `()` | — | Clear all state; delete state file from disk |
+| `clean_run_artifacts` | `()` | — | Delete only the current run's artifact directory (`artifacts/runs/<run_id>/`); other runs and the `artifacts/` tree are left untouched. No-op when no `run_id` is set |
 
 **Transition Methods:**
 
@@ -354,13 +355,20 @@ ok, msgs = sm.transition_to("analyze")
 ```python
 # Example: full transition flow
 sm = StateMachine(reg, "/project")
-sm.initialize("pick")                       # Sets stage, runs on_enter hooks
+sm.initialize("pick")                       # Sets stage, generates run_id
+run_id = sm.get_var("run_id")               # e.g., "550e8400-e29b-..."
 sm.set_var("issue_id", "BUG-42")
 ok, msgs = sm.can_transition_to("analyze")  # Dry-run check
 if ok:
     sm.transition_to("analyze")             # Real transition
 print(sm.status()["current_stage"])         # "analyze"
-print(sm.get_var("issue_id"))               # "BUG-42"
+print(sm.get_var("run_id"))                 # UUID persisted in state file
+
+# Artifact cleanup (scoped to current run only)
+sm.clean_run_artifacts()                    # Deletes artifacts/runs/<run_id>/
+
+# Reuse the same run_id after reset
+sm.initialize("pick", reuse_run=True)        # Keeps previous run_id
 ```
 
 **Internal Methods** (for testing/framework use):
@@ -519,14 +527,19 @@ python -m stageflow jump verify
 python -m stageflow jump implement --force
 ```
 
-### `reset [stage] [--hard]`
+### `reset [stage] [--hard] [--reuse-run] [--clean-artifacts]`
 
 Reset state machine. Without `--hard`, re-initializes at the first stage (or specified one).
 
+**⚠ Warning**: `reset` changes StageFlow state only; artifacts are preserved on disk unless `--clean-artifacts` is passed.
+
 ```
-python -m stageflow reset              # Reset to first stage
-python -m stageflow reset analyze      # Reset to specific stage
-python -m stageflow reset --hard       # Full reset — delete state file
+python -m stageflow reset                        # Reset to first stage (new run_id)
+python -m stageflow reset analyze                # Reset to specific stage
+python -m stageflow reset --hard                 # Full reset — delete state file
+python -m stageflow reset pick --reuse-run       # Reset but keep existing run_id
+python -m stageflow reset pick --clean-artifacts # Delete current run artifacts, then reset
+python -m stageflow reset pick --reuse-run --clean-artifacts  # Clean + reuse same run_id
 ```
 
 ### `graph`

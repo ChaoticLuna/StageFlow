@@ -2,7 +2,33 @@
 
 > **最后更新**: 2026-05-15
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-080 complete — artifact cleanup controls added
+> **交接原因**: task-081 complete — docs updated for run/resume behavior
+
+---
+
+## task-081 会话总结 (2026-05-15)
+
+### 做了什么
+1. **Updated `CLAUDE.md`**:
+   - Added "运行身份与产物隔离" section explaining run_id lifecycle, --reuse-run, --clean-artifacts
+   - Added warning: reset changes state only; artifacts preserved unless --clean-artifacts
+   - Updated CLI commands section with all new flags
+   - Updated scripts table with --reuse-run, --clean-artifacts, --hard entries
+   - Updated variable interpolation example to use run-scoped paths
+   - Updated test counts (1017 passed) and per-file counts (engine 92, e2e 25, hybrid 30)
+2. **Updated `docs/api_reference.md`**:
+   - Updated `initialize()` signature to include `reuse_run=False`
+   - Added `clean_run_artifacts()` method documentation
+   - Updated CLI `reset` section with --reuse-run, --clean-artifacts examples and warning
+   - Updated example code to demonstrate run_id and clean_run_artifacts()
+   - Updated evaluate_all example to use run-scoped paths
+
+### 当前状态快照
+```
+Tests:           1017 passed, 0 failed, 1 skipped
+Docs updated:    CLAUDE.md + api_reference.md
+fix_plan.md:     81/82 tasks complete
+```
 
 ---
 

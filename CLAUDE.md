@@ -20,7 +20,7 @@ StageFlow 是一套**声明式、可扩展的阶段化状态机框架**，用于
 ```
 Framework files:  17 modules (~2,100 lines)
 Test files:      21 files (~12,000 lines)
-Tests:           1000 passed, 0 failed (1001 collected, 1 skipped)
+Tests:           1017 passed, 0 failed (1018 collected, 1 skipped)
 Coverage:        84% overall (core: engine 100%, schema 100%, audit 100%, registry 100%)
 mypy:            clean (17 source files, 0 issues)
 Conditions:       30 types
@@ -132,16 +132,17 @@ transitions:
   - from: analyze
     to: plan
     conditions:
-      - file_exists: "artifacts/{{var.issue_id}}/findings.md"
+      - file_exists: "artifacts/runs/{{var.run_id}}/analyze/findings.md"
       - file_contains:
-          path: "artifacts/{{var.issue_id}}/findings.md"
+          path: "artifacts/runs/{{var.run_id}}/analyze/findings.md"
           pattern: "Root Cause"
 ```
 
-变量由 StateMachine 的 `set_var()` 方法设置：
+变量由 StateMachine 的 `set_var()` 方法设置，`run_id` 在 `initialize()` 时自动生成：
 ```python
+sm.initialize("analyze")  # 自动创建 variables.run_id
 sm.set_var("issue_id", "BUG-42")
-sm.transition_to("plan")  # 条件自动使用 BUG-42
+sm.transition_to("plan")  # 条件自动使用 run_id 和 BUG-42
 ```
 
 ## 自定义条件（注册机制）
@@ -209,21 +210,27 @@ ok, errors = reg.validate()
 | `python scripts/stage_next.py --list` | 查看可进入的阶段 |
 | `python scripts/stage_status.py` | 查看当前阶段状态 |
 | `python scripts/stage_reset.py` | 重置到初始阶段 |
+| `python scripts/stage_reset.py --reuse-run` | 重置但保留 run_id |
+| `python scripts/stage_reset.py --clean-artifacts` | 重置并清理当前运行产物 |
+| `python scripts/stage_reset.py --hard` | 完全清除状态文件 |
 | `python scripts/stage_jump.py <target>` | 跳转到指定阶段 |
 | `python scripts/stage_back.py` | 回退到上一阶段 |
 
 ## CLI 命令
 
 ```bash
-python -m stageflow status         # 查看状态
-python -m stageflow next [target]  # 推进阶段
-python -m stageflow back [target]  # 回退
-python -m stageflow jump <target>  # 跳转
-python -m stageflow reset          # 重置
-python -m stageflow graph          # 生成 Mermaid 流程图
-python -m stageflow list           # 列出所有阶段和转移
-python -m stageflow check <target> # 检查转移条件
-python -m stageflow cond <type>    # 测试条件类型
+python -m stageflow status [--verbose | --json]   # 查看状态
+python -m stageflow next [target] [--force]       # 推进阶段
+python -m stageflow back [target]                 # 回退
+python -m stageflow jump <target> [--force]       # 跳转
+python -m stageflow reset [stage]                  # 重置（新运行）
+python -m stageflow reset [stage] --reuse-run     # 重置（保留 run_id）
+python -m stageflow reset [stage] --clean-artifacts  # 重置并清理产物
+python -m stageflow reset --hard                  # 完全清除状态
+python -m stageflow graph                          # 生成 Mermaid 流程图
+python -m stageflow list [--json]                  # 列出所有阶段和转移
+python -m stageflow check <target> [--json]        # 检查转移条件
+python -m stageflow cond <type> [--params JSON]    # 测试条件类型
 ```
 
 ## 框架特性
@@ -252,6 +259,15 @@ python -m stageflow cond <type>    # 测试条件类型
 - `set_var(key, value)` / `get_var(key)` 存储阶段变量
 - 变量跨阶段持久化
 - 可在条件中通过 `python_expr` 访问
+
+### 运行身份与产物隔离 (Run Identity)
+- `initialize()` 自动生成唯一 `run_id` (UUID4)，存储在 `variables.run_id`
+- 所有默认产物路径使用 `artifacts/runs/{{var.run_id}}/<stage>/` 隔离不同运行
+- `python -m stageflow reset <stage>` — 开始新运行（新 `run_id`），旧产物保留在磁盘
+- `python -m stageflow reset <stage> --reuse-run` — 保留当前 `run_id`，覆盖阶段状态
+- `python -m stageflow reset <stage> --clean-artifacts` — 删除当前运行产物目录后重置
+- 支持组合使用：`--reuse-run --clean-artifacts` = 清理当前运行产物后重新开始同一运行
+- **警告**: `reset` 仅重置 StageFlow 状态文件；产物保留在磁盘上，除非显式传递 `--clean-artifacts`
 
 ### 重试与回退
 - 每阶段独立的重试计数器
@@ -311,10 +327,10 @@ auto_workflow/
 │   ├── conftest.py            # Fixtures + Pytest 插件
 │   ├── test_conditions.py     # 267 tests
 │   ├── test_registry.py       # 93 tests
-│   ├── test_engine.py         # 83 tests
+│   ├── test_engine.py         # 92 tests
 │   ├── test_guard.py          # 23 tests
 │   ├── test_edge_cases.py     # 11 tests
-│   ├── test_e2e.py            # 22 tests
+│   ├── test_e2e.py            # 25 tests
 │   ├── test_extensibility.py  # 28 tests
 │   ├── test_extensibility_quick.py # 1 test
 │   ├── test_agent.py          # 35 tests
@@ -323,7 +339,7 @@ auto_workflow/
 │   ├── test_concurrency.py    # 21 tests
 │   ├── test_generator.py      # 50 tests
 │   ├── test_hooks_integration.py # 17 tests
-│   ├── test_hybrid.py         # 25 tests
+│   ├── test_hybrid.py         # 30 tests
 │   ├── test_main.py           # 58 tests
 │   ├── test_orchestrator.py   # 33 tests
 │   ├── test_perf.py           # 7 tests
