@@ -126,6 +126,50 @@ class TestStageflowCLI:
         data = json.loads(r.stdout)
         assert "current_stage" in data
 
+
+
+    # ── resume / session-change (task-085) ────────────────────────────
+
+    def test_resume_keeps_run_id_in_new_session(self):
+        """A new StateMachine session retains the same run_id from disk."""
+        r1 = _stageflow("init", "pick")
+        assert r1.returncode == 0, r1.stderr
+        data1 = json.loads(_stageflow("status", "--json").stdout)
+        rid1 = data1["variables"]["run_id"]
+
+        data2 = json.loads(_stageflow("status", "--json").stdout)
+        assert data2["variables"]["run_id"] == rid1
+
+    def test_status_run_id_changes_after_reset(self):
+        """Plain reset creates a new run_id (CLI-level)."""
+        _stageflow("init", "pick")
+        data1 = json.loads(_stageflow("status", "--json").stdout)
+        rid1 = data1["variables"]["run_id"]
+
+        r = _stageflow("reset", "pick")
+        assert r.returncode == 0, r.stderr
+        data2 = json.loads(_stageflow("status", "--json").stdout)
+        rid2 = data2["variables"]["run_id"]
+
+        assert rid1 != rid2, (
+            f"Plain reset must create new run_id: {rid1} -> {rid2}"
+        )
+
+    def test_status_run_id_preserved_after_reset_reuse(self):
+        """reset --reuse-run preserves the same run_id (CLI-level)."""
+        _stageflow("init", "pick")
+        data1 = json.loads(_stageflow("status", "--json").stdout)
+        rid1 = data1["variables"]["run_id"]
+
+        r = _stageflow("reset", "pick", "--reuse-run")
+        assert r.returncode == 0, r.stderr
+        data2 = json.loads(_stageflow("status", "--json").stdout)
+        rid2 = data2["variables"]["run_id"]
+
+        assert rid1 == rid2, (
+            f"reset --reuse-run must preserve run_id: {rid1} != {rid2}"
+        )
+
     def test_next_dry_run(self):
         r = _stageflow("next", "--dry-run")
         assert "Dry-run" in r.stdout or r.returncode in (0, 1), r.stderr

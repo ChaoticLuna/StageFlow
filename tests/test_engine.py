@@ -1363,3 +1363,64 @@ class TestCleanArtifacts:
         # Normal reset without cleaning
         state_machine.reset()
         assert run_dir.exists(), "Artifacts preserved without --clean-artifacts flag"
+
+
+# =============================================================================
+# TestResumeSemantics — session-change resume (task-085)
+# =============================================================================
+
+class TestResumeSemantics:
+    def test_fresh_sm_loads_existing_state(self, state_machine):
+        state_machine.initialize("start")
+        run_id_1 = state_machine.get_var("run_id")
+        state_machine.transition_to("middle")
+
+        sm2 = StateMachine(state_machine.registry, str(state_machine.base_path))
+        assert sm2.current_stage == "middle"
+        assert sm2.get_var("run_id") == run_id_1
+
+    def test_resume_can_continue_work(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.transition_to("middle")
+
+        sm2 = StateMachine(state_machine.registry, str(state_machine.base_path))
+        ok, msgs = sm2.transition_to("end")
+        assert ok, f"Resumed session should continue transitions: {msgs}"
+        assert sm2.current_stage == "end"
+
+    def test_reset_creates_new_run_id_cross_session(self, state_machine):
+        state_machine.initialize("start")
+        run_id_1 = state_machine.get_var("run_id")
+        state_machine.transition_to("middle")
+
+        sm2 = StateMachine(state_machine.registry, str(state_machine.base_path))
+        sm2.reset()
+        sm2.initialize("start")
+        run_id_2 = sm2.get_var("run_id")
+        assert run_id_1 != run_id_2
+
+    def test_reuse_run_preserves_id_cross_session(self, state_machine):
+        state_machine.initialize("start")
+        run_id_1 = state_machine.get_var("run_id")
+        state_machine.transition_to("middle")
+
+        sm2 = StateMachine(state_machine.registry, str(state_machine.base_path))
+        sm2.initialize("start", reuse_run=True)
+        run_id_2 = sm2.get_var("run_id")
+        assert run_id_1 == run_id_2
+
+    def test_multiple_session_reloads_keep_same_run_id(self, state_machine):
+        state_machine.initialize("start")
+        run_id_1 = state_machine.get_var("run_id")
+
+        sm2 = StateMachine(state_machine.registry, str(state_machine.base_path))
+        assert sm2.get_var("run_id") == run_id_1
+
+        sm3 = StateMachine(state_machine.registry, str(state_machine.base_path))
+        assert sm3.get_var("run_id") == run_id_1
+
+        sm3.transition_to("middle")
+        sm4 = StateMachine(state_machine.registry, str(state_machine.base_path))
+        assert sm4.current_stage == "middle"
+        ok, _ = sm4.transition_to("end")
+        assert ok

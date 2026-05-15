@@ -2,7 +2,31 @@
 
 > **最后更新**: 2026-05-15
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-084 — enhanced run-scoped artifact demo with real file environments
+> **交接原因**: task-085 — resume semantics tests for session-change scenarios
+
+---
+
+## task-085 会话总结 (2026-05-15)
+
+### 做了什么
+1. **Added TestResumeSemantics** to 	ests/test_engine.py (5 tests):
+   - 	est_fresh_sm_loads_existing_state — new SM instance loads same stage + run_id
+   - 	est_resume_can_continue_work — fresh SM continues transitions from saved state
+   - 	est_reset_creates_new_run_id_cross_session — plain reset generates new run_id
+   - 	est_reuse_run_preserves_id_cross_session — initialize(reuse_run=True) keeps same run_id
+   - 	est_multiple_session_reloads_keep_same_run_id — any number of reloads preserve run_id
+2. **Added CLI-level resume tests** to 	ests/test_main.py (3 tests):
+   - 	est_resume_keeps_run_id_in_new_session — status --json shows same run_id across calls
+   - 	est_status_run_id_changes_after_reset — plain reset pick creates new run_id
+   - 	est_status_run_id_preserved_after_reset_reuse — reset pick --reuse-run preserves run_id
+
+### 测试结果
+- TestResumeSemantics: 5/5 passed
+- CLI resume tests: 3/3 passed
+- Full suite: 1071 passed, 1 skipped
+
+### 已知问题
+- Stage guard keeps resetting state file to analyze during test runs
 
 ---
 
