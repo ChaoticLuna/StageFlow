@@ -306,6 +306,16 @@ stageflow mcp                              # 启动 MCP Server
 - `@pytest.mark.stageflow("analyze")` 标记——非当前阶段自动跳过
 - `N` 阶段动态配置工厂函数
 
+### Editor 前端测试 (vitest)
+```bash
+cd editor
+npm run test:run       # 单次运行全部测试 (vitest --run)
+npm test               # watch 模式 (vitest)
+```
+- 测试文件位于 `editor/src/**/*.test.{ts,tsx}`
+- 使用 `@testing-library/react` + `vitest` + `jsdom`
+- 当前覆盖: YAML 工具函数 (23 tests), 条件定义工具 (11 tests), StageNode 组件渲染 (8 tests)
+
 ## 工作约束（Claude 模型须知）
 
 1. **不能手动修改** 状态文件 — 状态由框架管理
