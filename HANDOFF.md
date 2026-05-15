@@ -2,7 +2,29 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-090 — Phase 29 Redefine stageflow init as project bootstrap
+> **交接原因**: task-091 — Phase 29 stageflow start with custom YAML tests
+
+---
+
+## task-091 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Reviewed cmd_start implementation** — already solid from task-090: discovers root, uses insertion-order entry stage, fails when run active, writes state to discovered path
+2. **Added 2 custom YAML tests** to TestNewInitAndStart:
+   - test_start_with_custom_yaml_enters_first_stage — replaces default YAML with custom stages (alpha/beta/gamma), verifies start enters "alpha" (first in YAML order)
+   - test_start_custom_yaml_specific_stage — verifies start beta works with custom YAML
+3. **Verified all 1107 tests pass**
+
+### 当前状态快照
+Phase 29:        task-091 complete
+Next task:       task-092 — all CLI commands on discovered project root (partially implemented)
+fix_plan.md:     91/100 tasks complete
+Tests:           1107 passed, 1 skipped, 0 failed
+
+### 已知问题
+- Stage guard keeps resetting state file to analyze during work
+- Tasks 092 is partially implemented (all commands already use _require_sm / _get_sm)
+- Next agent should review task-092 against requirements, add tests from nested subdirectories, mark complete
 
 ---
 

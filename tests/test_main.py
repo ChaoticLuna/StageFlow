@@ -718,6 +718,49 @@ class TestNewInitAndStart:
         r = self._run(tmp_path, "next")
         assert r.returncode == 0
 
+
+    def test_start_with_custom_yaml_enters_first_stage(self, tmp_path):
+        self._run(tmp_path, "init")
+        yaml_path = tmp_path / ".stageflow" / "config" / "stages.yaml"
+        import yaml
+        config = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+        config["stages"] = [
+            {"name": "alpha", "tools": ["Read"], "meta": {"description": "First custom stage"}},
+            {"name": "beta", "tools": ["Write"], "meta": {"description": "Second custom stage"}},
+            {"name": "gamma", "tools": [], "meta": {"description": "Terminal custom stage"}},
+        ]
+        config["transitions"] = [
+            {"from": "alpha", "to": "beta", "conditions": [{"always": True}]},
+            {"from": "beta", "to": "gamma", "conditions": [{"always": True}]},
+        ]
+        yaml_path.write_text(yaml.dump(config), encoding="utf-8")
+        r = self._run(tmp_path, "start")
+        assert r.returncode == 0, r.stderr
+        import json
+        state = json.loads((tmp_path / ".stageflow" / "current_stage.json").read_text())
+        assert state["current_stage"] == "alpha"
+
+    def test_start_custom_yaml_specific_stage(self, tmp_path):
+        self._run(tmp_path, "init")
+        yaml_path = tmp_path / ".stageflow" / "config" / "stages.yaml"
+        import yaml
+        config = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+        config["stages"] = [
+            {"name": "alpha", "tools": ["Read"], "meta": {"description": "First custom stage"}},
+            {"name": "beta", "tools": ["Write"], "meta": {"description": "Second custom stage"}},
+            {"name": "gamma", "tools": [], "meta": {"description": "Terminal custom stage"}},
+        ]
+        config["transitions"] = [
+            {"from": "alpha", "to": "beta", "conditions": [{"always": True}]},
+            {"from": "beta", "to": "gamma", "conditions": [{"always": True}]},
+        ]
+        yaml_path.write_text(yaml.dump(config), encoding="utf-8")
+        r = self._run(tmp_path, "start", "beta")
+        assert r.returncode == 0, r.stderr
+        import json
+        state = json.loads((tmp_path / ".stageflow" / "current_stage.json").read_text())
+        assert state["current_stage"] == "beta"
+
     def test_init_preserves_existing_state_on_force(self, tmp_path):
         self._run(tmp_path, "init")
         self._run(tmp_path, "start", "pick")
