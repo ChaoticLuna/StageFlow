@@ -196,6 +196,13 @@ class TestStatus:
         assert wf.current_stage is None
         assert wf._stage_results == {}
 
+    def test_status_includes_run_id(self, wf):
+        wf.advance()
+        info = wf.status()
+        assert "variables" in info
+        assert "run_id" in info["variables"]
+        assert len(info["variables"]["run_id"]) == 36  # UUID format
+
 
 class TestStagePrompts:
     def test_all_default_pipeline_stages_have_prompts(self):
@@ -205,3 +212,61 @@ class TestStagePrompts:
 
     def test_terminal_stages_not_in_prompts(self):
         assert "done" not in STAGE_PROMPTS
+
+    def test_prompts_use_run_artifact_dir_placeholder(self):
+        """All artifact-writing prompts use the {run_artifact_dir} placeholder."""
+        for stage in ["pick", "analyze", "plan", "verify", "document"]:
+            assert "{run_artifact_dir}" in STAGE_PROMPTS[stage], \
+                f"Prompt for '{stage}' missing {run_artifact_dir} placeholder"
+
+
+class TestRunScopedPrompts:
+    def test_prompt_includes_run_scoped_path(self, mini_registry, tmp_path):
+        """run_llm_stage injects the current run_id into artifact paths."""
+        captured_prompt = []
+
+        def capture(prompt: str) -> str:
+            captured_prompt.append(prompt)
+            return "ok"
+
+        wf = HybridWorkflow(mini_registry, llm_call=capture, base_path=str(tmp_path))
+        wf.sm.initialize("pick")
+        run_id = wf.sm.get_var("run_id")
+
+        wf.run_llm_stage("analyze")
+        assert len(captured_prompt) == 1
+        expected = f"artifacts/runs/{run_id}/analyze/findings.md"
+        assert expected in captured_prompt[0], \
+            f"Prompt should contain run-scoped path: {captured_prompt[0]}"
+
+    def test_prompt_includes_run_scoped_path_for_pick(self, mini_registry, tmp_path):
+        """pick stage prompt also gets run_id injection."""
+        captured_prompt = []
+
+        def capture(prompt: str) -> str:
+            captured_prompt.append(prompt)
+            return "ok"
+
+        wf = HybridWorkflow(mini_registry, llm_call=capture, base_path=str(tmp_path))
+        wf.sm.initialize("pick")
+        run_id = wf.sm.get_var("run_id")
+
+        wf.run_llm_stage("pick")
+        expected = f"artifacts/runs/{run_id}/pick/issue_context.md"
+        assert expected in captured_prompt[0]
+
+    def test_fallback_when_run_id_missing(self, mini_registry, tmp_path):
+        """When SM has no run_id (edge case), uses 'unknown-run'."""
+        captured_prompt = []
+
+        def capture(prompt: str) -> str:
+            captured_prompt.append(prompt)
+            return "ok"
+
+        wf = HybridWorkflow(mini_registry, llm_call=capture, base_path=str(tmp_path))
+        # Manually set state without run_id
+        wf.sm._state["variables"] = {}
+        wf.sm.current_stage = "analyze"
+
+        wf.run_llm_stage("analyze")
+        assert "artifacts/runs/unknown-run/analyze/findings.md" in captured_prompt[0]

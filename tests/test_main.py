@@ -98,6 +98,8 @@ class TestStageflowCLI:
         assert "current_stage" in data
         assert "history" in data
         assert "registered_stages" in data
+        assert "variables" in data
+        assert "run_id" in data["variables"]
 
     def test_list_json_output(self):
         r = _stageflow("list", "--json")

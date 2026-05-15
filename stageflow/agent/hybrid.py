@@ -23,16 +23,16 @@ STAGE_PROMPTS = {
     "pick": (
         "You are in the PICK stage. Select an issue/task from the backlog. "
         "Read the context, identify what needs to be done. "
-        "Save your findings to artifacts/pick/issue_context.md."
+        "Save your findings to {run_artifact_dir}/pick/issue_context.md."
     ),
     "analyze": (
         "You are in the ANALYZE stage. Analyze the root cause, impact scope, "
-        "and relevant code paths. Write a thorough analysis to artifacts/analyze/findings.md "
+        "and relevant code paths. Write a thorough analysis to {run_artifact_dir}/analyze/findings.md "
         "with sections: ## Root Cause, ## Impact, ## Affected Files."
     ),
     "plan": (
         "You are in the PLAN stage. Design a solution approach, task breakdown, "
-        "and rollback strategy. Write the plan to artifacts/plan/task_plan.md "
+        "and rollback strategy. Write the plan to {run_artifact_dir}/plan/task_plan.md "
         "with sections: ## Task Plan, ## Implementation Notes, ## Rollback Strategy."
     ),
     "implement": (
@@ -41,11 +41,11 @@ STAGE_PROMPTS = {
     ),
     "verify": (
         "You are in the VERIFY stage. Run tests, collect evidence, and record results "
-        "to artifacts/verify/test_results.md. If tests fail, go back to implement."
+        "to {run_artifact_dir}/verify/test_results.md. If tests fail, go back to implement."
     ),
     "document": (
         "You are in the DOCUMENT stage. Write changelog entries to "
-        "artifacts/document/changelog.md and update any relevant docs."
+        "{run_artifact_dir}/document/changelog.md and update any relevant docs."
     ),
     "wrap_up": (
         "You are in the WRAP_UP stage. Clean up branches, update status, archive artifacts. "
@@ -83,6 +83,8 @@ class HybridWorkflow:
     def run_llm_stage(self, stage_name: str, extra_context: str = "") -> str:
         """Invoke the LLM for a stage that requires AI reasoning.
 
+        Injects the current run_id so the agent writes to the correct
+        run-scoped artifact directory.
         Returns the LLM's response text.
         """
         prompt = self.stage_prompts.get(
@@ -92,6 +94,10 @@ class HybridWorkflow:
         )
         if extra_context:
             prompt = f"{prompt}\n\n## Additional Context\n{extra_context}"
+
+        run_id = self.sm.get_var("run_id") or "unknown-run"
+        artifact_dir = f"artifacts/runs/{run_id}"
+        prompt = prompt.replace("{run_artifact_dir}", artifact_dir)
 
         response = self.llm_call(prompt)
         self._stage_results[stage_name] = response

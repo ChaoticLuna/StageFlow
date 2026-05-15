@@ -2,7 +2,28 @@
 
 > **最后更新**: 2026-05-15
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-078 complete — artifact gates now run-scoped
+> **交接原因**: task-079 complete — agent prompts + status output now run-scoped
+
+---
+
+## task-079 会话总结 (2026-05-15)
+
+### 做了什么
+1. **Updated `stageflow/agent/hybrid.py` STAGE_PROMPTS** — all artifact paths now use `{run_artifact_dir}` placeholder (pick, analyze, plan, verify, document stages)
+2. **Added run_id interpolation to `run_llm_stage()`** — replaces `{run_artifact_dir}` with `artifacts/runs/<run_id>` before calling the LLM; falls back to `unknown-run` when run_id is missing
+3. **Updated `tests/test_main.py` `test_status_json_output`** — now asserts `variables.run_id` is present in JSON output
+4. **Added 5 tests**:
+   - `TestRunScopedPrompts` (3 tests): prompt includes run-scoped path for analyze, pick; fallback when run_id missing
+   - `TestStagePrompts.test_prompts_use_run_artifact_dir_placeholder` — verifies all artifact-producing stages use the placeholder
+   - `TestStatus.test_status_includes_run_id` — status dict includes variables.run_id (UUID format)
+
+### 当前状态快照
+```
+Tests:           1012 passed, 0 failed, 1 skipped (1013 collected)
+hybrid.py:       STAGE_PROMPTS + run_llm_stage() now run-scoped
+Status JSON:     variables.run_id verified in test
+fix_plan.md:     79/82 tasks complete
+```
 
 ---
 
