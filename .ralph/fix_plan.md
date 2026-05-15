@@ -219,6 +219,16 @@
 
 ---
 
+## Phase 28: Run/resume/artifact stabilization
+
+- [ ] **task-083**: Audit Phase 27 behavior against real user flows before adding more features. Review `StateMachine.initialize/reset/clean_run_artifacts`, CLI `reset` flags, `stageflow/config/stages.yaml`, `HybridWorkflow` prompts, and docs. Produce concrete fixes if behavior diverges from the intended model: default reset = new task/new `run_id`; `--reuse-run` = continue/rewind same task; `--clean-artifacts` = delete only the current run directory; old global `artifacts/<stage>/...` files must not satisfy default workflow gates. Add or tighten tests for every bug found. Do not add unrelated coverage-only tests.
+- [ ] **task-084**: Strengthen the sequential two-task demo so it models real file environments, not only artifact files. Under `examples/run_scoped_artifacts/`, create two input environments such as `task_a/` and `task_b/` with distinct source files. Demo 1 must select and process `task_a`, create a stale `review/changes_requested.md` inside run A, and finish. Demo 2 must select and process `task_b`, prove run A's context/output/review artifacts do not unlock or steer run B, and prove the modified/read file belongs to `task_b` only. Update `tests/test_run_demo.py` to assert these facts from the script output or result files, then run both `python examples/run_scoped_artifacts/run_demo.py` and `python -m pytest tests/test_run_demo.py -q`.
+- [ ] **task-085**: Add resume semantics tests that simulate a session change. Start a run, advance partway, save `.claude/current_stage.json`, construct a fresh `StateMachine` instance, and verify it keeps the same `run_id` and can continue the same task. Then verify plain `reset pick` creates a new `run_id`, while `reset pick --reuse-run` preserves the old one. Include CLI-level tests that inspect `python -m stageflow status --json` before and after each command.
+- [ ] **task-086**: Validate visual YAML editor fidelity for run-scoped paths. Import the default `stageflow/config/stages.yaml`, verify templated paths like `artifacts/runs/{{var.run_id}}/review/changes_requested.md` survive import, auto layout, editing, and export without escaping, resolving, or deleting braces. Add a focused frontend/unit test if the editor has a test harness; otherwise add a small documented manual verification script/check. Run the editor build after changes.
+- [ ] **task-087**: Add an acceptance command for Phase 27. Provide a single documented command or script that runs the targeted verification set: run-scoped engine tests, e2e old-artifact isolation tests, hybrid prompt/status tests, CLI reset/resume tests, and the sequential demo. On Windows, set `TEMP`, `TMP`, and `PYTEST_DEBUG_TEMPROOT` to repo `.tmp` inside the script to avoid temp permission failures. Record the exact command and expected passing output in docs/HANDOFF.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |
