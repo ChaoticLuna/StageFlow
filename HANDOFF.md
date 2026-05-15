@@ -2,7 +2,40 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-094 — Phase 29 global hook entrypoint complete
+> **交接原因**: task-095 — Phase 29 legacy migration and compatibility complete
+
+---
+
+## task-095 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Added `cmd_migrate` to `__main__.py`** — `stageflow migrate` converts legacy projects to new-style:
+   - Detects legacy project via discover_project()
+   - Creates .stageflow/config/stages.yaml (copied from legacy config)
+   - Creates .stageflow/current_stage.json (copied from legacy state)
+   - Copies guard_violations.jsonl if present in legacy audit dir
+   - Preserves all old files (manual cleanup)
+   - Already new-style → prints "Already a new-style project"
+   - Outside project → fails with actionable message
+   - --force overwrites existing .stageflow/ directory
+2. **Added `migrate` CLI subcommand** with optional path arg and --force flag
+3. **Added TestLegacyCompatibility** (15 tests):
+   - Basic commands on legacy projects: status, status --json, start, next, check, reset, list, graph
+   - State writes to .claude/current_stage.json (not .stageflow/)
+   - Status works from nested subdirectory
+   - migrate: converts to new-style, preserves run_id, does not delete old files, idempotent, fails outside project
+4. **Added TestMixedMarkerPrecedence** (3 tests):
+   - .stageflow/ wins over legacy stageflow/config/stages.yaml + .claude/current_stage.json
+   - .claude/current_stage.json alone works (legacy_state_only)
+   - legacy_state_only next fails without config file
+
+### 当前状态快照
+```
+Phase 29:        task-095 complete
+Next task:       task-096 — update documentation for new usage model
+fix_plan.md:     95/100 tasks complete
+Tests:           1154 passed, 1 skipped, 0 failed
+```
 
 ---
 

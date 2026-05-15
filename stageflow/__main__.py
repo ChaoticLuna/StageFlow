@@ -686,6 +686,58 @@ def cmd_mcp(args):
     return 0
 
 
+def cmd_migrate(args):
+    """Convert a legacy StageFlow project to new-style (.stageflow/)."""
+    from stageflow.core.discovery import discover_project
+
+    root = discover_project()
+    if root is None:
+        print("Not a StageFlow project (or any parent directory).", file=sys.stderr)
+        print("Run 'stageflow init' to create one here.", file=sys.stderr)
+        return 1
+
+    if root.marker_type == "new":
+        print(f"Already a new-style project at {root.path}")
+        return 0
+
+    target = Path(args.path).resolve() if getattr(args, 'path', None) else root.path
+
+    stageflow_dir = target / ".stageflow"
+    if stageflow_dir.is_dir() and not getattr(args, 'force', False):
+        print(f".stageflow/ already exists at {target} — use --force to overwrite", file=sys.stderr)
+        return 1
+
+    stageflow_dir.mkdir(parents=True, exist_ok=True)
+    (stageflow_dir / "config").mkdir(parents=True, exist_ok=True)
+
+    if root.config_path.is_file():
+        (stageflow_dir / "config" / "stages.yaml").write_text(
+            root.config_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+
+    if root.state_path.is_file():
+        (stageflow_dir / "current_stage.json").write_text(
+            root.state_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+
+    audit_dir = stageflow_dir
+    if root.audit_dir != stageflow_dir:
+        old_violations = root.audit_dir / "guard_violations.jsonl"
+        if old_violations.is_file():
+            audit_dir.mkdir(parents=True, exist_ok=True)
+            (audit_dir / "guard_violations.jsonl").write_text(
+                old_violations.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+
+    print(f"Migrated legacy project at {target} to new-style (.stageflow/)")
+    print("Old files preserved — remove them manually when ready:")
+    if root.config_path.is_file():
+        print(f"  {root.config_path}")
+    if root.state_path.is_file():
+        print(f"  {root.state_path}")
+    return 0
+
+
 ALWAYS_ALLOW_TOOLS = {
     "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TaskOutput",
     "Read", "AskUserQuestion",
@@ -894,6 +946,10 @@ Examples:
 
     p = sub.add_parser("hook", help="Claude Code PreToolUse hook entrypoint")
 
+    p = sub.add_parser("migrate", help="Convert legacy project to new-style (.stageflow/)")
+    p.add_argument("path", nargs="?", help="Target directory (default: discovered project root)")
+    p.add_argument("--force", "-f", action="store_true", help="Overwrite existing .stageflow/ directory")
+
     p = sub.add_parser("mcp", help="Start MCP server (stdio transport)")
 
     args = parser.parse_args()
@@ -906,7 +962,7 @@ Examples:
         "jump": cmd_jump, "reset": cmd_reset, "graph": cmd_graph,
         "list": cmd_list, "init": cmd_init, "start": cmd_start,
         "check": cmd_check,
-        "cond": cmd_cond, "generate": cmd_generate, "hook": cmd_hook, "mcp": cmd_mcp,
+        "cond": cmd_cond, "generate": cmd_generate, "hook": cmd_hook, "migrate": cmd_migrate, "mcp": cmd_mcp,
     }
     return commands[args.command](args)
 

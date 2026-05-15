@@ -1134,3 +1134,234 @@ class TestHookCommand:
         r = self._hook(tmp_path, "Write", {"file_path": "anything.py"})
         assert r.returncode == 0, r.stderr
         assert "unrestricted" in r.stdout
+
+
+class TestLegacyCompatibility:
+    """CLI commands work against legacy projects (stageflow/config/stages.yaml + .claude/current_stage.json)."""
+
+    @staticmethod
+    def _run(cwd, *args):
+        import subprocess, sys
+        return subprocess.run(
+            [sys.executable, "-m", "stageflow", *args],
+            capture_output=True, text=True, cwd=str(cwd), timeout=30,
+        )
+
+    @staticmethod
+    def _make_legacy_project(root):
+        """Create a legacy project with custom stages."""
+        import yaml, json
+        config_dir = root / "stageflow" / "config"
+        config_dir.mkdir(parents=True)
+        yaml_path = config_dir / "stages.yaml"
+        yaml_path.write_text(yaml.dump({
+            "stages": [
+                {"name": "alpha", "tools": ["Read", "Bash(git *)"], "meta": {"description": "First"}},
+                {"name": "beta", "tools": ["Read", "Edit", "Write"], "meta": {"description": "Second"}},
+                {"name": "gamma", "tools": [], "meta": {"description": "Terminal"}},
+            ],
+            "transitions": [
+                {"from": "alpha", "to": "beta", "conditions": [{"always": True}]},
+                {"from": "beta", "to": "gamma", "conditions": [{"always": True}]},
+            ],
+        }), encoding="utf-8")
+        state_dir = root / ".claude"
+        state_dir.mkdir(parents=True)
+        state_path = state_dir / "current_stage.json"
+        state_path.write_text(json.dumps({
+            "current_stage": None, "history": [], "retry_count": {},
+            "iterations": {}, "variables": {}, "paused": False, "paused_reason": "",
+        }))
+        (root / "artifacts" / "runs").mkdir(parents=True)
+
+    # ── Basic commands ──────────────────────────────────────────────────
+
+    def test_legacy_status_works(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        r = self._run(tmp_path, "status")
+        assert r.returncode == 0, r.stderr
+        assert "alpha" in r.stdout
+
+    def test_legacy_status_json_works(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        r = self._run(tmp_path, "status", "--json")
+        assert r.returncode == 0, r.stderr
+        import json
+        data = json.loads(r.stdout)
+        assert data["current_stage"] == "alpha"
+
+    def test_legacy_start_works(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        r = self._run(tmp_path, "start", "alpha")
+        assert r.returncode == 0, r.stderr
+        state = tmp_path / ".claude" / "current_stage.json"
+        import json
+        data = json.loads(state.read_text())
+        assert data["current_stage"] == "alpha"
+        assert "run_id" in data.get("variables", {})
+
+    def test_legacy_next_works(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        r = self._run(tmp_path, "next")
+        assert r.returncode == 0, r.stderr
+        state = tmp_path / ".claude" / "current_stage.json"
+        import json
+        data = json.loads(state.read_text())
+        assert data["current_stage"] == "beta"
+
+    def test_legacy_check_works(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        r = self._run(tmp_path, "check", "beta")
+        assert r.returncode == 0, r.stderr
+        assert "ALLOWED" in r.stdout
+
+    def test_legacy_reset_works(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        r = self._run(tmp_path, "reset")
+        assert r.returncode == 0, r.stderr
+        assert "StageFlow state cleared" in r.stdout
+
+    def test_legacy_list_works(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        r = self._run(tmp_path, "list")
+        assert r.returncode == 0, r.stderr
+        assert "alpha" in r.stdout
+        assert "beta" in r.stdout
+        assert "gamma" in r.stdout
+
+    def test_legacy_graph_works(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        r = self._run(tmp_path, "graph")
+        assert r.returncode == 0, r.stderr
+        assert "flowchart TD" in r.stdout
+
+    def test_legacy_state_writes_to_claude_dir(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        assert (tmp_path / ".claude" / "current_stage.json").is_file()
+        assert not (tmp_path / ".stageflow" / "current_stage.json").exists()
+
+    # ── Nested directory ────────────────────────────────────────────────
+
+    def test_legacy_status_from_nested_subdir(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        nested = tmp_path / "src" / "lib" / "deep"
+        nested.mkdir(parents=True)
+        r = self._run(nested, "status")
+        assert r.returncode == 0, r.stderr
+        assert "alpha" in r.stdout
+
+    # ── Migration ───────────────────────────────────────────────────────
+
+    def test_migrate_converts_legacy_to_new(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        r = self._run(tmp_path, "migrate")
+        assert r.returncode == 0, r.stderr
+        assert "Migrated" in r.stdout
+        assert (tmp_path / ".stageflow" / "config" / "stages.yaml").is_file()
+        assert (tmp_path / ".stageflow" / "current_stage.json").is_file()
+        import json
+        new_state = json.loads((tmp_path / ".stageflow" / "current_stage.json").read_text())
+        assert new_state["current_stage"] == "alpha"
+
+    def test_migrate_preserves_run_id(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        import json
+        old_state = json.loads((tmp_path / ".claude" / "current_stage.json").read_text())
+        old_run_id = old_state["variables"]["run_id"]
+        self._run(tmp_path, "migrate")
+        new_state = json.loads((tmp_path / ".stageflow" / "current_stage.json").read_text())
+        assert new_state["variables"]["run_id"] == old_run_id
+
+    def test_migrate_does_not_delete_old_files(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        self._run(tmp_path, "migrate")
+        assert (tmp_path / "stageflow" / "config" / "stages.yaml").is_file()
+        assert (tmp_path / ".claude" / "current_stage.json").is_file()
+
+    def test_migrate_idempotent_detects_new_style(self, tmp_path):
+        self._make_legacy_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        self._run(tmp_path, "migrate")
+        r = self._run(tmp_path, "migrate")
+        assert r.returncode == 0, r.stderr
+        assert "Already a new-style project" in r.stdout
+
+    def test_migrate_outside_project_fails(self, tmp_path):
+        r = self._run(tmp_path, "migrate")
+        assert r.returncode == 1
+        assert "Not a StageFlow project" in r.stderr
+
+
+class TestMixedMarkerPrecedence:
+    """When both .stageflow/ and legacy markers exist, .stageflow/ wins."""
+
+    @staticmethod
+    def _run(cwd, *args):
+        import subprocess, sys
+        return subprocess.run(
+            [sys.executable, "-m", "stageflow", *args],
+            capture_output=True, text=True, cwd=str(cwd), timeout=30,
+        )
+
+    def test_new_marker_wins_over_legacy(self, tmp_path):
+        import yaml, json
+
+        # Create legacy project with stage "legacy_stage"
+        (tmp_path / "stageflow" / "config").mkdir(parents=True)
+        legacy_config = {
+            "stages": [
+                {"name": "legacy_stage", "tools": ["Read"], "meta": {"description": "Legacy"}},
+            ],
+            "transitions": [],
+        }
+        (tmp_path / "stageflow" / "config" / "stages.yaml").write_text(
+            yaml.dump(legacy_config), encoding="utf-8")
+        (tmp_path / ".claude").mkdir(parents=True)
+        (tmp_path / ".claude" / "current_stage.json").write_text(json.dumps({
+            "current_stage": "legacy_stage", "history": [], "retry_count": {},
+            "iterations": {}, "variables": {}, "paused": False, "paused_reason": "",
+        }))
+
+        # Now run init which creates .stageflow/
+        self._run(tmp_path, "init")
+        self._run(tmp_path, "start", "pick")
+
+        r = self._run(tmp_path, "status")
+        assert r.returncode == 0, r.stderr
+        assert "pick" in r.stdout
+        assert "legacy_stage" not in r.stdout
+
+    def test_legacy_state_only_beats_nothing(self, tmp_path):
+        import json
+        (tmp_path / ".claude").mkdir(parents=True)
+        (tmp_path / ".claude" / "current_stage.json").write_text(json.dumps({
+            "current_stage": "analyze", "history": [], "retry_count": {},
+            "iterations": {}, "variables": {"run_id": "test-run-id"},
+            "paused": False, "paused_reason": "",
+        }))
+
+        r = self._run(tmp_path, "status")
+        assert r.returncode == 0, r.stderr
+        assert "analyze" in r.stdout
+
+    def test_legacy_state_only_next_fails_without_config(self, tmp_path):
+        import json
+        (tmp_path / ".claude").mkdir(parents=True)
+        (tmp_path / ".claude" / "current_stage.json").write_text(json.dumps({
+            "current_stage": "analyze", "history": [], "retry_count": {},
+            "iterations": {}, "variables": {"run_id": "test-run-id"},
+            "paused": False, "paused_reason": "",
+        }))
+
+        r = self._run(tmp_path, "next")
+        assert r.returncode == 1
