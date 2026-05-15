@@ -2,7 +2,38 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-099 — AI-style e2e workflow tests complete
+> **交接原因**: task-100 — staged verification complete, Phase 29 done
+
+---
+
+## task-100 会话总结 (2026-05-16)
+
+### 做了什么
+按照递进难度执行分层验证，每层通过后才进入下一层：
+
+| Layer | 描述 | 命令 | 结果 |
+|-------|------|------|------|
+| 1 | Root discovery/init/start/reset | `pytest tests/test_discovery.py tests/test_main.py::TestNewInitAndStart tests/test_main.py::TestResetAndJumpHardening -v` | **44 passed** |
+| 2 | CLI smoke | `pytest tests/test_main.py::TestCLISmoke -v` | **11 passed** |
+| 3 | Nested/multi-repo | `pytest tests/test_main.py::TestNestedDirectoryCommands tests/test_main.py::TestMultiRepoIsolation -v` | **18 passed** |
+| 4 | AI-style e2e | `pytest tests/test_main.py::TestAIWorkflowE2E -v` | **14 passed** |
+| 5 | Full non-editor suite | `pytest tests/ --ignore=tests/test_server.py --ignore=tests/test_editor.py -q` | **1140 passed, 1 skipped** |
+| 6 | Editor/server | `pytest tests/test_server.py -v` | **49 passed** |
+
+**总计**: 1276 tests passed (across all layers, with overlap in full suite), 0 failures.
+
+### Phase 29 完成总结
+- **task-093**: Harden reset/jump semantics (8 tests)
+- **task-094**: Global hook entrypoint `stageflow hook` (15 tests)
+- **task-095**: Legacy migration `stageflow migrate` (15 tests)
+- **task-096**: Documentation update (CLAUDE.md, AGENT.md, api_reference.md)
+- **task-097**: CLI smoke-test layer (11 tests)
+- **task-098**: Multi-repo isolation tests (10 tests)
+- **task-099**: AI-style e2e workflow tests (14 tests)
+- **task-100**: Staged verification — all layers pass
+
+### 下一步
+- **fix_plan.md 全部 100 任务完成** — 可进行项目全面审查或开始新 Phase
 
 ---
 
