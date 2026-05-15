@@ -281,6 +281,14 @@ Hard acceptance rules for this phase:
 
 ---
 
+## Phase 32: 编辑器前端更多组件测试
+
+- [x] **task-109**: Write `PropertiesPanel.test.tsx` — 25 tests covering: empty state, name/description editing, tool add/remove/duplicate/Enter-key, hook add/remove/kind-toggle/value-update, terminal stage detection
+- [x] **task-110**: Write `EdgeEditor.test.tsx` — 26 tests covering: source→target header, description input, condition list/add/remove, logic toggle (AND/OR), on_fail target selector, save/cancel callbacks, param inputs (text/select/number/json)
+- [x] **task-111**: Write `App.test.tsx` — 12 tests covering: header rendering, theme toggle, localStorage persistence, theme load from storage, Canvas + PropertiesPanel layout
+
+---
+
 ## 图例
 
 | 符号 | 含义 |
