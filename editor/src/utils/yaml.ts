@@ -90,8 +90,8 @@ function firstParamForType(type: string): string {
 function hooksToYaml(hooks: { shell?: string; python?: string }[]): Record<string, string>[] {
   return hooks.map((h) => {
     const out: Record<string, string> = {};
-    if (h.shell) out.shell = h.shell;
-    if (h.python) out.python = h.python;
+    if ("shell" in h) out.shell = h.shell ?? "";
+    if ("python" in h) out.python = h.python ?? "";
     return out;
   });
 }

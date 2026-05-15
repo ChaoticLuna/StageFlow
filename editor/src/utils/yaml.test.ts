@@ -123,6 +123,21 @@ describe("exportToYaml", () => {
     expect(yaml).toContain("on_exit:");
     expect(yaml).toContain("shell: echo done");
   });
+
+  it("exports empty hooks (preserves key presence over truthiness)", () => {
+    const node = baseNode({
+      data: {
+        ...baseNode().data,
+        on_enter: [{ shell: "" }],
+        on_exit: [{ python: "" }],
+      },
+    });
+    const yaml = exportToYaml([node], []);
+    expect(yaml).toContain("on_enter:");
+    expect(yaml).toContain("shell:");
+    expect(yaml).toContain("on_exit:");
+    expect(yaml).toContain("python:");
+  });
 });
 
 // ── importFromYaml ──
