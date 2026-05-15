@@ -2,7 +2,35 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-091 — Phase 29 stageflow start with custom YAML tests
+> **交接原因**: task-092 — Phase 29 nested-directory isolation tests
+
+---
+
+## task-092 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Fixed cmd_status, cmd_graph, cmd_list** — now use _require_sm() instead of _get_sm(), so they fail closed with "Not a StageFlow project" when outside any project
+2. **Added TestNestedDirectoryCommands** (8 tests) proving root isolation:
+   - test_status_from_nested_subdir_sees_correct_stage — status from src/lib/deep sees project root stage
+   - test_start_from_nested_subdir_mutates_only_project_root — start from deep subdir, state written only at root
+   - test_next_dry_run_from_nested_subdir — next --dry-run works from nested dir
+   - test_reset_from_nested_subdir_mutates_only_project_root — reset only touches root state
+   - test_no_legacy_state_file_created_in_new_project — no .claude/current_stage.json in new-style projects
+   - test_package_source_tree_not_mutated — negative assertion on package source isolation
+   - test_outside_project_fails_from_any_dir — status/next outside project fail with actionable message
+   - test_status_json_from_nested_subdir — JSON status from nested dir
+3. **Verified all 1115 tests pass**
+
+### 当前状态快照
+Phase 29:        task-092 complete (implementation already in place from task-090, tests now added)
+Next task:       task-093 — harden reset and recovery semantics
+fix_plan.md:     92/100 tasks complete
+Tests:           1115 passed, 1 skipped, 0 failed
+
+### 已知问题
+- Stage guard keeps resetting state file to analyze during work
+- cmd_reset still accepts stage positional arg (will be changed in task-093)
+- Next agent should work on task-093: remove stage arg from reset, add --reason to jump, etc.
 
 ---
 

@@ -59,7 +59,9 @@ def _require_sm():
 
 
 def cmd_status(args):
-    reg, sm = _get_sm()
+    reg, sm, root = _require_sm()
+    if sm is None:
+        return 1
     info = sm.status()
     if getattr(args, 'json', False):
         print(_json.dumps(info, indent=2, default=str))
@@ -231,7 +233,9 @@ def cmd_reset(args):
 
 def cmd_graph(args):
     """Generate Mermaid flowchart of all stages and transitions."""
-    reg, sm = _get_sm()
+    reg, sm, root = _require_sm()
+    if sm is None:
+        return 1
     current_stage = sm.current_stage
 
     print("```mermaid")
@@ -288,7 +292,9 @@ def cmd_graph(args):
 
 
 def cmd_list(args):
-    reg, sm = _get_sm()
+    reg, sm, root = _require_sm()
+    if sm is None:
+        return 1
     if getattr(args, 'json', False):
         stages_list = []
         for name in reg.stage_names:

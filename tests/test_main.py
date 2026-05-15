@@ -769,3 +769,120 @@ class TestNewInitAndStart:
         import json
         state = json.loads((tmp_path / ".stageflow" / "current_stage.json").read_text())
         assert state["current_stage"] == "pick"
+
+
+class TestNestedDirectoryCommands:
+    """Commands operate on discovered project root, not cwd or package source."""
+
+    @staticmethod
+    def _run(cwd, *args):
+        import subprocess, sys
+        return subprocess.run(
+            [sys.executable, "-m", "stageflow", *args],
+            capture_output=True, text=True, cwd=str(cwd), timeout=30,
+        )
+
+    @staticmethod
+    def _make_custom_yaml(yaml_path):
+        import yaml
+        config = {
+            "stages": [
+                {"name": "alpha", "tools": ["Read"], "meta": {"description": "First custom"}},
+                {"name": "beta", "tools": ["Write"], "meta": {"description": "Second custom"}},
+                {"name": "gamma", "tools": [], "meta": {"description": "Terminal custom"}},
+            ],
+            "transitions": [
+                {"from": "alpha", "to": "beta", "conditions": [{"always": True}]},
+                {"from": "beta", "to": "gamma", "conditions": [{"always": True}]},
+            ],
+        }
+        yaml_path.write_text(yaml.dump(config), encoding="utf-8")
+
+    def test_status_from_nested_subdir_sees_correct_stage(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._make_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        self._run(tmp_path, "start", "alpha")
+        nested = tmp_path / "src" / "lib" / "deep"
+        nested.mkdir(parents=True)
+        r = self._run(nested, "status")
+        assert r.returncode == 0, r.stderr
+        assert "alpha" in r.stdout
+
+    def test_start_from_nested_subdir_mutates_only_project_root(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._make_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        nested = tmp_path / "src" / "lib" / "deep"
+        nested.mkdir(parents=True)
+        r = self._run(nested, "start", "alpha")
+        assert r.returncode == 0, r.stderr
+        state = tmp_path / ".stageflow" / "current_stage.json"
+        assert state.is_file()
+        import json
+        data = json.loads(state.read_text())
+        assert data["current_stage"] == "alpha"
+        assert "run_id" in data.get("variables", {})
+        assert not (nested / ".stageflow").exists()
+        assert not (nested / ".claude").exists()
+
+    def test_next_dry_run_from_nested_subdir(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._make_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        self._run(tmp_path, "start", "alpha")
+        nested = tmp_path / "src" / "lib" / "deep"
+        nested.mkdir(parents=True)
+        r = self._run(nested, "next", "--dry-run")
+        assert r.returncode == 0, r.stderr
+        assert "ALLOWED" in r.stdout
+
+    def test_reset_from_nested_subdir_mutates_only_project_root(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._make_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        self._run(tmp_path, "start", "alpha")
+        nested = tmp_path / "src" / "lib" / "deep"
+        nested.mkdir(parents=True)
+        r = self._run(nested, "reset", "alpha")
+        assert r.returncode == 0, r.stderr
+        state = tmp_path / ".stageflow" / "current_stage.json"
+        assert state.is_file()
+        assert not (nested / ".stageflow").exists()
+        assert not (nested / ".claude").exists()
+
+    def test_no_legacy_state_file_created_in_new_project(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._make_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        self._run(tmp_path, "start", "alpha")
+        assert not (tmp_path / ".claude" / "current_stage.json").exists()
+
+    def test_package_source_tree_not_mutated(self, tmp_path):
+        import os
+        pkg_state = os.path.join(os.path.dirname(__file__), "..", ".claude", "current_stage.json")
+        pkg_stageflow_dir = os.path.join(os.path.dirname(__file__), "..", ".stageflow")
+        before_state_exists = os.path.exists(pkg_state)
+        before_stageflow_exists = os.path.isdir(pkg_stageflow_dir)
+        self._run(tmp_path, "init")
+        self._make_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        self._run(tmp_path, "start", "alpha")
+        assert os.path.exists(pkg_state) == before_state_exists
+        assert os.path.isdir(pkg_stageflow_dir) == before_stageflow_exists
+
+    def test_outside_project_fails_from_any_dir(self, tmp_path):
+        r = self._run(tmp_path, "status")
+        assert r.returncode == 1
+        assert "Not a StageFlow project" in r.stderr
+        nested = tmp_path / "a" / "b"
+        nested.mkdir(parents=True)
+        r2 = self._run(nested, "next")
+        assert r2.returncode == 1
+        assert "Not a StageFlow project" in r2.stderr
+
+    def test_status_json_from_nested_subdir(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._make_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        self._run(tmp_path, "start", "alpha")
+        nested = tmp_path / "src" / "lib" / "deep"
+        nested.mkdir(parents=True)
+        r = self._run(nested, "status", "--json")
+        assert r.returncode == 0, r.stderr
+        import json
+        data = json.loads(r.stdout)
+        assert data["current_stage"] == "alpha"
