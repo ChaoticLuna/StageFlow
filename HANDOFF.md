@@ -2,7 +2,57 @@
 
 > **最后更新**: 2026-05-15
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-086 — editor fidelity validation for run-scoped paths
+> **交接原因**: task-087 — Phase 27 acceptance command/script
+
+---
+
+## task-087 会话总结 (2026-05-15)
+
+### 做了什么
+1. **Created `scripts/phase27_acceptance.py`** — Phase 27/28 targeted acceptance script:
+   - Runs 5 pytest suites (76 tests) + editor fidelity verification
+   - Each pytest suite gets a unique `--basetemp` subdirectory under `.tmp/` to avoid cross-suite file locking on Windows
+   - Sets `TEMP`, `TMP`, `PYTEST_DEBUG_TEMPROOT` to repo `.tmp` on Windows
+   - Cleans all temp content from previous runs on startup
+   - UTF-8 stdout wrapper to avoid GBK encoding issues
+   - Supports `--verbose`, `--json` flags
+   - All 76 tests pass + editor fidelity ALL CHECKS PASSED
+
+### Exact acceptance command
+```bash
+python scripts/phase27_acceptance.py
+```
+
+### Expected passing output
+```
+  [OK] Engine — Run Identity: PASS    (14 passed)
+  [OK] E2E — Run-Scoped Artifacts: PASS (3 passed)
+  [OK] Hybrid — Prompts & Status: PASS  (10 passed)
+  [OK] CLI — Resume & Reset: PASS       (34 passed)
+  [OK] Demo — Sequential Two-Task: PASS (15 passed)
+  [OK] Editor Fidelity: PASS
+-- ALL CHECKS PASSED --
+Phase 27 acceptance criteria satisfied.
+```
+
+### Verification targets
+| Suite | What | Tests |
+|-------|------|-------|
+| Engine — Run Identity | TestRunIdentity, TestCleanArtifacts, TestResumeSemantics | 14 |
+| E2E — Run-Scoped Artifacts | TestRunScopedArtifacts (old-run isolation regression) | 3 |
+| Hybrid — Prompts & Status | TestRunScopedPrompts, TestStagePrompts, TestStatus | 10 |
+| CLI — Resume & Reset | 3 resume CLI tests + TestMainInProcess (31 in-process tests) | 34 |
+| Demo — Sequential Two-Task | test_run_demo.py (all 6 classes) | 15 |
+| Editor Fidelity | verify_editor_fidelity.py | 11 templates |
+
+### 测试结果
+- phase27_acceptance.py: 76 passed, 0 failed across 5 pytest suites
+- Editor fidelity: ALL CHECKS PASSED
+- JSON mode: working
+
+### 已知问题
+- Stage guard keeps resetting state file to "analyze" during test runs
+- Shell tool name mismatch (Bash vs PowerShell) on Windows
 
 ---
 
