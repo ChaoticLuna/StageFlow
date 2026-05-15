@@ -66,8 +66,8 @@ const initialNodes: StageNodeType[] = [
 
 const initialEdges: Edge<EdgeData>[] = [
   { id: "pick-analyze", source: "pick", target: "analyze", data: { conditions: [{ type: "always", params: {} }], on_fail: null, description: "Start analysis" } },
-  { id: "analyze-plan", source: "analyze", target: "plan", data: { conditions: [{ type: "file_exists", params: { path: "artifacts/analyze/findings.md" } }], on_fail: "analyze", description: "Findings ready" } },
-  { id: "plan-done", source: "plan", target: "done", data: { conditions: [{ type: "file_exists", params: { path: "artifacts/plan/plan.md" } }], on_fail: "plan", description: "Plan delivered" } },
+  { id: "analyze-plan", source: "analyze", target: "plan", data: { conditions: [{ type: "file_exists", params: { path: "artifacts/runs/{{var.run_id}}/analyze/findings.md" } }], on_fail: "analyze", description: "Findings ready" } },
+  { id: "plan-done", source: "plan", target: "done", data: { conditions: [{ type: "file_exists", params: { path: "artifacts/runs/{{var.run_id}}/plan/plan.md" } }], on_fail: "plan", description: "Plan delivered" } },
 ];
 
 interface CanvasProps {

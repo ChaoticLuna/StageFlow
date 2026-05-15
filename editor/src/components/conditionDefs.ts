@@ -31,18 +31,18 @@ const defs: RawDefs = {
   file_exists: {
     label: "File Exists",
     description: "Check that a file exists on disk",
-    params: [{ name: "path", label: "File path", type: "text", placeholder: "artifacts/analyze/findings.md", required: true }],
+    params: [{ name: "path", label: "File path", type: "text", placeholder: "artifacts/runs/{{var.run_id}}/analyze/findings.md", required: true }],
   },
   file_not_exists: {
     label: "File Not Exists",
     description: "Check that a file does NOT exist",
-    params: [{ name: "path", label: "File path", type: "text", placeholder: "artifacts/temp/draft.md", required: true }],
+    params: [{ name: "path", label: "File path", type: "text", placeholder: "artifacts/runs/{{var.run_id}}/temp/draft.md", required: true }],
   },
   file_contains: {
     label: "File Contains",
     description: "Check that a file contains a pattern (regex)",
     params: [
-      { name: "path", label: "File path", type: "text", placeholder: "artifacts/analyze/findings.md", required: true },
+      { name: "path", label: "File path", type: "text", placeholder: "artifacts/runs/{{var.run_id}}/analyze/findings.md", required: true },
       { name: "pattern", label: "Pattern (regex)", type: "text", placeholder: "## Root Cause", required: true },
     ],
   },

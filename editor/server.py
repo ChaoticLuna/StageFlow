@@ -48,13 +48,13 @@ CONDITION_DEFS = [
         {"name": "reason", "label": "Reason", "kind": "text", "placeholder": "Why this transition is blocked"}
     ]},
     {"type": "file_exists", "label": "File Exists", "description": "Check that a file exists on disk", "params": [
-        {"name": "path", "label": "File path", "kind": "text", "placeholder": "artifacts/analyze/findings.md", "required": True}
+        {"name": "path", "label": "File path", "kind": "text", "placeholder": "artifacts/runs/<run_id>/analyze/findings.md", "required": True}
     ]},
     {"type": "file_not_exists", "label": "File Not Exists", "description": "Check that a file does NOT exist", "params": [
-        {"name": "path", "label": "File path", "kind": "text", "placeholder": "artifacts/temp/draft.md", "required": True}
+        {"name": "path", "label": "File path", "kind": "text", "placeholder": "artifacts/runs/<run_id>/temp/draft.md", "required": True}
     ]},
     {"type": "file_contains", "label": "File Contains", "description": "Check that a file contains a pattern (regex)", "params": [
-        {"name": "path", "label": "File path", "kind": "text", "placeholder": "artifacts/analyze/findings.md", "required": True},
+        {"name": "path", "label": "File path", "kind": "text", "placeholder": "artifacts/runs/<run_id>/analyze/findings.md", "required": True},
         {"name": "pattern", "label": "Pattern (regex)", "kind": "text", "placeholder": "## Root Cause", "required": True}
     ]},
     {"type": "file_not_contains", "label": "File Not Contains", "description": "Check that a file does NOT contain a pattern", "params": [

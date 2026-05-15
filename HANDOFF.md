@@ -2,7 +2,32 @@
 
 > **最后更新**: 2026-05-15
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-077 complete — run identity lifecycle added
+> **交接原因**: task-078 complete — artifact gates now run-scoped
+
+---
+
+## task-078 会话总结 (2026-05-15)
+
+### 做了什么
+1. **Updated `stageflow/config/stages.yaml`** — all 8 default artifact paths now use `artifacts/runs/{{var.run_id}}/...`:
+   - `pick/issue_context.md`, `analyze/findings.md`, `plan/task_plan.md`, `verify/test_results.md` (x2), `document/changelog.md`, `review/changes_requested.md`
+2. **Updated `editor/server.py`** — CONDITION_DEFS placeholders now show run-scoped examples (`artifacts/runs/<run_id>/...`)
+3. **Updated `editor/src/components/Canvas.tsx`** — default sample edges use `{{var.run_id}}` templates
+4. **Updated `editor/src/components/conditionDefs.ts`** — placeholder text uses run-scoped paths with `{{var.run_id}}`
+5. **Updated `tests/test_e2e.py`** — all E2E tests now write artifacts to run-scoped paths (5 test methods updated)
+6. **Added 3 regression tests** in `TestRunScopedArtifacts` class (test_e2e.py):
+   - `test_old_run_artifact_does_not_satisfy_new_run_transition`
+   - `test_current_run_artifact_satisfies_transition`
+   - `test_two_runs_have_independent_artifact_dirs`
+
+### 当前状态快照
+```
+Tests:           1007 passed, 0 failed, 1 skipped (1008 collected)
+E2E tests:       25 (was 22, +3 regression)
+Editor:          All placeholders + sample edges run-scoped
+stages.yaml:     8 artifact paths updated to {{var.run_id}} templates
+fix_plan.md:     78/82 tasks complete
+```
 
 ---
 

@@ -60,8 +60,10 @@ class TestFullPipeline:
         assert sm.current_stage == "analyze"
 
         # ── analyze -> plan (file_exists + file_contains on findings.md) ──
-        (temp_dir / "artifacts" / "analyze").mkdir(parents=True)
-        (temp_dir / "artifacts" / "analyze" / "findings.md").write_text(
+        run_id = sm.get_var("run_id")
+        _af = lambda stage, file: temp_dir / "artifacts" / "runs" / run_id / stage / file
+        (_af("analyze", "findings.md").parent).mkdir(parents=True)
+        _af("analyze", "findings.md").write_text(
             "## Root Cause\n\nThe bug is in core.py line 42.\n\n"
             "## Analysis\n\nMissing null check causes crash.\n",
             encoding="utf-8",
@@ -71,8 +73,8 @@ class TestFullPipeline:
         assert sm.current_stage == "plan"
 
         # ── plan -> implement (file_exists + file_contains on task_plan.md) ──
-        (temp_dir / "artifacts" / "plan").mkdir(parents=True)
-        (temp_dir / "artifacts" / "plan" / "task_plan.md").write_text(
+        _af("plan", "task_plan.md").parent.mkdir(parents=True)
+        _af("plan", "task_plan.md").write_text(
             "## Task Plan\n\n"
             "1. Add null check in core.py\n"
             "2. Add unit test\n"
@@ -90,8 +92,8 @@ class TestFullPipeline:
         assert sm.current_stage == "verify"
 
         # ── verify -> document (file_exists + file_contains PASS on test_results.md) ──
-        (temp_dir / "artifacts" / "verify").mkdir(parents=True)
-        (temp_dir / "artifacts" / "verify" / "test_results.md").write_text(
+        _af("verify", "test_results.md").parent.mkdir(parents=True)
+        _af("verify", "test_results.md").write_text(
             "## Test Results\n\nAll tests passed. 42 tests run, 0 failures.\nPASS\n",
             encoding="utf-8",
         )
@@ -100,8 +102,8 @@ class TestFullPipeline:
         assert sm.current_stage == "document"
 
         # ── document -> mr (file_exists changelog.md) ──
-        (temp_dir / "artifacts" / "document").mkdir(parents=True)
-        (temp_dir / "artifacts" / "document" / "changelog.md").write_text(
+        _af("document", "changelog.md").parent.mkdir(parents=True)
+        _af("document", "changelog.md").write_text(
             "# Changelog\n\n## v1.1.0\n\n- Fixed null check in core.py\n",
             encoding="utf-8",
         )
@@ -197,15 +199,15 @@ class TestRetryLoop:
     def test_verify_to_implement_on_failure(self, real_registry, temp_dir):
         """When test_results.md contains FAIL, the retry loop activates:
         verify->implement is reachable, verify->document is blocked."""
-        vf_dir = temp_dir / "artifacts" / "verify"
+        sm = StateMachine(real_registry, str(temp_dir))
+        sm.initialize("verify")
+        run_id = sm.get_var("run_id")
+        vf_dir = temp_dir / "artifacts" / "runs" / run_id / "verify"
         vf_dir.mkdir(parents=True)
         (vf_dir / "test_results.md").write_text(
             "## Test Results\n\nFAIL: 3 tests failed\n\nError: assertion error\n",
             encoding="utf-8",
         )
-
-        sm = StateMachine(real_registry, str(temp_dir))
-        sm.initialize("verify")
 
         ok, msgs = sm.can_transition_to("implement")
         assert ok, f"verify->implement should be reachable on FAIL: {msgs}"
@@ -214,11 +216,11 @@ class TestRetryLoop:
         assert not ok2, "verify->document should be blocked on FAIL"
 
     def test_retry_loop_multiple_cycles(self, real_registry, temp_dir):
-        vf_dir = temp_dir / "artifacts" / "verify"
-        vf_dir.mkdir(parents=True)
-
         sm = StateMachine(real_registry, str(temp_dir))
         sm.initialize("implement")
+        run_id = sm.get_var("run_id")
+        vf_dir = temp_dir / "artifacts" / "runs" / run_id / "verify"
+        vf_dir.mkdir(parents=True)
 
         for attempt in range(3):
             sm.force_transition_to("verify")
@@ -268,12 +270,14 @@ class TestConditionsEnforcement:
     def test_creating_file_unblocks_transition(self, real_registry, temp_dir):
         sm = StateMachine(real_registry, str(temp_dir))
         sm.initialize("analyze")
+        run_id = sm.get_var("run_id")
 
         ok, _ = sm.can_transition_to("plan")
         assert not ok
 
-        (temp_dir / "artifacts" / "analyze").mkdir(parents=True)
-        (temp_dir / "artifacts" / "analyze" / "findings.md").write_text(
+        adir = temp_dir / "artifacts" / "runs" / run_id / "analyze"
+        adir.mkdir(parents=True)
+        (adir / "findings.md").write_text(
             "## Root Cause\n\nThe bug is in bar.ts\n\n## Analysis\n...\n",
             encoding="utf-8",
         )
@@ -283,9 +287,11 @@ class TestConditionsEnforcement:
     def test_wrong_content_blocks_transition(self, real_registry, temp_dir):
         sm = StateMachine(real_registry, str(temp_dir))
         sm.initialize("analyze")
+        run_id = sm.get_var("run_id")
 
-        (temp_dir / "artifacts" / "analyze").mkdir(parents=True)
-        (temp_dir / "artifacts" / "analyze" / "findings.md").write_text(
+        adir = temp_dir / "artifacts" / "runs" / run_id / "analyze"
+        adir.mkdir(parents=True)
+        (adir / "findings.md").write_text(
             "## Summary\n\nNo required pattern here.\n", encoding="utf-8",
         )
         ok, msgs = sm.can_transition_to("plan")
@@ -294,9 +300,11 @@ class TestConditionsEnforcement:
     def test_correct_content_allows_transition(self, real_registry, temp_dir):
         sm = StateMachine(real_registry, str(temp_dir))
         sm.initialize("analyze")
+        run_id = sm.get_var("run_id")
 
-        (temp_dir / "artifacts" / "analyze").mkdir(parents=True)
-        (temp_dir / "artifacts" / "analyze" / "findings.md").write_text(
+        adir = temp_dir / "artifacts" / "runs" / run_id / "analyze"
+        adir.mkdir(parents=True)
+        (adir / "findings.md").write_text(
             "## Root Cause\n\nFound it.\n\n## Analysis\n\nDeep dive.\n",
             encoding="utf-8",
         )
@@ -397,3 +405,79 @@ class TestStatePersistence:
         sm.reset()
         assert not sm.state_path.exists()
         assert sm.current_stage is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Run-scoped artifact isolation (task-078)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestRunScopedArtifacts:
+    def test_old_run_artifact_does_not_satisfy_new_run_transition(self, real_registry, temp_dir):
+        """Artifact from an old run must not unlock transitions in a new run."""
+        sm1 = StateMachine(real_registry, str(temp_dir))
+        sm1.initialize("analyze")
+        run_id_1 = sm1.get_var("run_id")
+
+        # Write artifact under old run
+        adir = temp_dir / "artifacts" / "runs" / run_id_1 / "analyze"
+        adir.mkdir(parents=True)
+        (adir / "findings.md").write_text(
+            "## Root Cause\n\nOld run analysis.\n\n## Analysis\n\nDeep dive.\n",
+            encoding="utf-8",
+        )
+        ok, _ = sm1.can_transition_to("plan")
+        assert ok, "Transition should pass for old run with its own artifact"
+
+        # New run = different run_id
+        sm2 = StateMachine(real_registry, str(temp_dir))
+        sm2.initialize("analyze")
+        run_id_2 = sm2.get_var("run_id")
+        assert run_id_1 != run_id_2, "Two runs must have different run_ids"
+
+        # The old artifact should NOT satisfy the new run's transition
+        ok2, msgs2 = sm2.can_transition_to("plan")
+        assert not ok2, f"Old run artifact must not unlock new run: {msgs2}"
+
+    def test_current_run_artifact_satisfies_transition(self, real_registry, temp_dir):
+        """Artifact under the current run_id must satisfy the transition."""
+        sm = StateMachine(real_registry, str(temp_dir))
+        sm.initialize("analyze")
+        run_id = sm.get_var("run_id")
+
+        ok, _ = sm.can_transition_to("plan")
+        assert not ok, "Should be blocked without artifact"
+
+        adir = temp_dir / "artifacts" / "runs" / run_id / "analyze"
+        adir.mkdir(parents=True)
+        (adir / "findings.md").write_text(
+            "## Root Cause\n\nFound it.\n\n## Analysis\n\nDeep dive.\n",
+            encoding="utf-8",
+        )
+        ok, msgs = sm.transition_to("plan")
+        assert ok, f"Should pass with current run artifact: {msgs}"
+        assert sm.current_stage == "plan"
+
+    def test_two_runs_have_independent_artifact_dirs(self, real_registry, temp_dir):
+        """Each run writes to its own artifact directory. Stale files from
+        run A's review/changes_requested.md cannot drive run B's flow."""
+        sm_a = StateMachine(real_registry, str(temp_dir))
+        sm_a.initialize("review")
+        run_a = sm_a.get_var("run_id")
+
+        # Write changes_requested for run A
+        adir_a = temp_dir / "artifacts" / "runs" / run_a / "review"
+        adir_a.mkdir(parents=True)
+        (adir_a / "changes_requested.md").write_text(
+            "## Changes Requested\n\n- Fix typo\n", encoding="utf-8",
+        )
+        ok_a, _ = sm_a.can_transition_to("implement")
+        assert ok_a, "Run A should see its own changes_requested"
+
+        # Run B — different run, no changes_requested
+        sm_b = StateMachine(real_registry, str(temp_dir))
+        sm_b.initialize("review")
+        run_b = sm_b.get_var("run_id")
+        assert run_a != run_b
+
+        ok_b, msgs_b = sm_b.can_transition_to("implement")
+        assert not ok_b, f"Run B must not see run A's changes_requested: {msgs_b}"

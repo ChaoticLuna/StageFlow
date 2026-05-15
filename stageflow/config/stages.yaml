@@ -179,16 +179,16 @@ transitions:
     to: analyze
     description: "Issue 上下文已就绪，开始分析"
     conditions:
-      - file_exists: artifacts/pick/issue_context.md
+      - file_exists: artifacts/runs/{{var.run_id}}/pick/issue_context.md
 
   # ── Analyze → Plan ──────────────────────────────────────────────────
   - from: analyze
     to: plan
     description: "分析完成，产出 findings.md"
     conditions:
-      - file_exists: artifacts/analyze/findings.md
+      - file_exists: artifacts/runs/{{var.run_id}}/analyze/findings.md
       - file_contains:
-          path: artifacts/analyze/findings.md
+          path: artifacts/runs/{{var.run_id}}/analyze/findings.md
           pattern: "## (根因|Root Cause|Analysis|分析)"
     on_fail: analyze
 
@@ -197,9 +197,9 @@ transitions:
     to: implement
     description: "方案就绪，任务清单完备"
     conditions:
-      - file_exists: artifacts/plan/task_plan.md
+      - file_exists: artifacts/runs/{{var.run_id}}/plan/task_plan.md
       - file_contains:
-          path: artifacts/plan/task_plan.md
+          path: artifacts/runs/{{var.run_id}}/plan/task_plan.md
           pattern: "## (Task|任务|Plan|方案)"
     on_fail: plan
 
@@ -219,9 +219,9 @@ transitions:
     to: document
     description: "测试通过，编写文档"
     conditions:
-      - file_exists: artifacts/verify/test_results.md
+      - file_exists: artifacts/runs/{{var.run_id}}/verify/test_results.md
       - file_contains:
-          path: artifacts/verify/test_results.md
+          path: artifacts/runs/{{var.run_id}}/verify/test_results.md
           pattern: "(PASS|通过|All tests passed)"
       - shell_test:
           command: "python -m pytest --tb=short"
@@ -233,9 +233,9 @@ transitions:
     to: implement
     description: "测试失败，回退 implement 重试"
     conditions:
-      - file_exists: artifacts/verify/test_results.md
+      - file_exists: artifacts/runs/{{var.run_id}}/verify/test_results.md
       - file_contains:
-          path: artifacts/verify/test_results.md
+          path: artifacts/runs/{{var.run_id}}/verify/test_results.md
           pattern: "(FAIL|失败|Error)"
 
   # ── Document → MR ───────────────────────────────────────────────────
@@ -243,7 +243,7 @@ transitions:
     to: mr
     description: "文档齐备，创建 MR"
     conditions:
-      - file_exists: artifacts/document/changelog.md
+      - file_exists: artifacts/runs/{{var.run_id}}/document/changelog.md
 
   # ── MR → Review ─────────────────────────────────────────────────────
   - from: mr
@@ -270,7 +270,7 @@ transitions:
     to: implement
     description: "Review 要求修改，回退实施"
     conditions:
-      - file_exists: artifacts/review/changes_requested.md
+      - file_exists: artifacts/runs/{{var.run_id}}/review/changes_requested.md
 
   # ── Wrap Up → terminal (done) ───────────────────────────────────────
   - from: wrap_up
