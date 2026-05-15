@@ -11,10 +11,9 @@ Usage:
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 from stageflow.core.registry import StageRegistry
 from stageflow.core.engine import StateMachine

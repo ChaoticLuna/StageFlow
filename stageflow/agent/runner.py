@@ -149,7 +149,7 @@ class AgentRunner:
             return False, [f"Unknown stage '{target}'. Pipeline: {self.PIPELINE}"]
 
         now = datetime.now(timezone.utc).isoformat()
-        task_data = self._progress.setdefault("tasks", {}).setdefault(task_id, {})
+        self._progress.setdefault("tasks", {}).setdefault(task_id, {})
 
         self._progress["current_stage"] = target
         self._progress.setdefault("history", []).append({

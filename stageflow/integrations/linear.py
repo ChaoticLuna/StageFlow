@@ -6,7 +6,7 @@ import os
 import json
 import urllib.request
 import urllib.error
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, Any
 from pathlib import Path
 
 LINEAR_API_URL = "https://api.linear.app/graphql"

@@ -417,7 +417,6 @@ def cmd_start(args):
 
 def _get_default_stages_yaml() -> str:
     """Return the default stages.yaml content shipped with the package."""
-    import os
     pkg_yaml = Path(__file__).resolve().parent / "config" / "stages.yaml"
     if pkg_yaml.exists():
         return pkg_yaml.read_text(encoding="utf-8")
@@ -611,7 +610,7 @@ def cmd_cond(args):
 
 
 def cmd_generate(args):
-    from stageflow.generator.llm_generator import WorkflowGenerator, CONDITION_REFERENCE
+    from stageflow.generator.llm_generator import WorkflowGenerator
     from stageflow.generator.prompts import get_template, list_templates
 
     if args.list_templates:

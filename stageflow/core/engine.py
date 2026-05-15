@@ -7,12 +7,11 @@ State file: .claude/current_stage.json
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
-from .conditions import evaluate_all, list_conditions
+from .conditions import list_conditions
 from .registry import StageRegistry
 
 
@@ -431,8 +430,6 @@ class StateMachine:
 
         for allowed in stage.tools:
             if tool_name.startswith(allowed.split("(")[0].strip()):
-                # Check sub-constraint like "Bash(python *)"
-                constraint = allowed
                 if "(" in allowed:
                     tool_base = allowed.split("(")[0].strip()
                     constraint_args = allowed[allowed.index("(")+1:allowed.rindex(")")].strip()

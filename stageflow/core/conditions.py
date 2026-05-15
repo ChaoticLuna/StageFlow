@@ -239,7 +239,6 @@ def _parse_condition(cond: dict) -> Tuple[str, dict]:
     """Parse a condition dict like {'file_exists': 'path/to/file'} or
     {'json_field': {'path': '...', 'field': '...', 'op': 'not_empty'}}.
     Returns (condition_type, params_dict)."""
-    known_keys: set[str] = set()
     for key in cond:
         if key not in ("severity", "max_attempts"):
             name = key

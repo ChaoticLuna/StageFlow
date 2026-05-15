@@ -19,13 +19,13 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 import yaml
 
 from stageflow.core.schema import validate_stages_config
 from stageflow.core.registry import StageRegistry
-from stageflow.generator.prompts import get_template, PromptTemplate
+from stageflow.generator.prompts import get_template
 
 CONDITION_REFERENCE = """## Built-in Condition Types (27)
 

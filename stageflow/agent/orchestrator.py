@@ -15,7 +15,7 @@ import asyncio
 import concurrent.futures
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from stageflow.core.registry import StageRegistry
 from stageflow.agent.hybrid import HybridWorkflow

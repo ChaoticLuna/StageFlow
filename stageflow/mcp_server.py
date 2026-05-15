@@ -12,8 +12,6 @@ Or programmatically:
 
 from __future__ import annotations
 
-import json
-from typing import Any, Dict, List, Optional
 
 
 def create_mcp_server():
