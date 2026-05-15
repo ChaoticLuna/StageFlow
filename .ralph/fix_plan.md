@@ -296,6 +296,12 @@ Hard acceptance rules for this phase:
 
 ---
 
+## Phase 34: TypeScript 严格模式修复
+
+- [x] **task-114**: Fix 5 `TS2532` (Object is possibly 'undefined') errors in `yaml.test.ts`. Added non-null assertions (`!`) to edge/data/condition array accesses where test data guarantees presence. `tsc --noEmit` and `tsc --noEmit --noUnusedLocals` both clean.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |

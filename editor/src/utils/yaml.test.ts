@@ -174,9 +174,9 @@ transitions:
 `;
     const result = importFromYaml(yaml);
     if ("nodes" in result) {
-      expect(result.edges[0].data.conditions).toHaveLength(2);
-      expect(result.edges[0].data.conditions[0].type).toBe("file_exists");
-      expect(result.edges[0].data.conditions[1].type).toBe("always");
+      expect(result.edges[0]!.data!.conditions).toHaveLength(2);
+      expect(result.edges[0]!.data!.conditions[0]!.type).toBe("file_exists");
+      expect(result.edges[0]!.data!.conditions[1]!.type).toBe("always");
     }
   });
 
@@ -232,7 +232,7 @@ transitions:
 `;
     const result = importFromYaml(yaml);
     if ("nodes" in result) {
-      expect(result.edges[0].data.on_fail).toBe("a");
+      expect(result.edges[0]!.data!.on_fail).toBe("a");
     }
   });
 
@@ -312,7 +312,7 @@ describe("YAML round-trip", () => {
       expect(result.edges).toHaveLength(1);
       expect(result.edges[0].source).toBe("investigate");
       expect(result.edges[0].target).toBe("implement");
-      expect(result.edges[0].data.conditions[0].type).toBe("file_exists");
+      expect(result.edges[0]!.data!.conditions[0]!.type).toBe("file_exists");
     } else {
       throw new Error("Round-trip failed: " + result.error);
     }
