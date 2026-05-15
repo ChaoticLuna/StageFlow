@@ -47,7 +47,9 @@ function conditionFromYaml(obj: Record<string, unknown>): ConditionDef {
   }
 
   if (typeof val !== "object" || val === null) {
-    return { type, params: { [firstParamForType(type)]: val } };
+    const first = firstParamForType(type);
+    if (!first) return { type, params: {} };
+    return { type, params: { [first]: val } };
   }
 
   return { type, params: val as Record<string, unknown> };

@@ -311,6 +311,7 @@ Hard acceptance rules for this phase:
 ## Phase 36: Bug 修复 — 空 Hook 在 YAML 导出时被静默丢弃
 
 - [x] **task-116**: Fix `hooksToYaml()` in `yaml.ts` — used truthiness checks (`if (h.shell)`) which dropped empty-string hooks (e.g. `{shell: ""}` from newly added but unfilled hooks). Changed to `"shell" in h` / `"python" in h` key-presence checks. Added test for empty hook export round-trip.
+- [x] **task-117**: Fix `conditionFromYaml()` — scalar-valued conditions with no first param (e.g. `always`) created `params: {"": true}` internally. Added guard: if `firstParamForType` returns empty string, skip param injection, keep `params: {}`.
 
 ---
 
