@@ -289,6 +289,12 @@ Hard acceptance rules for this phase:
 
 ---
 
+## Phase 33: Bug 修复 — Hook 类型切换残留旧 key
+
+- [x] **task-112**: Fix `toggleHookKind` in PropertiesPanel — toggling shell→python left both keys (`{shell, python}`) because `updateHook` used spread merge. Changed to direct `onChange` with clean single-key replacement. Updated 2 tests to verify old key is removed.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |

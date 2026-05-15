@@ -179,13 +179,14 @@ function HookEditor({
   const toggleHookKind = useCallback(
     (index: number) => {
       const current = hooks[index];
+      const val = current.shell ?? current.python ?? "";
       if ("shell" in current) {
-        updateHook(index, { python: current.shell ?? "" });
+        onChange(hooks.map((h, i) => (i === index ? { python: val } : h)));
       } else {
-        updateHook(index, { shell: current.python ?? "" });
+        onChange(hooks.map((h, i) => (i === index ? { shell: val } : h)));
       }
     },
-    [hooks, updateHook]
+    [hooks, onChange]
   );
 
   return (

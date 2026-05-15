@@ -227,7 +227,7 @@ describe("PropertiesPanel", () => {
       );
     });
 
-    it("toggles hook kind from shell to python", () => {
+    it("toggles hook kind from shell to python, removing the old key", () => {
       const onUpdate = vi.fn();
       render(
         <PropertiesPanel
@@ -247,11 +247,11 @@ describe("PropertiesPanel", () => {
       fireEvent.click(kindToggle);
       expect(onUpdate).toHaveBeenCalledWith(
         "test-node",
-        expect.objectContaining({ on_enter: [{ shell: "echo hi", python: "echo hi" }] })
+        expect.objectContaining({ on_enter: [{ python: "echo hi" }] })
       );
     });
 
-    it("toggles hook kind from python to shell", () => {
+    it("toggles hook kind from python to shell, removing the old key", () => {
       const onUpdate = vi.fn();
       render(
         <PropertiesPanel
@@ -271,7 +271,7 @@ describe("PropertiesPanel", () => {
       fireEvent.click(kindToggle);
       expect(onUpdate).toHaveBeenCalledWith(
         "test-node",
-        expect.objectContaining({ on_exit: [{ python: "print('x')", shell: "print('x')" }] })
+        expect.objectContaining({ on_exit: [{ shell: "print('x')" }] })
       );
     });
 
