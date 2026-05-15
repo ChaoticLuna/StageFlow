@@ -2,7 +2,32 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-095 — Phase 29 legacy migration and compatibility complete
+> **交接原因**: task-096 — Phase 29 documentation update complete
+
+---
+
+## task-096 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Updated `CLAUDE.md`** — comprehensive rewrite of user-facing sections:
+   - 快速开始: replaced `python scripts/stage_next.py` with `stageflow start`/`stageflow next`, added Git-like explanation
+   - CLI 命令: complete rewrite with all current commands (init, start, migrate, hook, etc.) organized by category
+   - 阶段转移脚本: deprecated old scripts, mapped them to new CLI equivalents
+   - 运行身份与产物隔离: updated to new reset/start semantics (no more `reset <stage>`)
+   - 工具拦截: documented global `stageflow hook` entrypoint and discovery-based root resolution
+   - 工作约束: updated to reference `stageflow next` instead of `stage_next.py`
+   - 目录结构: added `.stageflow/`, discovery.py, updated test counts
+   - 项目统计: updated to 1154 tests, 18 modules
+2. **Updated `.ralph/AGENT.md`** — rewritten Run section with full CLI commands, updated project structure, added new-style project notes
+3. **Updated `docs/api_reference.md`** — new commands documented (init as project bootstrap, start, migrate, hook), old reset syntax removed, jump --reason added
+
+### 当前状态快照
+```
+Phase 29:        task-096 complete
+Next task:       task-097 — CLI smoke-test layer
+fix_plan.md:     96/100 tasks complete
+Tests:           1154 passed, 1 skipped, 0 failed
+```
 
 ---
 

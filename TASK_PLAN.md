@@ -1,8 +1,8 @@
 # StageFlow — Task Plan
 
 > **最后更新**: 2026-05-16
-> **当前阶段**: Phase 29 — Git-like CLI (task-095 complete, task-096 next) 🔄
-> **Ralph 状态**: 活跃 — fix_plan.md 95/100 完成
+> **当前阶段**: Phase 29 — Git-like CLI (task-096 complete, task-097 next) 🔄
+> **Ralph 状态**: 活跃 — fix_plan.md 96/100 完成
 
 ---
 
