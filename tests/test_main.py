@@ -91,6 +91,8 @@ class TestStageflowCLI:
         assert r.returncode == 0, r.stderr
 
     def test_status_json_output(self):
+        _stageflow("reset")
+        _stageflow("start", "pick")
         r = _stageflow("status", "--json")
         assert r.returncode == 0, r.stderr
         import json
@@ -132,7 +134,8 @@ class TestStageflowCLI:
 
     def test_resume_keeps_run_id_in_new_session(self):
         """A new StateMachine session retains the same run_id from disk."""
-        r1 = _stageflow("reset", "pick")
+        _stageflow("reset")
+        r1 = _stageflow("start", "pick")
         assert r1.returncode == 0, r1.stderr
         data1 = json.loads(_stageflow("status", "--json").stdout)
         rid1 = data1["variables"]["run_id"]
@@ -141,33 +144,20 @@ class TestStageflowCLI:
         assert data2["variables"]["run_id"] == rid1
 
     def test_status_run_id_changes_after_reset(self):
-        """Plain reset creates a new run_id (CLI-level)."""
-        _stageflow("reset", "pick")
+        """Reset + start creates a new run_id (CLI-level)."""
+        _stageflow("reset")
+        _stageflow("start", "pick")
         data1 = json.loads(_stageflow("status", "--json").stdout)
         rid1 = data1["variables"]["run_id"]
 
-        r = _stageflow("reset", "pick")
+        _stageflow("reset")
+        r = _stageflow("start", "pick")
         assert r.returncode == 0, r.stderr
         data2 = json.loads(_stageflow("status", "--json").stdout)
         rid2 = data2["variables"]["run_id"]
 
         assert rid1 != rid2, (
-            f"Plain reset must create new run_id: {rid1} -> {rid2}"
-        )
-
-    def test_status_run_id_preserved_after_reset_reuse(self):
-        """reset --reuse-run preserves the same run_id (CLI-level)."""
-        _stageflow("reset", "pick")
-        data1 = json.loads(_stageflow("status", "--json").stdout)
-        rid1 = data1["variables"]["run_id"]
-
-        r = _stageflow("reset", "pick", "--reuse-run")
-        assert r.returncode == 0, r.stderr
-        data2 = json.loads(_stageflow("status", "--json").stdout)
-        rid2 = data2["variables"]["run_id"]
-
-        assert rid1 == rid2, (
-            f"reset --reuse-run must preserve run_id: {rid1} != {rid2}"
+            f"Reset + start must create new run_id: {rid1} -> {rid2}"
         )
 
     def test_next_dry_run(self):
@@ -228,7 +218,8 @@ class TestStageflowCLI:
         assert r.returncode in (0, 1), f"rc={r.returncode}: {r.stderr}"
 
     def test_init_runs(self):
-        r = _stageflow("reset", "analyze")
+        _stageflow("reset")
+        r = _stageflow("start", "analyze")
         assert r.returncode in (0, 1), f"rc={r.returncode}: {r.stderr}"
 
     def test_check_plain_output(self):
@@ -268,7 +259,7 @@ class TestStageflowCLI:
         assert "fully reset" in r.stdout
 
     def test_jump_force(self, known_state_file):
-        r = _stageflow("jump", "--force", "verify")
+        r = _stageflow("jump", "--force", "--reason", "test force jump", "verify")
         assert r.returncode == 0, f"rc={r.returncode}: {r.stderr}"
 
     # ── uninitialized paths ───────────────────────────────────────────
@@ -489,7 +480,7 @@ class TestMainInProcess:
         assert result in (0, 1, None)
 
     def test_jump_force(self, monkeypatch, known_state_file):
-        result = self._run(monkeypatch, "jump", "--force", "verify")
+        result = self._run(monkeypatch, "jump", "--force", "--reason", "test force jump", "verify")
         assert result in (0, None)
 
     # ── reset ────────────────────────────────────────────────────────
@@ -502,12 +493,8 @@ class TestMainInProcess:
         result = self._run(monkeypatch, "reset", "--hard")
         assert result in (0, None)
 
-    def test_reset_reuse_run(self, monkeypatch):
-        result = self._run(monkeypatch, "reset", "pick", "--reuse-run")
-        assert result in (0, 1, None)
-
     def test_reset_clean_artifacts(self, monkeypatch):
-        result = self._run(monkeypatch, "reset", "pick", "--clean-artifacts")
+        result = self._run(monkeypatch, "reset", "--clean-artifacts")
         assert result in (0, 1, None)
 
     # ── graph / init / check ─────────────────────────────────────────
@@ -517,7 +504,7 @@ class TestMainInProcess:
         assert result in (0, None)
 
     def test_init(self, monkeypatch):
-        result = self._run(monkeypatch, "reset", "analyze")
+        result = self._run(monkeypatch, "start", "analyze")
         assert result in (0, 1, None)
 
     def test_check(self, monkeypatch):
@@ -840,12 +827,12 @@ class TestNestedDirectoryCommands:
         self._run(tmp_path, "start", "alpha")
         nested = tmp_path / "src" / "lib" / "deep"
         nested.mkdir(parents=True)
-        r = self._run(nested, "reset", "alpha")
+        r = self._run(nested, "reset")
         assert r.returncode == 0, r.stderr
-        state = tmp_path / ".stageflow" / "current_stage.json"
-        assert state.is_file()
+        assert "StageFlow state cleared" in r.stdout
         assert not (nested / ".stageflow").exists()
         assert not (nested / ".claude").exists()
+        assert not (tmp_path / ".stageflow" / "current_stage.json").exists()
 
     def test_no_legacy_state_file_created_in_new_project(self, tmp_path):
         self._run(tmp_path, "init")
@@ -886,3 +873,75 @@ class TestNestedDirectoryCommands:
         import json
         data = json.loads(r.stdout)
         assert data["current_stage"] == "alpha"
+
+
+class TestResetAndJumpHardening:
+    """Reset must not accept stage arg; jump --force requires --reason."""
+
+    @staticmethod
+    def _run(cwd, *args):
+        import subprocess, sys
+        return subprocess.run(
+            [sys.executable, "-m", "stageflow", *args],
+            capture_output=True, text=True, cwd=str(cwd), timeout=30,
+        )
+
+    def test_reset_with_stage_fails_clear_error(self, tmp_path):
+        """reset <stage> must fail with a clear usage error."""
+        self._run(tmp_path, "init")
+        r = self._run(tmp_path, "reset", "pick")
+        assert r.returncode != 0, f"reset pick should fail, got rc={r.returncode}"
+        assert "unrecognized" in r.stderr.lower() or "usage" in r.stderr.lower()
+
+    def test_plain_reset_clears_state_without_stage(self, tmp_path):
+        """Plain reset clears active run and prints guidance."""
+        self._run(tmp_path, "init")
+        self._run(tmp_path, "start", "pick")
+        r = self._run(tmp_path, "reset")
+        assert r.returncode == 0, r.stderr
+        assert "StageFlow state cleared" in r.stdout
+        assert "stageflow start" in r.stdout
+
+    def test_reset_hard_clears_state(self, tmp_path):
+        """reset --hard fully clears the state file."""
+        self._run(tmp_path, "init")
+        self._run(tmp_path, "start", "pick")
+        r = self._run(tmp_path, "reset", "--hard")
+        assert r.returncode == 0, r.stderr
+
+    def test_forced_jump_requires_reason(self, tmp_path):
+        """jump --force without --reason fails."""
+        self._run(tmp_path, "init")
+        self._run(tmp_path, "start", "pick")
+        r = self._run(tmp_path, "jump", "verify", "--force")
+        assert r.returncode == 1, f"jump --force without --reason should fail, rc={r.returncode}"
+        assert "--reason" in r.stderr
+
+    def test_forced_jump_with_reason_works(self, tmp_path):
+        """jump --force --reason '...' succeeds."""
+        self._run(tmp_path, "init")
+        self._run(tmp_path, "start", "pick")
+        r = self._run(tmp_path, "jump", "verify", "--force", "--reason", "emergency rollback")
+        assert r.returncode == 0, r.stderr
+
+    def test_jump_without_force_still_condition_gated(self, tmp_path):
+        """Normal jump (no --force) must still pass conditions."""
+        self._run(tmp_path, "init")
+        self._run(tmp_path, "start", "pick")
+        r = self._run(tmp_path, "jump", "verify")
+        assert r.returncode == 1, f"jump without force should be condition-gated, rc={r.returncode}"
+
+    def test_next_remains_condition_gated(self, tmp_path):
+        """Normal next must not bypass conditions."""
+        self._run(tmp_path, "init")
+        self._run(tmp_path, "start", "pick")
+        r = self._run(tmp_path, "next")
+        assert r.returncode == 1, f"next should be condition-gated, rc={r.returncode}"
+
+    def test_next_force_succeeds(self, tmp_path):
+        """next --force bypasses conditions."""
+        self._run(tmp_path, "init")
+        self._run(tmp_path, "start", "pick")
+        r = self._run(tmp_path, "next", "--force")
+        assert r.returncode == 0, r.stderr
+

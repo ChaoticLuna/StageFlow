@@ -2,7 +2,52 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-092 — Phase 29 nested-directory isolation tests
+> **交接原因**: task-093 — Phase 29 reset/jump hardening complete
+
+---
+
+## task-093 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Removed stage positional arg from `stageflow reset`** — `cmd_reset` now only clears state, `--hard` differentiates output message ("fully reset" vs "cleared")
+2. **Removed `--reuse-run` from `stageflow start`** — separated reset/start model makes reuse-run semantically impossible: `reset()` always clears state, so `start --reuse-run` has nothing to reuse. Users who want to restart the same run should not call reset first.
+3. **Enforced `--reason` on `jump --force`** — `cmd_jump` now requires `--reason '...'` when `--force` is used, for audit trail
+4. **Added TestResetAndJumpHardening** (8 tests):
+   - test_reset_with_stage_fails_clear_error — reset <stage> rejected with usage error
+   - test_plain_reset_clears_state_without_stage — plain reset clears run, prints guidance
+   - test_reset_hard_clears_state — reset --hard clears state
+   - test_forced_jump_requires_reason — jump --force without --reason fails
+   - test_forced_jump_with_reason_works — jump --force --reason succeeds
+   - test_jump_without_force_still_condition_gated — normal jump requires conditions
+   - test_next_remains_condition_gated — normal next must pass conditions
+   - test_next_force_succeeds — next --force bypasses conditions
+5. **Updated 5 existing tests** for new semantics:
+   - test_jump_force → added --reason flag
+   - test_reset_hard → changed to accept new output message
+   - test_status_json_output → added explicit reset+start before status check
+   - test_resume_keeps_run_id_in_new_session → added reset before start
+   - test_status_run_id_changes_after_reset → added explicit reset between runs
+6. **Removed 3 tests** that used removed --reuse-run on start:
+   - test_start_reuse_run_preserves_run_id (TestResetAndJumpHardening)
+   - test_status_run_id_preserved_after_reset_reuse (TestStageflowCLI)
+   - test_reset_reuse_run (TestMainInProcess)
+
+### 设计决策
+- `--reuse-run` on start removed because the separated reset/start model always clears state on reset, so there's nothing to reuse
+- Keeping run_id across resets would require a different mechanism not exposed at CLI level yet
+- Jump --force --reason provides audit trail without changing engine internals
+
+### 当前状态快照
+```
+Phase 29:        task-093 complete
+Next task:       task-094 — global hook entrypoint (stageflow hook command)
+fix_plan.md:     93/100 tasks complete
+Tests:           1121 passed, 1 skipped, 0 failed
+```
+
+### 已知问题
+- Stage guard keeps resetting state file to analyze during work; need to force-advance after state mutations
+- Legacy state file at .claude/current_stage.json conflicts with tests that manipulate state from PROJECT_ROOT
 
 ---
 

@@ -200,10 +200,17 @@ def cmd_jump(args):
     reg, sm, root = _require_sm()
     if sm is None:
         return 1
+    if args.force and not getattr(args, 'reason', None):
+        print("Error: --force requires --reason '...' for audit trail.", file=sys.stderr)
+        return 1
     if sm.current_stage is None:
         ok, msgs = sm.initialize(args.target)
     elif args.force:
         ok, msgs = sm.force_transition_to(args.target)
+        sm.audit.log_transition(
+            sm.current_stage, args.target, success=ok, forced=True,
+            messages=[f"reason: {args.reason}"],
+        )
     else:
         ok, msgs = sm.transition_to(args.target)
     for m in msgs:
@@ -212,23 +219,17 @@ def cmd_jump(args):
 
 
 def cmd_reset(args):
+    """Clear the active run. Use stageflow start to begin a new run."""
     reg, sm, root = _require_sm()
     if sm is None:
         return 1
     if getattr(args, 'clean_artifacts', False):
         sm.clean_run_artifacts()
-    if args.hard:
-        sm.reset()
-        print("State machine fully reset.")
+    sm.reset()
+    if getattr(args, 'hard', False):
+        print("State fully reset. Use 'stageflow start' to begin a new run.")
     else:
-        target = args.stage or (reg.stage_names[0] if reg.stage_names else "pick")
-        reuse_run = getattr(args, 'reuse_run', False)
-        if not reuse_run:
-            sm.reset()
-        ok, msgs = sm.initialize(target, reuse_run=reuse_run)
-        for m in msgs:
-            print(f"  {m}")
-        return 0 if ok else 1
+        print("StageFlow state cleared. Use 'stageflow start' to begin a new run.")
 
 
 def cmd_graph(args):
@@ -718,11 +719,10 @@ Examples:
     p = sub.add_parser("jump", help="Jump to a specific stage")
     p.add_argument("target", help="Target stage name")
     p.add_argument("--force", "-f", action="store_true")
+    p.add_argument("--reason", "-r", help="Reason for forced jump (required with --force)")
 
-    p = sub.add_parser("reset", help="Reset state machine")
-    p.add_argument("stage", nargs="?", help="Stage to reset to")
+    p = sub.add_parser("reset", help="Reset the active run (clears state)")
     p.add_argument("--hard", action="store_true")
-    p.add_argument("--reuse-run", action="store_true", help="Keep existing run_id instead of creating a new one")
     p.add_argument("--clean-artifacts", action="store_true", help="Delete the current run's artifact directory before resetting")
 
     p = sub.add_parser("graph", help="Generate Mermaid flowchart")
