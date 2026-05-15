@@ -686,6 +686,36 @@ def cmd_mcp(args):
     return 0
 
 
+def cmd_root(args):
+    """Print the discovered StageFlow project root path."""
+    import json as _json
+    from stageflow.core.discovery import discover_project
+
+    root = discover_project()
+    if root is None:
+        print("Not a StageFlow project. Run 'stageflow init' to create one.", file=sys.stderr)
+        return 1
+
+    if getattr(args, "json", False):
+        print(_json.dumps({
+            "root": str(root.path),
+            "marker_type": root.marker_type,
+            "config_path": str(root.config_path),
+            "state_path": str(root.state_path),
+            "artifacts_dir": str(root.artifacts_dir),
+            "audit_dir": str(root.audit_dir),
+        }))
+        return 0
+
+    print(f"Project root: {root.path}")
+    print(f"Marker type:  {root.marker_type}")
+    print(f"Config:       {root.config_path}")
+    print(f"State:        {root.state_path}")
+    print(f"Artifacts:    {root.artifacts_dir}")
+    print(f"Audit:        {root.audit_dir}")
+    return 0
+
+
 def cmd_migrate(args):
     """Convert a legacy StageFlow project to new-style (.stageflow/)."""
     from stageflow.core.discovery import discover_project
@@ -950,6 +980,9 @@ Examples:
     p.add_argument("path", nargs="?", help="Target directory (default: discovered project root)")
     p.add_argument("--force", "-f", action="store_true", help="Overwrite existing .stageflow/ directory")
 
+    p = sub.add_parser("root", help="Print the discovered project root path")
+    p.add_argument("--json", "-j", action="store_true", help="JSON output")
+
     p = sub.add_parser("mcp", help="Start MCP server (stdio transport)")
 
     args = parser.parse_args()
@@ -962,7 +995,7 @@ Examples:
         "jump": cmd_jump, "reset": cmd_reset, "graph": cmd_graph,
         "list": cmd_list, "init": cmd_init, "start": cmd_start,
         "check": cmd_check,
-        "cond": cmd_cond, "generate": cmd_generate, "hook": cmd_hook, "migrate": cmd_migrate, "mcp": cmd_mcp,
+        "cond": cmd_cond, "generate": cmd_generate, "hook": cmd_hook, "migrate": cmd_migrate, "root": cmd_root, "mcp": cmd_mcp,
     }
     return commands[args.command](args)
 

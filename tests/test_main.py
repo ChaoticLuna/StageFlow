@@ -2149,3 +2149,85 @@ class TestAIWorkflowE2E:
             "Package .claude/current_stage.json was mutated by AI workflow"
         assert os.path.isdir(pkg_stageflow) == before_sf, \
             "Package .stageflow/ was mutated by AI workflow"
+
+
+class TestRootCommand:
+    """Tests for stageflow root — prints discovered project root path."""
+
+    @staticmethod
+    def _run(cwd, *args):
+        import subprocess, sys
+        return subprocess.run(
+            [sys.executable, "-m", "stageflow", *args],
+            capture_output=True, text=True, cwd=str(cwd), timeout=30,
+        )
+
+    def test_root_from_project_root(self, tmp_path):
+        self._run(tmp_path, "init")
+        r = self._run(tmp_path, "root")
+        assert r.returncode == 0, r.stderr
+        assert "Project root:" in r.stdout
+        assert str(tmp_path.resolve()) in r.stdout
+        assert "Marker type:" in r.stdout
+        assert "new" in r.stdout
+
+    def test_root_from_nested_subdir(self, tmp_path):
+        self._run(tmp_path, "init")
+        nested = tmp_path / "src" / "lib" / "deep"
+        nested.mkdir(parents=True)
+        r = self._run(nested, "root")
+        assert r.returncode == 0, r.stderr
+        assert str(tmp_path.resolve()) in r.stdout
+
+    def test_root_json_output(self, tmp_path):
+        import json
+        self._run(tmp_path, "init")
+        r = self._run(tmp_path, "root", "--json")
+        assert r.returncode == 0, r.stderr
+        data = json.loads(r.stdout)
+        assert data["marker_type"] == "new"
+        for key in ("root", "config_path", "state_path", "artifacts_dir", "audit_dir"):
+            assert key in data, f"Missing key: {key}"
+
+    def test_root_json_short_flag(self, tmp_path):
+        import json
+        self._run(tmp_path, "init")
+        r = self._run(tmp_path, "root", "-j")
+        assert r.returncode == 0, r.stderr
+        data = json.loads(r.stdout)
+        assert data["marker_type"] == "new"
+
+    def test_root_outside_project_fails(self, tmp_path):
+        r = self._run(tmp_path, "root")
+        assert r.returncode == 1
+        assert "Not a StageFlow project" in r.stderr
+
+    def test_root_from_legacy_project(self, tmp_path):
+        import json
+        (tmp_path / "stageflow" / "config").mkdir(parents=True)
+        (tmp_path / "stageflow" / "config" / "stages.yaml").write_text(
+            "stages: []\ntransitions: []\n", encoding="utf-8"
+        )
+        r = self._run(tmp_path, "root", "--json")
+        assert r.returncode == 0, r.stderr
+        data = json.loads(r.stdout)
+        assert data["marker_type"] == "legacy"
+
+    def test_root_new_beats_legacy_in_same_dir(self, tmp_path):
+        import json
+        self._run(tmp_path, "init")
+        (tmp_path / "stageflow" / "config").mkdir(parents=True)
+        (tmp_path / "stageflow" / "config" / "stages.yaml").write_text(
+            "stages: []\ntransitions: []\n", encoding="utf-8"
+        )
+        r = self._run(tmp_path, "root", "--json")
+        assert r.returncode == 0, r.stderr
+        data = json.loads(r.stdout)
+        assert data["marker_type"] == "new"
+
+    def test_root_from_nested_outside_project_fails(self, tmp_path):
+        nested = tmp_path / "a" / "b" / "c"
+        nested.mkdir(parents=True)
+        r = self._run(nested, "root")
+        assert r.returncode == 1
+        assert "Not a StageFlow project" in r.stderr
