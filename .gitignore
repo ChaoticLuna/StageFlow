@@ -61,5 +61,8 @@ target/
 *.swp
 *.swo
 
+# StageFlow run artifacts (generated at runtime)
+artifacts/runs/
+
 # Ralph backup directories (created by migration)
 .ralph_backup_*
