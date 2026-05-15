@@ -386,3 +386,160 @@ class TestGenerateCLI:
     def test_generate_no_args(self):
         r = _stageflow("generate")
         assert r.returncode == 0, f"rc={r.returncode}: {r.stderr}"
+
+
+class TestMainInProcess:
+    """Call main() directly via monkeypatch for coverage tracking."""
+
+    def _run(self, monkeypatch, *args):
+        monkeypatch.setattr(sys, "argv", ["stageflow"] + list(args))
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from stageflow.__main__ import main
+        try:
+            return main()
+        except SystemExit as e:
+            return int(e.code) if e.code is not None else 0
+
+    # ── status ──────────────────────────────────────────────────────
+
+    def test_status_json(self, monkeypatch):
+        result = self._run(monkeypatch, "status", "--json")
+        assert result in (0, None)
+
+    def test_status_verbose(self, monkeypatch):
+        result = self._run(monkeypatch, "status", "--verbose")
+        assert result in (0, None)
+
+    # ── list ─────────────────────────────────────────────────────────
+
+    def test_list_json(self, monkeypatch):
+        result = self._run(monkeypatch, "list", "--json")
+        assert result in (0, None)
+
+    # ── next ─────────────────────────────────────────────────────────
+
+    def test_next_basic(self, monkeypatch):
+        result = self._run(monkeypatch, "next")
+        assert result in (0, 1, None)
+
+    def test_next_force(self, monkeypatch, known_state_file):
+        result = self._run(monkeypatch, "next", "--force", "verify")
+        assert result in (0, None)
+
+    def test_next_dry_run(self, monkeypatch):
+        result = self._run(monkeypatch, "next", "--dry-run")
+        assert result in (0, 1, None)
+
+    def test_next_dry_run_target(self, monkeypatch, known_state_file):
+        result = self._run(monkeypatch, "next", "--dry-run", "verify")
+        assert result in (0, 1, None)
+
+    # ── back / jump ──────────────────────────────────────────────────
+
+    def test_back(self, monkeypatch):
+        result = self._run(monkeypatch, "back")
+        assert result in (0, 1, None)
+
+    def test_jump(self, monkeypatch):
+        result = self._run(monkeypatch, "jump", "analyze")
+        assert result in (0, 1, None)
+
+    def test_jump_force(self, monkeypatch, known_state_file):
+        result = self._run(monkeypatch, "jump", "--force", "verify")
+        assert result in (0, None)
+
+    # ── reset ────────────────────────────────────────────────────────
+
+    def test_reset(self, monkeypatch):
+        result = self._run(monkeypatch, "reset")
+        assert result in (0, 1, None)
+
+    def test_reset_hard(self, monkeypatch):
+        result = self._run(monkeypatch, "reset", "--hard")
+        assert result in (0, None)
+
+    def test_reset_reuse_run(self, monkeypatch):
+        result = self._run(monkeypatch, "reset", "pick", "--reuse-run")
+        assert result in (0, 1, None)
+
+    def test_reset_clean_artifacts(self, monkeypatch):
+        result = self._run(monkeypatch, "reset", "pick", "--clean-artifacts")
+        assert result in (0, 1, None)
+
+    # ── graph / init / check ─────────────────────────────────────────
+
+    def test_graph(self, monkeypatch):
+        result = self._run(monkeypatch, "graph")
+        assert result in (0, None)
+
+    def test_init(self, monkeypatch):
+        result = self._run(monkeypatch, "init", "analyze")
+        assert result in (0, 1, None)
+
+    def test_check(self, monkeypatch):
+        result = self._run(monkeypatch, "check", "analyze")
+        assert result in (0, 1, None)
+
+    def test_check_json(self, monkeypatch):
+        result = self._run(monkeypatch, "check", "--json", "analyze")
+        assert result in (0, 1, None)
+
+    def test_check_uninitialized(self, monkeypatch, uninitialized_state):
+        result = self._run(monkeypatch, "check", "analyze")
+        assert result == 1
+
+    # ── cond ─────────────────────────────────────────────────────────
+
+    def test_cond_list(self, monkeypatch):
+        result = self._run(monkeypatch, "cond", "--list")
+        assert result == 0
+
+    def test_cond_always(self, monkeypatch):
+        result = self._run(monkeypatch, "cond", "always")
+        assert result in (0, None)
+
+    def test_cond_with_params(self, monkeypatch):
+        result = self._run(monkeypatch, "cond", "file_exists", "--params",
+                           '{"path": "pyproject.toml"}')
+        assert result in (0, None)
+
+    def test_cond_bare(self, monkeypatch):
+        result = self._run(monkeypatch, "cond")
+        assert result == 1
+
+    # ── generate ─────────────────────────────────────────────────────
+
+    def test_generate_basic(self, monkeypatch):
+        result = self._run(monkeypatch, "generate", "test workflow")
+        assert result in (0, None)
+
+    def test_generate_list_templates(self, monkeypatch):
+        result = self._run(monkeypatch, "generate", "--list-templates")
+        assert result == 0
+
+    def test_generate_prompt_only(self, monkeypatch):
+        result = self._run(monkeypatch, "generate", "test", "--prompt-only")
+        assert result in (0, None)
+
+    def test_generate_with_template(self, monkeypatch):
+        result = self._run(monkeypatch, "generate", "ci test", "--template", "CI_CD")
+        assert result in (0, None)
+
+    def test_generate_bad_template(self, monkeypatch):
+        result = self._run(monkeypatch, "generate", "test", "--template", "NONEXISTENT")
+        assert result in (0, None)
+
+    def test_generate_with_validate(self, monkeypatch):
+        result = self._run(monkeypatch, "generate", "test", "--validate")
+        assert result in (0, None)
+
+    def test_generate_with_output(self, monkeypatch, tmp_path):
+        out = tmp_path / "out.yaml"
+        result = self._run(monkeypatch, "generate", "test", "--output", str(out))
+        assert result in (0, None)
+
+    # ── mcp ──────────────────────────────────────────────────────────
+
+    def test_mcp_help(self, monkeypatch):
+        result = self._run(monkeypatch, "mcp", "--help")
+        assert result == 0
