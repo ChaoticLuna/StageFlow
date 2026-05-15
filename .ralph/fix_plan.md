@@ -272,6 +272,15 @@ Hard acceptance rules for this phase:
 
 ---
 
+## Phase 31: Editor 前端测试 🆕
+
+- [x] **task-105**: Install vitest + @testing-library/react + jsdom in editor/. Set up vitest.config.ts with jsdom environment. Add "test" and "test:run" scripts to package.json. Verify vitest --run works (0 tests is OK at this stage).
+- [ ] **task-106**: Write component tests for the editor's TypeScript utility functions (YAML parse/serialize, validation helpers). These don't need DOM and are the lowest-risk starting point.
+- [ ] **task-107**: Write component tests for React components (StageNode, Canvas, PropertiesPanel, EdgeEditor) using @testing-library/react. Test rendering, user interactions, and prop changes.
+- [ ] **task-108**: Run editor test suite, verify all pass. Document test commands in CLAUDE.md and api_reference.md.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |
