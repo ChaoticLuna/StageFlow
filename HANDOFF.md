@@ -2,7 +2,34 @@
 
 > **最后更新**: 2026-05-15
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-081 complete — docs updated for run/resume behavior
+> **交接原因**: task-082 complete — run-scoped artifact isolation demos
+
+---
+
+## task-082 会话总结 (2026-05-15)
+
+### 完成了什么
+创建 `examples/run_scoped_artifacts/run_demo.py` 和 `tests/test_run_demo.py`。
+
+### Demo 设计
+- 使用临时目录中的 3 阶段迷你工作流 (start → build → done)
+- Demo 1: 运行 task_a，写入 task_a 专属 artifacts，推进到 done
+- Demo 2: 运行 task_b (新 run_id)，验证:
+  1. 两个 run_id 不同
+  2. task_a 的产物不会解锁 task_b 的转换（条件使用 `{{var.run_id}}`）
+  3. 错误的 `changes_requested.md` 会阻塞 done 门控
+  4. 每个 run 有独立的产物目录
+
+### 文件
+- `examples/run_scoped_artifacts/run_demo.py` — 168 行，可直接 `python run_demo.py` 运行
+- `tests/test_run_demo.py` — 5 个测试，subprocess 包装器验证 demo 输出
+
+### 测试结果
+- run_demo.py: 手动运行通过，ALL DEMOS PASSED
+- test_run_demo.py: 5/5 通过
+
+### 下一步
+Phase 27 (6 个任务，077-082) 现已完成。TASK_PLAN.md 应更新为 82/82 且 Phase 27 标记为 ✅。
 
 ---
 
