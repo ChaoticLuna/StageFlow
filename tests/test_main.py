@@ -1766,3 +1766,386 @@ class TestMultiRepoIsolation:
 
         assert not (repo_a / ".claude" / "current_stage.json").exists()
         assert not (repo_b / ".claude" / "current_stage.json").exists()
+
+
+class TestAIWorkflowE2E:
+    """End-to-end AI-style workflow tests with progressively harder scenarios.
+
+    Uses a custom 4-stage YAML with artifact-based transitions. Stage names
+    are deliberately different from the built-in example workflow.
+
+    Scenarios (each is a separate test, increasing in difficulty):
+      (1) bootstrap a fresh repo and start at the first custom stage
+      (2) create current-run artifacts and advance through two custom stages
+      (3) resume from a nested directory in a new Python process, same run_id
+      (4) assert stale artifacts from an old run do not unlock a new run
+      (5) assert the global hook command blocks/permits based on discovered root
+    """
+
+    AI_STAGES = {
+        "stages": [
+            {"name": "investigate", "tools": ["Read", "Grep", "Glob", "WebSearch"],
+             "meta": {"description": "Investigation phase"}},
+            {"name": "implement", "tools": ["Read", "Edit", "Write"],
+             "meta": {"description": "Implementation phase"}},
+            {"name": "verify", "tools": ["Read"],
+             "meta": {"description": "Verification phase — read-only"}},
+            {"name": "deliver", "tools": [],
+             "meta": {"description": "Delivery complete"}},
+        ],
+        "transitions": [
+            {"from": "investigate", "to": "implement", "conditions": [
+                {"file_exists": "artifacts/runs/{{var.run_id}}/investigate/findings.md"}
+            ]},
+            {"from": "implement", "to": "verify", "conditions": [
+                {"file_exists": "artifacts/runs/{{var.run_id}}/implement/patch.diff"}
+            ]},
+            {"from": "verify", "to": "deliver", "conditions": [
+                {"file_exists": "artifacts/runs/{{var.run_id}}/verify/test_report.md"}
+            ]},
+        ],
+    }
+
+    @staticmethod
+    def _run(cwd, *args):
+        import subprocess, sys
+        return subprocess.run(
+            [sys.executable, "-m", "stageflow", *args],
+            capture_output=True, text=True, cwd=str(cwd), timeout=30,
+        )
+
+    @staticmethod
+    def _run_hook(cwd, stdin_str):
+        """Run stageflow hook with stdin input."""
+        import subprocess, sys
+        return subprocess.run(
+            [sys.executable, "-m", "stageflow", "hook"],
+            capture_output=True, text=True, cwd=str(cwd), timeout=30,
+            input=stdin_str,
+        )
+
+    @staticmethod
+    def _write_yaml(path, config):
+        import yaml
+        path.write_text(yaml.dump(config), encoding="utf-8")
+
+    @staticmethod
+    def _read_state(project_dir):
+        import json
+        return json.loads(
+            (project_dir / ".stageflow" / "current_stage.json").read_text()
+        )
+
+    @staticmethod
+    def _get_run_id(project_dir):
+        return TestAIWorkflowE2E._read_state(project_dir)["variables"]["run_id"]
+
+    def _init_project(self, project_dir):
+        project_dir.mkdir(parents=True, exist_ok=True)
+        self._run(project_dir, "init")
+        self._write_yaml(
+            project_dir / ".stageflow" / "config" / "stages.yaml", self.AI_STAGES
+        )
+
+    # ── scenario (1): bootstrap fresh repo and start at first custom stage ──
+
+    def test_bootstrap_and_start_first_stage(self, tmp_path):
+        """Init a fresh repo, write custom YAML, start at first stage."""
+        import json
+        self._init_project(tmp_path)
+
+        r = self._run(tmp_path, "start")
+        assert r.returncode == 0, r.stderr
+
+        state = self._read_state(tmp_path)
+        assert state["current_stage"] == "investigate", \
+            f"Expected 'investigate' as first stage, got {state['current_stage']}"
+        assert "run_id" in state.get("variables", {}), "Missing run_id"
+        assert len(state["variables"]["run_id"]) == 36  # UUID4
+
+        # Verify state file location
+        assert (tmp_path / ".stageflow" / "current_stage.json").is_file()
+
+    def test_start_specific_stage(self, tmp_path):
+        """Start at a named custom stage, not just the first."""
+        self._init_project(tmp_path)
+        r = self._run(tmp_path, "start", "implement")
+        assert r.returncode == 0, r.stderr
+        state = self._read_state(tmp_path)
+        assert state["current_stage"] == "implement"
+
+    # ── scenario (2): create artifacts and advance through two custom stages ──
+
+    def test_advance_through_two_stages_with_artifacts(self, tmp_path):
+        """Create investigation artifact → advance to implement,
+        create implementation artifact → advance to verify."""
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "investigate")
+
+        run_id = self._get_run_id(tmp_path)
+        investigate_dir = tmp_path / "artifacts" / "runs" / run_id / "investigate"
+        investigate_dir.mkdir(parents=True)
+        (investigate_dir / "findings.md").write_text("## Root Cause\nBug found in parser.\n", encoding="utf-8")
+
+        # Advance: investigate → implement
+        r = self._run(tmp_path, "next")
+        assert r.returncode == 0, f"next failed: {r.stderr}"
+        state = self._read_state(tmp_path)
+        assert state["current_stage"] == "implement", \
+            f"Expected 'implement', got {state['current_stage']}"
+
+        # Create implement artifact
+        impl_dir = tmp_path / "artifacts" / "runs" / run_id / "implement"
+        impl_dir.mkdir(parents=True)
+        (impl_dir / "patch.diff").write_text("@@ -1,3 +1,4 @@\n fix parser\n", encoding="utf-8")
+
+        # Advance: implement → verify
+        r2 = self._run(tmp_path, "next")
+        assert r2.returncode == 0, f"next failed: {r2.stderr}"
+        state2 = self._read_state(tmp_path)
+        assert state2["current_stage"] == "verify", \
+            f"Expected 'verify', got {state2['current_stage']}"
+
+    def test_transition_blocked_without_artifact(self, tmp_path):
+        """Next fails when required artifact doesn't exist."""
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "investigate")
+
+        # No artifact created — should fail
+        r = self._run(tmp_path, "next")
+        assert r.returncode != 0, "Expected next to fail without artifact"
+        state = self._read_state(tmp_path)
+        assert state["current_stage"] == "investigate", "Stage should not have changed"
+
+    def test_full_pipeline_investigate_to_deliver(self, tmp_path):
+        """Advance through all 4 stages by creating all required artifacts."""
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "investigate")
+        run_id = self._get_run_id(tmp_path)
+        base = tmp_path / "artifacts" / "runs" / run_id
+
+        # investigate → implement
+        (base / "investigate").mkdir(parents=True)
+        (base / "investigate" / "findings.md").write_text("# Findings\nDone.\n", encoding="utf-8")
+        self._run(tmp_path, "next")
+
+        # implement → verify
+        (base / "implement").mkdir(parents=True)
+        (base / "implement" / "patch.diff").write_text("diff content\n", encoding="utf-8")
+        self._run(tmp_path, "next")
+
+        # verify → deliver
+        (base / "verify").mkdir(parents=True)
+        (base / "verify" / "test_report.md").write_text("# All tests passed\n", encoding="utf-8")
+        self._run(tmp_path, "next")
+
+        state = self._read_state(tmp_path)
+        assert state["current_stage"] == "deliver", \
+            f"Expected 'deliver', got {state['current_stage']}"
+
+    # ── scenario (3): resume from nested subdir in new process, same run_id ──
+
+    def test_resume_from_nested_subdir_in_new_process(self, tmp_path):
+        """Start a run, then from a new Python process in a nested subdir,
+        verify the same run_id and continue advancing."""
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "investigate")
+        run_id = self._get_run_id(tmp_path)
+
+        # Create investigate artifact
+        inv_dir = tmp_path / "artifacts" / "runs" / run_id / "investigate"
+        inv_dir.mkdir(parents=True)
+        (inv_dir / "findings.md").write_text("# Found it\n", encoding="utf-8")
+
+        # Advance to implement from root
+        self._run(tmp_path, "next")
+
+        # Now simulate "resume" — a new process checks state from nested dir
+        nested = tmp_path / "src" / "module" / "deep"
+        nested.mkdir(parents=True)
+        import json
+        r = self._run(nested, "status", "--json")
+        assert r.returncode == 0, r.stderr
+        data = json.loads(r.stdout)
+        assert data["current_stage"] == "implement"
+        assert data["variables"]["run_id"] == run_id
+
+        # Create implement artifact from the nested dir
+        impl_dir = tmp_path / "artifacts" / "runs" / run_id / "implement"
+        impl_dir.mkdir(parents=True)
+        (impl_dir / "patch.diff").write_text("patch\n", encoding="utf-8")
+
+        # Advance from nested dir
+        r2 = self._run(nested, "next")
+        assert r2.returncode == 0, f"next failed: {r2.stderr}"
+        state = self._read_state(tmp_path)
+        assert state["current_stage"] == "verify"
+
+    # ── scenario (4): stale artifacts from old run don't unlock new run ──
+
+    def test_stale_artifacts_dont_unlock_new_run(self, tmp_path):
+        """Old run's artifacts should not satisfy conditions for a new run."""
+        self._init_project(tmp_path)
+
+        # First run — create artifacts and advance
+        self._run(tmp_path, "start", "investigate")
+        run_id_1 = self._get_run_id(tmp_path)
+        inv_dir = tmp_path / "artifacts" / "runs" / run_id_1 / "investigate"
+        inv_dir.mkdir(parents=True)
+        (inv_dir / "findings.md").write_text("# First run\n", encoding="utf-8")
+        self._run(tmp_path, "next")
+        assert self._read_state(tmp_path)["current_stage"] == "implement"
+
+        # Reset and start a NEW run
+        self._run(tmp_path, "reset")
+        assert not (tmp_path / ".stageflow" / "current_stage.json").exists()
+
+        self._run(tmp_path, "start", "investigate")
+        run_id_2 = self._get_run_id(tmp_path)
+        assert run_id_2 != run_id_1, "New run should have different run_id"
+
+        # Stale artifacts from run_id_1 exist, but conditions use {{var.run_id}}
+        # which resolves to run_id_2 — so old artifacts should NOT unlock
+        r = self._run(tmp_path, "next")
+        assert r.returncode != 0, \
+            "Expected next to fail — stale artifacts from old run should not unlock new run"
+        state = self._read_state(tmp_path)
+        assert state["current_stage"] == "investigate", \
+            "Stage should not advance with stale artifacts"
+
+        # But creating artifacts for the CURRENT run_id should work
+        inv_dir_2 = tmp_path / "artifacts" / "runs" / run_id_2 / "investigate"
+        inv_dir_2.mkdir(parents=True)
+        (inv_dir_2 / "findings.md").write_text("# Second run\n", encoding="utf-8")
+        r2 = self._run(tmp_path, "next")
+        assert r2.returncode == 0, \
+            f"Should advance with correct-run artifacts: {r2.stderr}"
+        assert self._read_state(tmp_path)["current_stage"] == "implement"
+
+    # ── scenario (5): global hook blocks/permits based on discovered root ──
+
+    def test_hook_permits_allowed_tool_in_investigate(self, tmp_path):
+        """Hook should allow Read in investigate stage."""
+        import json
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "investigate")
+
+        hook_input = json.dumps({"tool_name": "Read", "tool_input": {}})
+        r = self._run_hook(tmp_path, hook_input)
+        assert r.returncode == 0, r.stderr
+        result = json.loads(r.stdout)
+        assert result["decision"] == "allow", f"Expected allow, got {result}"
+
+    def test_hook_blocks_disallowed_tool_in_investigate(self, tmp_path):
+        """Hook should block Edit in investigate stage (only Read/Grep/Glob/WebSearch allowed)."""
+        import json
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "investigate")
+
+        hook_input = json.dumps({"tool_name": "Edit", "tool_input": {}})
+        r = self._run_hook(tmp_path, hook_input)
+        # Blocking returns exit code 1 — check stdout for the decision
+        result = json.loads(r.stdout)
+        assert result["decision"] == "block", f"Expected block, got {result}"
+
+    def test_hook_allows_edit_in_implement_stage(self, tmp_path):
+        """Hook should allow Edit in implement stage."""
+        import json
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "implement")
+
+        hook_input = json.dumps({"tool_name": "Edit", "tool_input": {}})
+        r = self._run_hook(tmp_path, hook_input)
+        assert r.returncode == 0, r.stderr
+        result = json.loads(r.stdout)
+        assert result["decision"] == "allow", f"Expected allow, got {result}"
+
+    def test_hook_from_nested_subdir_uses_discovered_root(self, tmp_path):
+        """Hook run from nested subdir should enforce the discovered project's rules."""
+        import json
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "investigate")
+
+        nested = tmp_path / "src" / "deep"
+        nested.mkdir(parents=True)
+
+        # Edit is disallowed in investigate stage — even from nested dir
+        hook_input = json.dumps({"tool_name": "Edit", "tool_input": {}})
+        r = self._run_hook(nested, hook_input)
+        result = json.loads(r.stdout)
+        assert result["decision"] == "block", \
+            f"Expected block from nested dir, got {result}"
+
+        # Read should be allowed
+        hook_input2 = json.dumps({"tool_name": "Read", "tool_input": {}})
+        r2 = self._run_hook(nested, hook_input2)
+        assert r2.returncode == 0, r2.stderr
+        result2 = json.loads(r2.stdout)
+        assert result2["decision"] == "allow", \
+            f"Expected allow from nested dir, got {result2}"
+
+    def test_hook_allows_everything_in_deliver_stage(self, tmp_path):
+        """Deliver stage has empty tools list — everything should be allowed."""
+        import json
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "deliver")
+
+        for tool in ["Edit", "Write", "Bash", "PowerShell", "Grep"]:
+            hook_input = json.dumps({"tool_name": tool, "tool_input": {}})
+            r = self._run_hook(tmp_path, hook_input)
+            assert r.returncode == 0, r.stderr
+            result = json.loads(r.stdout)
+            assert result["decision"] == "allow", \
+                f"Expected allow for {tool} in deliver, got {result}"
+
+    def test_hook_violation_logged(self, tmp_path):
+        """Blocked tool calls should be logged to guard_violations.jsonl."""
+        import json
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "investigate")
+
+        hook_input = json.dumps({"tool_name": "Edit", "tool_input": {"file_path": "/tmp/x"}})
+        self._run_hook(tmp_path, hook_input)
+        self._run_hook(tmp_path, hook_input)
+
+        violations_path = tmp_path / ".stageflow" / "guard_violations.jsonl"
+        assert violations_path.is_file(), "Violations log should exist"
+        lines = violations_path.read_text(encoding="utf-8").strip().split("\n")
+        assert len(lines) >= 2, f"Expected at least 2 violations logged, got {len(lines)}"
+        for line in lines:
+            entry = json.loads(line)
+            assert entry["tool"] == "Edit"
+
+    # ── package source isolation ──
+
+    def test_package_source_unchanged(self, tmp_path):
+        """Running the full AI workflow in a temp project must not mutate
+        the StageFlow package source tree."""
+        import os
+        tests_dir = os.path.dirname(__file__)
+        pkg_root = os.path.join(tests_dir, "..")
+        pkg_state = os.path.join(pkg_root, ".claude", "current_stage.json")
+        pkg_stageflow = os.path.join(pkg_root, ".stageflow")
+
+        before_state = os.path.exists(pkg_state)
+        before_sf = os.path.isdir(pkg_stageflow)
+
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "investigate")
+        run_id = self._get_run_id(tmp_path)
+        base = tmp_path / "artifacts" / "runs" / run_id
+        (base / "investigate").mkdir(parents=True)
+        (base / "investigate" / "findings.md").write_text("# ok\n", encoding="utf-8")
+        self._run(tmp_path, "next")
+        (base / "implement").mkdir(parents=True)
+        (base / "implement" / "patch.diff").write_text("ok\n", encoding="utf-8")
+        self._run(tmp_path, "next")
+        (base / "verify").mkdir(parents=True)
+        (base / "verify" / "test_report.md").write_text("ok\n", encoding="utf-8")
+        self._run(tmp_path, "next")
+        self._run(tmp_path, "reset")
+
+        assert os.path.exists(pkg_state) == before_state, \
+            "Package .claude/current_stage.json was mutated by AI workflow"
+        assert os.path.isdir(pkg_stageflow) == before_sf, \
+            "Package .stageflow/ was mutated by AI workflow"

@@ -2,7 +2,52 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-098 — nested-directory and multi-repo tests complete
+> **交接原因**: task-099 — AI-style e2e workflow tests complete
+
+---
+
+## task-099 会话总结 (2026-05-16)
+
+### 做了什么
+1. **新增 `TestAIWorkflowE2E` 测试类** (14 tests) 到 `tests/test_main.py`，使用 4 阶段自定义 YAML（stage 名称: investigate/implement/verify/deliver）:
+
+   **场景 (1) — bootstrap and start:**
+   - `test_bootstrap_and_start_first_stage` — init + start，验证 first stage="investigate" + run_id
+   - `test_start_specific_stage` — 从指定 stage 启动
+
+   **场景 (2) — artifacts and advance:**
+   - `test_advance_through_two_stages_with_artifacts` — 创建 findings.md → advance to implement，创建 patch.diff → advance to verify
+   - `test_transition_blocked_without_artifact` — 缺少 artifact 时 next 失败且不改变 stage
+   - `test_full_pipeline_investigate_to_deliver` — 完整 4 阶段流水线，创建所有 artifacts
+
+   **场景 (3) — resume from nested subdir:**
+   - `test_resume_from_nested_subdir_in_new_process` — 从嵌套目录读取 status --json，验证相同 run_id，继续推进
+
+   **场景 (4) — stale artifacts don't unlock new run:**
+   - `test_stale_artifacts_dont_unlock_new_run` — reset + 新 run_id 后，使用 `{{var.run_id}}` 插值的条件不会被旧 run artifacts 满足
+
+   **场景 (5) — hook blocks/permits by discovered root:**
+   - `test_hook_permits_allowed_tool_in_investigate` — 允许 Read
+   - `test_hook_blocks_disallowed_tool_in_investigate` — 阻止 Edit
+   - `test_hook_allows_edit_in_implement_stage` — implement stage 允许 Edit
+   - `test_hook_from_nested_subdir_uses_discovered_root` — 嵌套目录 hook 也使用发现的项目根
+   - `test_hook_allows_everything_in_deliver_stage` — 空 tools list 允许所有工具
+   - `test_hook_violation_logged` — 违规记录到 guard_violations.jsonl
+
+   **Package isolation:**
+   - `test_package_source_unchanged` — 完整 AI 工作流后源码包未被修改
+
+2. **Transition 条件使用 `{{var.run_id}}` 变量插值**，实现按 run 隔离的 artifact 检查
+
+3. **添加 `_run_hook` 辅助方法** — 支持 stdin 输入的 hook 子进程调用
+
+### 测试结果
+- **TestAIWorkflowE2E**: 14/14 passed
+- **test_main.py 全部**: 192/192 passed
+- **Full non-editor suite**: 1140 passed, 1 skipped
+
+### 下一步
+- **task-100**: Run staged verification — increasing difficulty layers, document results
 
 ---
 
