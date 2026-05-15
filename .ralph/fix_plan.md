@@ -302,6 +302,12 @@ Hard acceptance rules for this phase:
 
 ---
 
+## Phase 35: 依赖更新
+
+- [x] **task-115**: Run `npm update` — bump `@tanstack/react-query` 5.100.9→5.100.10, `vite` 8.0.11→8.0.13. Zero vulnerabilities. All 107 editor tests pass.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |
