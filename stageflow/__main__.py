@@ -186,8 +186,10 @@ def cmd_reset(args):
         print("State machine fully reset.")
     else:
         target = args.stage or (reg.stage_names[0] if reg.stage_names else "pick")
-        sm.reset()
-        ok, msgs = sm.initialize(target)
+        reuse_run = getattr(args, 'reuse_run', False)
+        if not reuse_run:
+            sm.reset()
+        ok, msgs = sm.initialize(target, reuse_run=reuse_run)
         for m in msgs:
             print(f"  {m}")
         return 0 if ok else 1
@@ -463,6 +465,7 @@ Examples:
     p = sub.add_parser("reset", help="Reset state machine")
     p.add_argument("stage", nargs="?", help="Stage to reset to")
     p.add_argument("--hard", action="store_true")
+    p.add_argument("--reuse-run", action="store_true", help="Keep existing run_id instead of creating a new one")
 
     p = sub.add_parser("graph", help="Generate Mermaid flowchart")
 

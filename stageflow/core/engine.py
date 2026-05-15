@@ -350,18 +350,27 @@ class StateMachine:
         """Force a transition without condition checks."""
         return self.transition_to(target, force=True, reason=reason)
 
-    def initialize(self, stage: str) -> Tuple[bool, List[str]]:
-        """Initialize the state machine at a starting stage."""
+    def initialize(self, stage: str, reuse_run: bool = False) -> Tuple[bool, List[str]]:
+        """Initialize the state machine at a starting stage.
+
+        If reuse_run is True, preserves the existing run_id from the current
+        state (if any). Otherwise generates a new UUID for each initialize call.
+        """
         if self.is_paused:
             return False, [f"Cannot initialize: state machine is paused. Reason: {self._state.get('paused_reason', 'none')}"]
         if stage not in self.registry.stage_names:
             return False, [f"Unknown stage: {stage}"]
+        import uuid
+        existing_run_id = None
+        if reuse_run:
+            existing_run_id = self._state.get("variables", {}).get("run_id")
+        run_id = existing_run_id or str(uuid.uuid4())
         self._state = {
             "current_stage": stage,
             "history": [],
             "retry_count": {stage: 0},
             "iterations": {stage: 1},
-            "variables": {},
+            "variables": {"run_id": run_id},
             "paused": False,
             "paused_reason": "",
         }

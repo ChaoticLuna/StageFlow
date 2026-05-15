@@ -1,8 +1,8 @@
 # StageFlow — Task Plan
 
-> **最后更新**: 2026-05-11
-> **当前阶段**: Phase 11 — 生态与集成 ✅ (全部完成)
-> **Ralph 状态**: 活跃 — fix_plan.md 76/76 完成
+> **最后更新**: 2026-05-15
+> **当前阶段**: Phase 27 — Run-scoped artifacts and resume semantics 🔄
+> **Ralph 状态**: 活跃 — fix_plan.md 77/82 完成
 
 ---
 

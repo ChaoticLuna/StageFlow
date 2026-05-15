@@ -1,8 +1,36 @@
 # StageFlow — Agent Handoff 文档
 
-> **最后更新**: 2026-05-11
+> **最后更新**: 2026-05-15
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: Linear + Notion integrations at 100% coverage (1000 tests)
+> **交接原因**: task-077 complete — run identity lifecycle added
+
+---
+
+## task-077 会话总结 (2026-05-15)
+
+### 做了什么
+1. **Added run_id lifecycle to `StateMachine.initialize()`** — generates a UUID on each initialize call, stored as `variables.run_id` and persisted in `.claude/current_stage.json`
+2. **Added `reuse_run: bool = False` parameter** to `initialize()` — when True, preserves the existing `run_id` from current state instead of generating a new one
+3. **Updated CLI reset flow** — `python -m stageflow reset <stage>` starts a fresh run (new UUID); `python -m stageflow reset <stage> --reuse-run` keeps the existing `run_id`
+4. **Updated `scripts/stage_reset.py`** — same `--reuse-run` flag support
+5. **Added 4 tests** in `TestRunIdentity` class (test_engine.py):
+   - `test_initialize_creates_run_id` — UUID generated and persisted
+   - `test_two_default_resets_create_different_run_ids` — fresh run_ids on each reset
+   - `test_reuse_run_preserves_run_id` — `reuse_run=True` keeps the same run_id
+   - `test_reuse_run_missing_old_run_id_creates_one` — graceful fallback when no prior run_id
+6. **Fixed 3 existing tests** that broke due to auto-generated `run_id` in variables:
+   - `test_get_all_vars_returns_dict` — now checks individual keys instead of exact dict match
+   - `test_concurrent_set_var_different_keys` — accounts for +1 run_id key
+   - `test_state_file_consistency_under_concurrent_var_writes` — accounts for +1 run_id key
+
+### 当前状态快照
+```
+Tests:           1004 passed, 0 failed, 1 skipped (1005 collected)
+fix_plan.md:     76/82 tasks complete (task-077 just completed)
+New behavior:    initialize() always creates variables.run_id (UUID4)
+CLI:             reset --reuse-run flag added
+Script:          stage_reset.py --reuse-run flag added
+```
 
 ---
 

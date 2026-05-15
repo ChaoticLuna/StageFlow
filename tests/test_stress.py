@@ -149,7 +149,7 @@ class TestConcurrentVariables:
             assert val is not None, f"key_{t} was not set"
             assert val.startswith(f"val_{t}_"), f"key_{t} has wrong value: {val}"
 
-        assert len(sm.get_all_vars()) == num_threads
+        assert len(sm.get_all_vars()) == num_threads + 1  # +1 for auto-generated run_id
 
     def test_concurrent_reads_during_writes(self, tmp_path):
         """Concurrent readers should always get valid values while writers are active."""
@@ -414,7 +414,7 @@ class TestFileIntegrity:
             pytest.fail(f"State file corrupted by concurrent writes: {e}")
 
         assert parsed["current_stage"] == "a"
-        assert len(parsed["variables"]) == 8
+        assert len(parsed["variables"]) == 9  # 8 threads + auto-generated run_id
 
     def test_state_file_not_truncated_by_concurrent_saves(self, tmp_path):
         """Rapid consecutive saves should never produce a truncated/empty file."""
