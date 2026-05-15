@@ -2,7 +2,36 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-096 — Phase 29 documentation update complete
+> **交接原因**: task-098 — nested-directory and multi-repo tests complete
+
+---
+
+## task-098 会话总结 (2026-05-16)
+
+### 做了什么
+1. **新增 `TestMultiRepoIsolation` 测试类** (10 tests) 到 `tests/test_main.py`:
+   - `test_repo_a_deep_nested_touches_only_repo_a` — 从 `repo_a/src/lib/deep` 运行命令仅影响 repo_a
+   - `test_repo_b_deep_nested_touches_only_repo_b` — 从 `repo_b/apps/nested/deep` 运行命令仅影响 repo_b
+   - `test_reset_in_repo_a_does_not_affect_repo_b` — repo_a 的 reset 不影响 repo_b 状态
+   - `test_start_from_nested_in_repo_a_after_reset` — reset 后从嵌套目录重新 start
+   - `test_outside_both_projects_fails` — 两个项目之外的目录报 "Not a StageFlow project"
+   - `test_package_source_not_mutated` — 运行多 repo 操作后，StageFlow 源码包的 `.claude/current_stage.json` 和 `.stageflow/` 未被修改
+   - `test_multi_repo_status_json_from_nested` — 两个 repo 各自从嵌套目录获取 JSON 状态
+   - `test_multi_repo_list_shows_correct_project` — list 命令只显示当前项目的 stages
+   - `test_next_dry_run_from_each_project` — 两个项目各自 dry-run 互不干扰
+   - `test_no_legacy_state_file_in_either_repo` — 两个新项目都不产生 legacy state 文件
+
+2. **使用不同的 stage 名称区分两个项目**: repo_a 用 alpha/beta, repo_b 用 uno/dos
+
+3. **添加 `_init` 辅助方法** — 一步完成目录创建 + init + 写入自定义 YAML
+
+### 测试结果
+- **TestMultiRepoIsolation**: 10/10 passed
+- **test_main.py 全部**: 178/178 passed
+- **Full non-editor suite**: 1126 passed, 1 skipped
+
+### 下一步
+- **task-099**: AI-style e2e workflow tests with progressively harder scenarios
 
 ---
 

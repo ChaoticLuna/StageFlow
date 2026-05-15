@@ -1491,3 +1491,278 @@ class TestCLISmoke:
 
         assert os.path.isdir(pkg_stageflow) == before_sf
         assert os.path.exists(pkg_claude_state) == before_claude
+
+
+class TestMultiRepoIsolation:
+    """Two independent projects side by side — commands from one don't affect the other."""
+
+    @staticmethod
+    def _run(cwd, *args):
+        import subprocess, sys
+        return subprocess.run(
+            [sys.executable, "-m", "stageflow", *args],
+            capture_output=True, text=True, cwd=str(cwd), timeout=30,
+        )
+
+    @classmethod
+    def _init(cls, project_dir, stages_config):
+        """Create directory, run init, write custom YAML."""
+        project_dir.mkdir(parents=True, exist_ok=True)
+        cls._run(project_dir, "init")
+        cls._write_yaml(project_dir / ".stageflow" / "config" / "stages.yaml", stages_config)
+
+    STAGES_A = {
+        "stages": [
+            {"name": "alpha", "tools": ["Read"], "meta": {"description": "Repo A first"}},
+            {"name": "beta", "tools": ["Write"], "meta": {"description": "Repo A second"}},
+        ],
+        "transitions": [
+            {"from": "alpha", "to": "beta", "conditions": [{"always": True}]},
+        ],
+    }
+
+    STAGES_B = {
+        "stages": [
+            {"name": "uno", "tools": ["Read"], "meta": {"description": "Repo B first"}},
+            {"name": "dos", "tools": ["Write"], "meta": {"description": "Repo B second"}},
+        ],
+        "transitions": [
+            {"from": "uno", "to": "dos", "conditions": [{"always": True}]},
+        ],
+    }
+
+    @staticmethod
+    def _write_yaml(path, config):
+        import yaml
+        path.write_text(yaml.dump(config), encoding="utf-8")
+
+    @staticmethod
+    def _read_state(project_dir):
+        import json
+        return json.loads(
+            (project_dir / ".stageflow" / "current_stage.json").read_text()
+        )
+
+    # ── two projects, commands from each deep subdir ──
+
+    def test_repo_a_deep_nested_touches_only_repo_a(self, tmp_path):
+        repo_a = tmp_path / "repo_a"
+        repo_b = tmp_path / "repo_b"
+        self._init(repo_a, self.STAGES_A)
+        self._init(repo_b, self.STAGES_B)
+        self._run(repo_a, "start", "alpha")
+        self._run(repo_b, "start", "uno")
+
+        deep = repo_a / "src" / "lib" / "deep"
+        deep.mkdir(parents=True)
+
+        r = self._run(deep, "status")
+        assert r.returncode == 0, r.stderr
+        assert "alpha" in r.stdout
+
+        self._run(deep, "next")
+        a_state = self._read_state(repo_a)
+        assert a_state["current_stage"] == "beta"
+
+        b_state = self._read_state(repo_b)
+        assert b_state["current_stage"] == "uno"
+
+        assert not (deep / ".stageflow").exists()
+        assert not (deep / ".claude").exists()
+
+    def test_repo_b_deep_nested_touches_only_repo_b(self, tmp_path):
+        repo_a = tmp_path / "repo_a"
+        repo_b = tmp_path / "repo_b"
+        self._init(repo_a, self.STAGES_A)
+        self._init(repo_b, self.STAGES_B)
+        self._run(repo_a, "start", "alpha")
+        self._run(repo_b, "start", "uno")
+
+        deep = repo_b / "apps" / "nested" / "deep"
+        deep.mkdir(parents=True)
+
+        r = self._run(deep, "status")
+        assert r.returncode == 0, r.stderr
+        assert "uno" in r.stdout
+
+        self._run(deep, "next")
+        b_state = self._read_state(repo_b)
+        assert b_state["current_stage"] == "dos"
+
+        a_state = self._read_state(repo_a)
+        assert a_state["current_stage"] == "alpha"
+
+        assert not (deep / ".stageflow").exists()
+        assert not (deep / ".claude").exists()
+
+    def test_reset_in_repo_a_does_not_affect_repo_b(self, tmp_path):
+        repo_a = tmp_path / "repo_a"
+        repo_b = tmp_path / "repo_b"
+        self._init(repo_a, self.STAGES_A)
+        self._init(repo_b, self.STAGES_B)
+        self._run(repo_a, "start", "alpha")
+        self._run(repo_b, "start", "uno")
+
+        deep = repo_a / "src" / "deep"
+        deep.mkdir(parents=True)
+        r = self._run(deep, "reset")
+        assert r.returncode == 0, r.stderr
+
+        assert not (repo_a / ".stageflow" / "current_stage.json").exists()
+        b_state = self._read_state(repo_b)
+        assert b_state["current_stage"] == "uno"
+
+    def test_start_from_nested_in_repo_a_after_reset(self, tmp_path):
+        repo_a = tmp_path / "repo_a"
+        repo_b = tmp_path / "repo_b"
+        self._init(repo_a, self.STAGES_A)
+        self._init(repo_b, self.STAGES_B)
+        self._run(repo_b, "start", "uno")
+
+        self._run(repo_a, "reset")
+        deep = repo_a / "packages" / "core"
+        deep.mkdir(parents=True)
+        r = self._run(deep, "start", "beta")
+        assert r.returncode == 0, r.stderr
+
+        a_state = self._read_state(repo_a)
+        assert a_state["current_stage"] == "beta"
+        b_state = self._read_state(repo_b)
+        assert b_state["current_stage"] == "uno"
+
+    def test_outside_both_projects_fails(self, tmp_path):
+        repo_a = tmp_path / "repo_a"
+        repo_b = tmp_path / "repo_b"
+        self._init(repo_a, self.STAGES_A)
+        self._init(repo_b, self.STAGES_B)
+
+        nowhere = tmp_path / "random_dir"
+        nowhere.mkdir()
+        r = self._run(nowhere, "status")
+        assert r.returncode == 1
+        assert "Not a StageFlow project" in r.stderr
+
+        deep = nowhere / "x" / "y" / "z"
+        deep.mkdir(parents=True)
+        r2 = self._run(deep, "next")
+        assert r2.returncode == 1
+        assert "Not a StageFlow project" in r2.stderr
+
+    def test_package_source_not_mutated(self, tmp_path):
+        import os
+        tests_dir = os.path.dirname(__file__)
+        pkg_root = os.path.join(tests_dir, "..")
+        pkg_state = os.path.join(pkg_root, ".claude", "current_stage.json")
+        pkg_stageflow = os.path.join(pkg_root, ".stageflow")
+
+        before_state = os.path.exists(pkg_state)
+        before_sf = os.path.isdir(pkg_stageflow)
+
+        repo_a = tmp_path / "repo_a"
+        repo_b = tmp_path / "repo_b"
+        self._init(repo_a, self.STAGES_A)
+        self._init(repo_b, self.STAGES_B)
+        self._run(repo_a, "start", "alpha")
+        self._run(repo_b, "start", "uno")
+
+        deep_a = repo_a / "src" / "deep"
+        deep_a.mkdir(parents=True)
+        self._run(deep_a, "next")
+        self._run(deep_a, "status")
+        self._run(deep_a, "list")
+
+        deep_b = repo_b / "lib" / "nested"
+        deep_b.mkdir(parents=True)
+        self._run(deep_b, "next")
+        self._run(deep_b, "status")
+
+        self._run(repo_a, "reset")
+        self._run(repo_b, "reset")
+
+        assert os.path.exists(pkg_state) == before_state, \
+            "Package .claude/current_stage.json was mutated"
+        assert os.path.isdir(pkg_stageflow) == before_sf, \
+            "Package .stageflow/ was mutated"
+
+    def test_multi_repo_status_json_from_nested(self, tmp_path):
+        import json
+        repo_a = tmp_path / "repo_a"
+        repo_b = tmp_path / "repo_b"
+        self._init(repo_a, self.STAGES_A)
+        self._init(repo_b, self.STAGES_B)
+        self._run(repo_a, "start", "alpha")
+        self._run(repo_b, "start", "dos")
+
+        deep_a = repo_a / "src" / "deep"
+        deep_a.mkdir(parents=True)
+        r1 = self._run(deep_a, "status", "--json")
+        assert r1.returncode == 0
+        data1 = json.loads(r1.stdout)
+        assert data1["current_stage"] == "alpha"
+
+        deep_b = repo_b / "apps" / "sub"
+        deep_b.mkdir(parents=True)
+        r2 = self._run(deep_b, "status", "--json")
+        assert r2.returncode == 0
+        data2 = json.loads(r2.stdout)
+        assert data2["current_stage"] == "dos"
+
+    def test_multi_repo_list_shows_correct_project(self, tmp_path):
+        repo_a = tmp_path / "repo_a"
+        repo_b = tmp_path / "repo_b"
+        self._init(repo_a, self.STAGES_A)
+        self._init(repo_b, self.STAGES_B)
+        self._run(repo_a, "start", "alpha")
+        self._run(repo_b, "start", "uno")
+
+        deep_a = repo_a / "a" / "deep"
+        deep_a.mkdir(parents=True)
+        r1 = self._run(deep_a, "list")
+        assert "alpha" in r1.stdout
+        assert "beta" in r1.stdout
+        assert "uno" not in r1.stdout
+        assert "dos" not in r1.stdout
+
+        deep_b = repo_b / "b" / "deep"
+        deep_b.mkdir(parents=True)
+        r2 = self._run(deep_b, "list")
+        assert "uno" in r2.stdout
+        assert "dos" in r2.stdout
+        assert "alpha" not in r2.stdout
+        assert "beta" not in r2.stdout
+
+    def test_next_dry_run_from_each_project(self, tmp_path):
+        repo_a = tmp_path / "repo_a"
+        repo_b = tmp_path / "repo_b"
+        self._init(repo_a, self.STAGES_A)
+        self._init(repo_b, self.STAGES_B)
+        self._run(repo_a, "start", "alpha")
+        self._run(repo_b, "start", "uno")
+
+        deep_a = repo_a / "deep"
+        deep_a.mkdir()
+        r1 = self._run(deep_a, "next", "--dry-run")
+        assert r1.returncode == 0
+        assert "ALLOWED" in r1.stdout
+
+        deep_b = repo_b / "deep"
+        deep_b.mkdir()
+        r2 = self._run(deep_b, "next", "--dry-run")
+        assert r2.returncode == 0
+        assert "ALLOWED" in r2.stdout
+
+        assert self._read_state(repo_a)["current_stage"] == "alpha"
+        assert self._read_state(repo_b)["current_stage"] == "uno"
+
+    def test_no_legacy_state_file_in_either_repo(self, tmp_path):
+        repo_a = tmp_path / "repo_a"
+        repo_b = tmp_path / "repo_b"
+        self._init(repo_a, self.STAGES_A)
+        self._init(repo_b, self.STAGES_B)
+        self._run(repo_a, "start", "alpha")
+        self._run(repo_b, "start", "uno")
+        self._run(repo_a, "next")
+        self._run(repo_b, "next")
+
+        assert not (repo_a / ".claude" / "current_stage.json").exists()
+        assert not (repo_b / ".claude" / "current_stage.json").exists()
