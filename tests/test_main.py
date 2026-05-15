@@ -1365,3 +1365,129 @@ class TestMixedMarkerPrecedence:
 
         r = self._run(tmp_path, "next")
         assert r.returncode == 1
+
+
+class TestCLISmoke:
+    """Focused smoke tests with custom stage names — verifies the simplest happy path."""
+
+    @staticmethod
+    def _run(cwd, *args):
+        import subprocess, sys
+        return subprocess.run(
+            [sys.executable, "-m", "stageflow", *args],
+            capture_output=True, text=True, cwd=str(cwd), timeout=30,
+        )
+
+    CUSTOM_YAML = {
+        "stages": [
+            {"name": "alpha", "tools": ["Read", "Grep"], "meta": {"description": "Investigation"}},
+            {"name": "beta", "tools": ["Read", "Edit", "Write"], "meta": {"description": "Implementation"}},
+            {"name": "gamma", "tools": [], "meta": {"description": "Terminal"}},
+        ],
+        "transitions": [
+            {"from": "alpha", "to": "beta", "conditions": [{"always": True}]},
+            {"from": "beta", "to": "gamma", "conditions": [{"always": True}]},
+        ],
+    }
+
+    @staticmethod
+    def _write_custom_yaml(yaml_path):
+        import yaml
+        yaml_path.write_text(yaml.dump(TestCLISmoke.CUSTOM_YAML), encoding="utf-8")
+
+    def test_init_creates_expected_files(self, tmp_path):
+        self._run(tmp_path, "init")
+        assert (tmp_path / ".stageflow" / "config" / "stages.yaml").is_file()
+        assert (tmp_path / ".claude" / "settings.json").is_file()
+        assert (tmp_path / "artifacts" / "runs").is_dir()
+        assert not (tmp_path / ".stageflow" / "current_stage.json").exists()
+        assert not (tmp_path / ".claude" / "current_stage.json").exists()
+
+    def test_init_start_creates_state_with_run_id(self, tmp_path):
+        import json
+        self._run(tmp_path, "init")
+        self._write_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        self._run(tmp_path, "start")
+        state = tmp_path / ".stageflow" / "current_stage.json"
+        assert state.is_file()
+        data = json.loads(state.read_text())
+        assert data["current_stage"] == "alpha"
+        assert "run_id" in data.get("variables", {})
+
+    def test_status_shows_custom_stage_name(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._write_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        self._run(tmp_path, "start", "beta")
+        r = self._run(tmp_path, "status")
+        assert r.returncode == 0
+        assert "beta" in r.stdout
+
+    def test_list_shows_custom_stages_not_default(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._write_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        r = self._run(tmp_path, "list")
+        assert r.returncode == 0
+        assert "alpha" in r.stdout
+        assert "beta" in r.stdout
+        assert "gamma" in r.stdout
+        assert "pick" not in r.stdout
+
+    def test_next_dry_run_allowed(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._write_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        self._run(tmp_path, "start", "alpha")
+        r = self._run(tmp_path, "next", "--dry-run")
+        assert r.returncode == 0
+        assert "ALLOWED" in r.stdout
+
+    def test_next_advances_to_next_custom_stage(self, tmp_path):
+        import json
+        self._run(tmp_path, "init")
+        self._write_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        self._run(tmp_path, "start", "alpha")
+        self._run(tmp_path, "next")
+        state = json.loads((tmp_path / ".stageflow" / "current_stage.json").read_text())
+        assert state["current_stage"] == "beta"
+
+    def test_no_legacy_state_file_created(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._write_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        self._run(tmp_path, "start", "alpha")
+        self._run(tmp_path, "next")
+        assert not (tmp_path / ".claude" / "current_stage.json").exists()
+
+    def test_start_unknown_stage_fails(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._write_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        r = self._run(tmp_path, "start", "nonexistent_xyz")
+        assert r.returncode != 0
+
+    def test_next_without_run_fails_with_guidance(self, tmp_path):
+        self._run(tmp_path, "init")
+        self._write_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        r = self._run(tmp_path, "next")
+        assert r.returncode != 0
+        assert "No active run" in r.stderr
+
+    def test_outside_project_fails(self, tmp_path):
+        r = self._run(tmp_path, "status")
+        assert r.returncode != 0
+        assert "Not a StageFlow project" in r.stderr
+
+    def test_package_source_isolation(self, tmp_path):
+        import os
+        pkg_stageflow = os.path.join(os.path.dirname(__file__), "..", ".stageflow")
+        pkg_claude_state = os.path.join(os.path.dirname(__file__), "..", ".claude", "current_stage.json")
+        before_sf = os.path.isdir(pkg_stageflow)
+        before_claude = os.path.exists(pkg_claude_state)
+
+        self._run(tmp_path, "init")
+        self._write_custom_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        self._run(tmp_path, "start", "alpha")
+        self._run(tmp_path, "next")
+        self._run(tmp_path, "reset")
+        self._run(tmp_path, "start", "beta")
+        self._run(tmp_path, "next")
+
+        assert os.path.isdir(pkg_stageflow) == before_sf
+        assert os.path.exists(pkg_claude_state) == before_claude
