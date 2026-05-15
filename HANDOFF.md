@@ -1,8 +1,70 @@
 # StageFlow — Agent Handoff 文档
 
-> **最后更新**: 2026-05-15
+> **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-087 — Phase 27 acceptance command/script
+> **交接原因**: task-089 — Phase 29 Root discovery module
+
+---
+
+## task-089 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Marked task-088 as complete** in fix_plan.md (design doc was already written in prior session)
+2. **Created `stageflow/core/discovery.py`** — project-root discovery module:
+   - `ProjectRoot` frozen dataclass with fields: `path`, `marker_type`, `config_path`, `state_path`, `artifacts_dir`, `audit_dir`
+   - `discover_project(start_path=None)` — walks upward from cwd finding StageFlow markers
+   - Marker priority at each level: `.stageflow/` (new) > `stageflow/config/stages.yaml` (legacy) > `.claude/current_stage.json` (legacy_state_only)
+   - Stops at filesystem root / Windows drive root
+   - Symlink-safe: resolves start_path but not each parent
+3. **Created `tests/test_discovery.py`** — 18 tests across 7 classes:
+   - `TestDiscoverNewStyle` (6): from root, child dir, deeply nested, no project, artifacts_dir, audit_dir
+   - `TestDiscoverLegacy` (3): config marker, from child, state-only marker
+   - `TestMarkerPriority` (2): new beats legacy, legacy beats state-only
+   - `TestNestedProjects` (2): nearest ancestor wins, deep nested falls back to outer
+   - `TestFilesystemBoundaries` (3): stops at /, stops at C:\, temp dir no marker
+   - `TestProjectRootImmutability` (1): frozen dataclass
+   - `TestCurrentDirectoryDefault` (1): uses cwd when no start_path given
+
+### 当前状态快照
+```
+Phase 29:        task-089 complete (discovery module + 18 tests)
+Next task:       task-090 — redefine stageflow init as project bootstrap
+fix_plan.md:     89/98 tasks complete
+Tests:           1089 passed, 1 skipped, 0 failed
+```
+
+---
+
+## task-088 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Created `docs/git_like_design.md`** — comprehensive design and requirements document for Git-like StageFlow CLI (Phase 29):
+   - Section 2: Project marker discovery algorithm (`.stageflow/` > `stageflow/config/stages.yaml` > `.claude/current_stage.json`)
+   - Section 3: `stageflow init` redefined as project bootstrap (no more `init <stage>`)
+   - Section 4: Command classification — which commands require a project vs. work anywhere
+   - Section 5: Path resolution rules for new-style vs. legacy projects
+   - Section 6: Global `stageflow hook` entrypoint design
+   - Section 7: Nested project behavior (nearest ancestor wins)
+   - Section 8: Migration path for legacy projects (automatic compatibility, opt-in migration)
+   - Section 9: Safeguards — package source isolation, test strategy, discovery module purity
+   - Section 10: Implementation order for tasks 088-098
+   - Section 11: Non-goals (no state machine changes, no editor changes, no remote sync)
+   - Section 12: Open decisions (template flag, `stageflow root` command, env var override, gitignore)
+
+### 关键设计决策
+- **New projects use `.stageflow/`** as the authoritative metadata directory
+- **Legacy projects** (`stageflow/config/stages.yaml` + `.claude/current_stage.json`) continue working without migration
+- **`stageflow init` means "create project"** not "set current stage" — use `stageflow reset <stage>` for that
+- **Discovery walks upward from cwd** like Git, nearest marker wins
+- **Commands outside a project fail closed** with actionable message
+- **Global hook** (`stageflow hook`) eliminates need to copy hook scripts between projects
+
+### 当前状态快照
+```
+Phase 29:        task-088 complete (design doc written)
+Next task:       task-089 — implement root discovery module
+fix_plan.md:     88/98 tasks complete
+```
 
 ---
 
