@@ -686,6 +686,143 @@ def cmd_mcp(args):
     return 0
 
 
+ALWAYS_ALLOW_TOOLS = {
+    "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TaskOutput",
+    "Read", "AskUserQuestion",
+}
+
+ALWAYS_ALLOW_COMMANDS = [
+    "python -m stageflow",
+    "python scripts/stage_next.py",
+    "python scripts/stage_status.py",
+    "python scripts/stage_reset.py",
+    "python scripts/stage_jump.py",
+    "python scripts/stage_back.py",
+    "python -c",
+]
+
+
+def _strip_cd_prefix(cmd: str) -> str:
+    import re
+    return re.sub(
+        r'^(cd\s+(/d\s+)?["\']?[A-Za-z]:[^;]*["\']?\s*;\s*)+',
+        '', cmd.strip(), flags=re.IGNORECASE
+    )
+
+
+def _match_bash_pattern(pattern: str, cmd: str) -> bool:
+    import re
+    stripped = _strip_cd_prefix(cmd)
+    regex = "^" + re.escape(pattern).replace(r"\*", ".*").replace(r"\?", ".")
+    return bool(re.search(regex, stripped))
+
+
+def cmd_hook(args):
+    """Claude Code PreToolUse hook entrypoint. Discovers project root from cwd
+    and enforces stage tool allowlist. Outputs allow/block JSON to stdout.
+    """
+    import json as _json
+    from datetime import datetime, timezone
+
+    try:
+        input_data = _json.loads(sys.stdin.read())
+    except (_json.JSONDecodeError, IOError):
+        print(_json.dumps({"decision": "allow", "reason": "hook input parse error — allowing"}))
+        return 0
+
+    tool_name = input_data.get("tool_name", "")
+    tool_input = input_data.get("tool_input", {})
+
+    # Always allow certain tools to prevent deadlock
+    if tool_name in ALWAYS_ALLOW_TOOLS:
+        print(_json.dumps({"decision": "allow", "reason": f"{tool_name} is always allowed"}))
+        return 0
+
+    # Always allow operational stageflow commands via Bash
+    if tool_name in ("Bash", "PowerShell"):
+        cmd = tool_input.get("command", "")
+        stripped = _strip_cd_prefix(cmd)
+        for prefix in ALWAYS_ALLOW_COMMANDS:
+            if stripped.startswith(prefix):
+                print(_json.dumps({"decision": "allow",
+                                   "reason": f"Bash({cmd[:60]}) is always allowed"}))
+                return 0
+
+    # Discover project root
+    from stageflow.core.discovery import discover_project
+    root = discover_project()
+    if root is None:
+        print(_json.dumps({"decision": "allow",
+                           "reason": "not a StageFlow project — allowing"}))
+        return 0
+
+    # Load registry and state from discovered root
+    try:
+        rel_state = str(root.state_path.relative_to(root.path))
+        reg = StageRegistry(str(root.config_path))
+        sm = StateMachine(reg, str(root.path), state_file=rel_state)
+    except Exception:
+        print(_json.dumps({"decision": "allow",
+                           "reason": "config load error — allowing"}))
+        return 0
+
+    current_stage = sm.current_stage
+    if current_stage is None:
+        print(_json.dumps({"decision": "allow",
+                           "reason": "no stage set (bootstrap mode)"}))
+        return 0
+
+    stage = reg.get_stage(current_stage)
+    if stage is None:
+        print(_json.dumps({"decision": "allow",
+                           "reason": f"stage '{current_stage}' not found — allowing"}))
+        return 0
+
+    allowed_tools = stage.tools
+    if not allowed_tools:
+        print(_json.dumps({"decision": "allow",
+                           "reason": f"stage '{current_stage}' has unrestricted tools"}))
+        return 0
+
+    # Check exact tool match
+    if tool_name in allowed_tools:
+        print(_json.dumps({"decision": "allow",
+                           "reason": f"'{tool_name}' allowed in stage '{current_stage}'"}))
+        return 0
+
+    # Check Bash(pattern) / PowerShell(pattern) constraints
+    if tool_name in ("Bash", "PowerShell"):
+        cmd = tool_input.get("command", "")
+        for allowed in allowed_tools:
+            if "(" in allowed and (allowed.startswith("Bash(") or allowed.startswith("PowerShell(")):
+                prefix = allowed.split("(")[0]
+                if tool_name == prefix:
+                    start = allowed.index("(")
+                    pattern = allowed[start + 1:-1].strip()
+                    if _match_bash_pattern(pattern, cmd):
+                        print(_json.dumps({"decision": "allow",
+                                           "reason": f"{tool_name}({cmd[:60]}) matches '{allowed}' in '{current_stage}'"}))
+                        return 0
+
+    # Blocked
+    reason = (f"Tool '{tool_name}' is NOT allowed in stage '{current_stage}'. "
+              f"Allowed tools: {allowed_tools}")
+    print(_json.dumps({"decision": "block", "reason": reason}))
+
+    # Log violation
+    violation_path = root.audit_dir / "guard_violations.jsonl"
+    violation_path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "tool": tool_name,
+        "stage": current_stage,
+        "reason": reason,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    with open(violation_path, "a", encoding="utf-8") as f:
+        f.write(_json.dumps(entry) + "\n")
+    return 1
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(
@@ -755,6 +892,8 @@ Examples:
     p.add_argument("--prompt-only", action="store_true", help="Print the LLM prompt instead of generating")
     p.add_argument("--list-templates", action="store_true", help="List available templates and exit")
 
+    p = sub.add_parser("hook", help="Claude Code PreToolUse hook entrypoint")
+
     p = sub.add_parser("mcp", help="Start MCP server (stdio transport)")
 
     args = parser.parse_args()
@@ -767,7 +906,7 @@ Examples:
         "jump": cmd_jump, "reset": cmd_reset, "graph": cmd_graph,
         "list": cmd_list, "init": cmd_init, "start": cmd_start,
         "check": cmd_check,
-        "cond": cmd_cond, "generate": cmd_generate, "mcp": cmd_mcp,
+        "cond": cmd_cond, "generate": cmd_generate, "hook": cmd_hook, "mcp": cmd_mcp,
     }
     return commands[args.command](args)
 

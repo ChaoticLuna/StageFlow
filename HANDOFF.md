@@ -2,7 +2,54 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-093 — Phase 29 reset/jump hardening complete
+> **交接原因**: task-094 — Phase 29 global hook entrypoint complete
+
+---
+
+## task-094 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Added `cmd_hook` to `__main__.py`** — Claude Code PreToolUse hook entrypoint:
+   - Reads stdin JSON (hook protocol: `{"tool_name": "...", "tool_input": {...}}`)
+   - Always-allow tools: TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, Read, AskUserQuestion
+   - Always-allow Bash commands: `python -m stageflow *`, `python scripts/stage_*.py`, `python -c`
+   - Discovers project root from cwd via `discover_project()`
+   - Loads StageRegistry + StateMachine from discovered root
+   - Checks stage tool allowlist (exact match + Bash(pattern) constraint matching)
+   - Strips Windows `cd /d` prefix from commands before matching
+   - Logs violations to `<root>/.stageflow/guard_violations.jsonl` (new-style) or `<root>/.claude/guard_violations.jsonl` (legacy)
+   - Outputs `{"decision": "allow", ...}` or `{"decision": "block", "reason": "..."}` JSON
+2. **Added `hook` CLI subcommand** — `python -m stageflow hook`
+3. **Added 15 tests** in `TestHookCommand` class:
+   - always-allowed tools (Read, TaskCreate)
+   - block Edit in restricted alpha stage
+   - allow Grep/Write in appropriate stages
+   - violation logging under discovered root
+   - hook works from nested subdirectory (block + allow)
+   - allows everything outside project or in bootstrap mode
+   - malformed input → allow (avoid deadlock)
+   - Bash pattern matching (git allowed, npm blocked)
+   - always-allow operational stageflow commands
+   - unrestricted stage (empty tools) allows anything
+
+### 设计决策
+- Hook follows same protocol as existing `.claude/hooks/stage_guard.py` for drop-in replacement
+- `stageflow init` already writes `.claude/settings.json` pointing to `stageflow hook` (from task-090)
+- Violations logged to `.stageflow/guard_violations.jsonl` for new-style projects (audit_dir)
+- Gracefully allows on parse errors, missing project, or missing state to prevent deadlock
+- Uses `discover_project()` so hook works from any subdirectory
+
+### 当前状态快照
+```
+Phase 29:        task-094 complete
+Next task:       task-095 — migration and compatibility for legacy repos
+fix_plan.md:     94/100 tasks complete
+Tests:           1136 passed, 1 skipped, 0 failed
+```
+
+### 已知问题
+- Stage guard keeps resetting state file to analyze during work
+- Existing `.claude/hooks/stage_guard.py` still works for backward compatibility
 
 ---
 

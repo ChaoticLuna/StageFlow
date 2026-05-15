@@ -945,3 +945,192 @@ class TestResetAndJumpHardening:
         r = self._run(tmp_path, "next", "--force")
         assert r.returncode == 0, r.stderr
 
+
+class TestHookCommand:
+    """Claude Code PreToolUse hook via stageflow hook command."""
+
+    @staticmethod
+    def _hook(cwd, tool_name, tool_input=None):
+        import subprocess, sys, json
+        hook_input = json.dumps({"tool_name": tool_name, "tool_input": tool_input or {}})
+        return subprocess.run(
+            [sys.executable, "-m", "stageflow", "hook"],
+            capture_output=True, text=True, cwd=str(cwd), timeout=30,
+            input=hook_input,
+        )
+
+    @staticmethod
+    def _make_stages_yaml(yaml_path, stages=None, transitions=None):
+        import yaml
+        config = {
+            "stages": stages or [
+                {"name": "alpha", "tools": ["Read", "Grep", "Bash(git *)"], "meta": {"description": "First"}},
+                {"name": "beta", "tools": ["Read", "Edit", "Write"], "meta": {"description": "Second"}},
+                {"name": "gamma", "tools": [], "meta": {"description": "Terminal"}},
+            ],
+            "transitions": transitions or [
+                {"from": "alpha", "to": "beta", "conditions": [{"always": True}]},
+                {"from": "beta", "to": "gamma", "conditions": [{"always": True}]},
+            ],
+        }
+        yaml_path.write_text(yaml.dump(config), encoding="utf-8")
+
+
+    # ── Always-allowed tools ──────────────────────────────────────────
+
+    def test_always_allows_read(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        r = self._hook(tmp_path, "Read")
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    def test_always_allows_taskcreate(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "TaskCreate")
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    # ── Block/allow based on stage ─────────────────────────────────────
+
+    def test_blocks_edit_in_alpha_stage(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Edit", {"file_path": "some/file.py"})
+        assert r.returncode != 0, f"Edit should be blocked in alpha, got rc={r.returncode}"
+        assert "block" in r.stdout
+
+    def test_allows_grep_in_alpha_stage(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Grep")
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    def test_allows_write_in_beta_stage(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "beta"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Write", {"file_path": "some/file.py"})
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    # ── Violation logging ──────────────────────────────────────────────
+
+    def test_violation_logged_under_discovered_root(self, tmp_path):
+        import json
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Edit", {"file_path": "some/file.py"})
+        assert r.returncode != 0
+        viol_path = tmp_path / ".stageflow" / "guard_violations.jsonl"
+        assert viol_path.is_file(), f"Expected violation log at {viol_path}"
+        lines = viol_path.read_text(encoding="utf-8").strip().split("\n")
+        assert len(lines) >= 1
+        entry = json.loads(lines[-1])
+        assert entry["tool"] == "Edit"
+        assert entry["stage"] == "alpha"
+
+    # ── Hook from nested subdirectory ──────────────────────────────────
+
+    def test_hook_from_nested_subdir(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
+        nested = tmp_path / "src" / "lib" / "deep"
+        nested.mkdir(parents=True)
+        r = self._hook(nested, "Edit", {"file_path": "some/file.py"})
+        assert r.returncode != 0, f"Edit should be blocked from nested dir, got rc={r.returncode}"
+        assert "block" in r.stdout
+
+    def test_hook_allows_from_nested_subdir(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
+        nested = tmp_path / "src" / "lib" / "deep"
+        nested.mkdir(parents=True)
+        r = self._hook(nested, "Grep")
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    # ── No project / bootstrap mode ────────────────────────────────────
+
+    def test_allows_when_no_project(self, tmp_path):
+        r = self._hook(tmp_path, "Edit", {"file_path": "some/file.py"})
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+        assert "not a StageFlow project" in r.stdout
+
+    def test_allows_when_no_active_run(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        r = self._hook(tmp_path, "Edit", {"file_path": "some/file.py"})
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+        assert "no stage set" in r.stdout
+
+    # ── Input error handling ───────────────────────────────────────────
+
+    def test_allows_on_malformed_input(self, tmp_path):
+        import subprocess, sys
+        r = subprocess.run(
+            [sys.executable, "-m", "stageflow", "hook"],
+            capture_output=True, text=True, cwd=str(tmp_path), timeout=30,
+            input="not valid json {{{",
+        )
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    # ── Bash pattern matching ──────────────────────────────────────────
+
+    def test_allows_bash_git_in_alpha(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Bash", {"command": "git status"})
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    def test_blocks_bash_npm_in_alpha(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Bash", {"command": "npm install"})
+        assert r.returncode != 0, f"npm should be blocked in alpha, rc={r.returncode}"
+        assert "block" in r.stdout
+
+    # ── Always-allowed operational commands ────────────────────────────
+
+    def test_always_allows_stageflow_commands(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Bash", {"command": "python -m stageflow status"})
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    # ── Unrestricted stage (empty tools) ───────────────────────────────
+
+    def test_allows_anything_in_unrestricted_stage(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "gamma"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Write", {"file_path": "anything.py"})
+        assert r.returncode == 0, r.stderr
+        assert "unrestricted" in r.stdout
