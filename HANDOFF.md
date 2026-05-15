@@ -2,7 +2,18 @@
 
 > **最后更新**: 2026-05-15
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-082 complete — run-scoped artifact isolation demos
+> **交接原因**: cleanup — removed duplicate TestStageflowMainModule class
+
+---
+
+## cleanup 会话总结 (2026-05-15)
+
+### 做了什么
+修复 `tests/test_main.py` 中重复的 `TestStageflowMainModule` 类定义。该文件原本已有此类（第 303 行），未提交的更改又在第 391 行添加了完全相同的第二个定义。删除了重复的类定义，保留了新的 `TestMainInProcess` 类（提供全面的进程内 CLI 测试覆盖）。
+
+### 测试结果
+- 1053 passed, 1 skipped, 0 failed
+- 89 个 test_main.py 测试全部通过
 
 ---
 
