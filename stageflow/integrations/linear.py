@@ -46,9 +46,9 @@ def _load_env(path: Optional[Path] = None) -> Dict[str, str]:
 
 class LinearClient:
     def __init__(self, api_key: Optional[str] = None):
-        self._api_key = api_key or os.environ.get(
+        self._api_key: str = api_key or os.environ.get(
             "LINEAR_API_KEY"
-        ) or _load_env().get("LINEAR_API_KEY")
+        ) or _load_env().get("LINEAR_API_KEY") or ""
         if not self._api_key:
             raise ValueError(
                 "LINEAR_API_KEY not set. Pass api_key parameter, "

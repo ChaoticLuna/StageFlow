@@ -292,6 +292,7 @@ Hard acceptance rules for this phase:
 ## Phase 33: Bug 修复 — Hook 类型切换残留旧 key
 
 - [x] **task-112**: Fix `toggleHookKind` in PropertiesPanel — toggling shell→python left both keys (`{shell, python}`) because `updateHook` used spread merge. Changed to direct `onChange` with clean single-key replacement. Updated 2 tests to verify old key is removed.
+- [x] **task-113**: Fix mypy type error in `linear.py:65` — `_api_key` typed as `Optional[str]` causing `dict-item` incompatible type error. Added `: str` annotation and `or ""` fallback since `__init__` guarantees non-None via ValueError raise.
 
 ---
 
