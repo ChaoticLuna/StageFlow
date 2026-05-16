@@ -20,7 +20,7 @@ class TestStageGuardCheck:
         sm.initialize("start")  # tools: ["Read", "Write"]
 
         # Guard reads state from the same disk location
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         allowed, msg = guard.check("Read")
         assert allowed is True
         assert "allowed" in msg.lower()
@@ -30,7 +30,7 @@ class TestStageGuardCheck:
         sm = StateMachine(registry, str(temp_dir))
         sm.initialize("start")  # tools: ["Read", "Write"]
 
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         allowed, msg = guard.check("Delete")
         assert allowed is False
         assert "NOT allowed" in msg
@@ -40,7 +40,7 @@ class TestStageGuardCheck:
         sm = StateMachine(registry, str(temp_dir))
         sm.initialize("start")  # tools: ["Read", "Write"]
 
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
 
         # First check sees 'start' stage
         allowed, _ = guard.check("Read")
@@ -61,13 +61,13 @@ class TestStageGuardCheck:
         sm = StateMachine(registry, str(temp_dir))
         sm.initialize("start")
 
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         tools = guard.allowed_tools()
         assert tools == ["Read", "Write"]
 
     def test_allowed_tools_no_current_stage(self, registry, temp_dir):
         """allowed_tools returns empty list when no stage is set."""
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         tools = guard.allowed_tools()
         assert tools == []
 
@@ -112,96 +112,187 @@ class TestToolPatternMatching:
 
 
 class TestPathGuard:
+    """Path-level access control via AccessPolicy, unified with cmd_hook."""
+
+    @staticmethod
+    def _register_secured_stage(registry, name="secured", tools=None,
+                                access=None):
+        kwargs = {}
+        if access is not None:
+            kwargs["access"] = access
+        registry.register_stage(name, tools=tools or ["Read", "Write", "Edit", "NotebookEdit"], **kwargs)
+
     def test_write_to_artifacts_allowed(self, registry, temp_dir):
+        self._register_secured_stage(
+            registry, "secured",
+            access={"write": {"allow": ["artifacts/**", ".claude/**"]}},
+        )
         sm = StateMachine(registry, str(temp_dir))
-        sm.initialize("start")  # tools: [Read, Write]
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        sm.initialize("secured")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         allowed, msg = guard.check("Write", {"file_path": "artifacts/test/output.md"})
         assert allowed, f"Write to artifacts/ should be allowed: {msg}"
 
     def test_write_to_dot_claude_allowed(self, registry, temp_dir):
+        self._register_secured_stage(
+            registry, "secured",
+            access={"write": {"allow": ["artifacts/**", ".claude/**"]}},
+        )
         sm = StateMachine(registry, str(temp_dir))
-        sm.initialize("start")
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        sm.initialize("secured")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         allowed, msg = guard.check("Write", {"file_path": ".claude/notes.md"})
         assert allowed, f"Write to .claude/ should be allowed: {msg}"
 
     def test_write_outside_denied(self, registry, temp_dir):
+        self._register_secured_stage(
+            registry, "secured",
+            access={"write": {"allow": ["artifacts/**", ".claude/**"]}},
+        )
         sm = StateMachine(registry, str(temp_dir))
-        sm.initialize("start")
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        sm.initialize("secured")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         allowed, msg = guard.check("Write", {"file_path": "stageflow/core/engine.py"})
         assert not allowed, f"Write to engine.py should be denied: {msg}"
-        assert "denied" in msg.lower()
+        assert "denied" in msg.lower() or "not in allow" in msg.lower()
 
     def test_edit_outside_denied(self, registry, temp_dir):
+        self._register_secured_stage(
+            registry, "secured",
+            access={"write": {"allow": ["artifacts/**", ".claude/**"]}},
+        )
         sm = StateMachine(registry, str(temp_dir))
-        sm.initialize("start")
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        sm.initialize("secured")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         allowed, msg = guard.check("Edit", {"file_path": "pyproject.toml"})
         assert not allowed, f"Edit to pyproject.toml should be denied: {msg}"
 
-    def test_read_always_allowed_if_in_tools(self, registry, temp_dir):
+    def test_read_allowed_when_no_read_policy(self, registry, temp_dir):
+        """Read passes through when stage has no access.read policy."""
         sm = StateMachine(registry, str(temp_dir))
         sm.initialize("start")
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         allowed, msg = guard.check("Read", {"file_path": "stageflow/core/engine.py"})
-        # Read is not in WRITE_TOOLS, so path guard doesn't apply
-        assert allowed, f"Read should be allowed regardless of path: {msg}"
+        assert allowed, f"Read should be allowed when no read policy: {msg}"
+
+    def test_read_blocked_by_read_policy(self, registry, temp_dir):
+        self._register_secured_stage(
+            registry, "secured",
+            access={"read": {"allow": ["artifacts/**", "*.md"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("secured")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Read", {"file_path": "secret.env"})
+        assert not allowed, f"Read outside allow list should be blocked: {msg}"
 
     def test_path_guard_can_be_disabled(self, registry, temp_dir):
+        self._register_secured_stage(
+            registry, "secured",
+            access={"write": {"allow": ["artifacts/**"]}},
+        )
         sm = StateMachine(registry, str(temp_dir))
-        sm.initialize("start")
-        guard = StageGuard(str(registry.config_path), str(temp_dir),
+        sm.initialize("secured")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry,
                           enforce_path_guard=False)
         allowed, msg = guard.check("Write", {"file_path": "stageflow/core/engine.py"})
         assert allowed, f"Path guard disabled should allow write anywhere: {msg}"
 
     def test_notebook_edit_also_checked(self, registry, temp_dir):
+        self._register_secured_stage(
+            registry, "secured",
+            access={"write": {"allow": ["artifacts/**"]}},
+        )
         sm = StateMachine(registry, str(temp_dir))
-        sm.initialize("start")
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        sm.initialize("secured")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         allowed, msg = guard.check("NotebookEdit", {"notebook_path": "scripts/evil.ipynb"})
         assert not allowed, f"NotebookEdit outside allowed roots: {msg}"
+        r = guard.check("NotebookEdit", {"notebook_path": "artifacts/ok.ipynb"})
+        assert r[0], f"NotebookEdit in artifacts should be allowed: {r[1]}"
 
     def test_write_without_file_path(self, registry, temp_dir):
-        """line 38: _check_write_path returns True when tool_input has no file_path."""
+        """No access policy → write without file_path passes through."""
         sm = StateMachine(registry, str(temp_dir))
         sm.initialize("start")
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
-        # Non-empty tool_input with no file_path/notebook_path triggers line 38
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         allowed, msg = guard.check("Write", {"some_other_arg": "value"})
         assert allowed, f"Write without file_path should pass: {msg}"
 
-    def test_write_absolute_path_outside_project(self, registry, temp_dir):
+    def test_write_missing_path_with_policy_fails_closed(self, registry, temp_dir):
+        self._register_secured_stage(
+            registry, "secured",
+            access={"write": {"allow": ["artifacts/**"]}},
+        )
         sm = StateMachine(registry, str(temp_dir))
-        sm.initialize("start")
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        sm.initialize("secured")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Write", {"some_other_arg": "value"})
+        assert not allowed, f"Write without file_path when policy exists should fail closed: {msg}"
+
+    def test_write_absolute_path_outside_project(self, registry, temp_dir):
+        self._register_secured_stage(
+            registry, "secured",
+            access={"write": {"allow": ["**"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("secured")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         allowed, msg = guard.check("Write", {"file_path": "C:/Windows/evil.ps1"})
         assert not allowed, f"Absolute path outside project should be denied: {msg}"
-        assert "outside project" in msg.lower() or "denied" in msg.lower()
+        assert "outside" in msg.lower() or "escape" in msg.lower()
 
     def test_write_absolute_path_inside_project(self, registry, temp_dir):
+        self._register_secured_stage(
+            registry, "secured",
+            access={"write": {"allow": ["**"]}},
+        )
         sm = StateMachine(registry, str(temp_dir))
-        sm.initialize("start")
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        sm.initialize("secured")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         abs_path = str(Path(temp_dir).resolve() / "artifacts" / "ok.md")
         allowed, msg = guard.check("Write", {"file_path": abs_path})
-        assert allowed, f"Absolute path inside project artifacts/ should be allowed: {msg}"
+        assert allowed, f"Absolute path inside project should be allowed: {msg}"
 
     def test_write_dot_path_allowed(self, registry, temp_dir):
+        """No access policy → write to '.' passes through."""
         sm = StateMachine(registry, str(temp_dir))
         sm.initialize("start")
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         allowed, msg = guard.check("Write", {"file_path": "."})
-        assert allowed, f"Write to '.' should be allowed (empty parts): {msg}"
+        assert allowed, f"Write to '.' should be allowed: {msg}"
+
+    def test_deny_overrides_allow(self, registry, temp_dir):
+        self._register_secured_stage(
+            registry, "secured",
+            access={"write": {"allow": ["**"], "deny": ["secrets/**"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("secured")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Write", {"file_path": "secrets/key.txt"})
+        assert not allowed, f"Deny should override allow: {msg}"
+
+    def test_grep_search_root_checked(self, registry, temp_dir):
+        self._register_secured_stage(
+            registry, "secured",
+            tools=["Read", "Grep"],
+            access={"read": {"allow": ["artifacts/**"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("secured")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Grep", {"pattern": "TODO", "path": "artifacts"})
+        assert allowed, f"Grep in allowed dir should pass: {msg}"
+        allowed, msg = guard.check("Grep", {"pattern": "TODO", "path": "stageflow"})
+        assert not allowed, f"Grep outside allowed dir should be blocked: {msg}"
 
 
 class TestGuardLogViolation:
     def test_log_violation_writes_to_file(self, registry, temp_dir):
         sm = StateMachine(registry, str(temp_dir))
         sm.initialize("start")
-        guard = StageGuard(str(registry.config_path), str(temp_dir))
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
         guard.log_violation("Delete", "Not in tools list")
         log_path = Path(temp_dir) / ".claude" / "guard_violations.jsonl"
         assert log_path.exists()

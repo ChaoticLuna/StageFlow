@@ -2,7 +2,34 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-130 — Enforce access in stageflow hook entrypoint
+> **交接原因**: task-131 — Reconcile guard.py and hook behavior
+
+---
+
+## task-131 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Unified `StageGuard` with `cmd_hook`** — both now use `AccessPolicy`:
+   - Removed hardcoded `_check_write_path` and `ALLOWED_WRITE_ROOTS` from guard.py
+   - `StageGuard.check()` now imports and delegates to `AccessPolicy`
+   - Same path resolution, same deny-over-allow, same variable interpolation
+   - Both enforce identical access policy from `stage.extra.access`
+   - `enforce_path_guard=False` still disables all path checking
+
+2. **Updated 11 guard tests + added 4 new ones**:
+   - Removed: old `test_read_always_allowed_if_in_tools` → replaced with `test_read_allowed_when_no_read_policy` and `test_read_blocked_by_read_policy`
+   - Updated: write/Edit/NotebookEdit tests now use stages with access policy
+   - Added: `test_write_missing_path_with_policy_fails_closed`
+   - Added: `test_deny_overrides_allow` (programmatic guard deny precedence)
+   - Added: `test_grep_search_root_checked` (programmatic guard search gating)
+
+### 当前状态
+- task-131 完成: guard.py unified with cmd_hook via AccessPolicy
+- 全测试套件: 865 passed, 1 skipped, 0 failed (was 861, +4 guard tests)
+- Phase 39: tasks 39.1-39.4 complete
+
+### 下一步
+task-132: Preserve access through editor import/export — ensure YAML round-trip doesn't drop access fields.
 
 ---
 

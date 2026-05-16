@@ -1,5 +1,9 @@
 """Tool guard. Called by Claude Code PreToolUse hook to check if a tool is
 allowed in the current stage. Also used by the framework for programmatic checking.
+
+Path-level access control delegates to :class:`AccessPolicy` so the
+programmatic ``StageGuard`` and the ``stageflow hook`` CLI enforce the
+same policy from the same stage ``access`` configuration.
 """
 
 from __future__ import annotations
@@ -10,10 +14,19 @@ from pathlib import Path
 
 from .engine import StateMachine
 from .registry import StageRegistry
+from .access_policy import AccessPolicy
 
 
-WRITE_TOOLS = {"Write", "Edit", "NotebookEdit"}
-ALLOWED_WRITE_ROOTS = {"artifacts", ".claude"}
+_READ_TOOLS = {"Read", "Grep", "Glob"}
+_WRITE_TOOLS = {"Write", "Edit", "NotebookEdit"}
+
+
+def _extract_file_path(tool_name: str, tool_input: dict) -> str | None:
+    if tool_name == "NotebookEdit":
+        return tool_input.get("notebook_path") or tool_input.get("file_path")
+    if tool_name in ("Grep", "Glob"):
+        return tool_input.get("path")
+    return tool_input.get("file_path")
 
 
 class StageGuard:
@@ -32,27 +45,6 @@ class StageGuard:
         self.machine = StateMachine(self.registry, base_path)
         self._enforce_path_guard = enforce_path_guard
 
-    def _check_write_path(self, tool_input: dict) -> tuple[bool, str]:
-        file_path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
-        if not file_path:
-            return True, ""
-        p = Path(file_path)
-        if p.is_absolute():
-            try:
-                p = p.resolve()
-                rel = p.relative_to(self.machine.base_path)
-            except ValueError:
-                return False, f"Write denied: '{file_path}' is outside project"
-        else:
-            rel = p
-        parts = rel.parts
-        if not parts:
-            return True, ""
-        root = parts[0]
-        if root in ALLOWED_WRITE_ROOTS:
-            return True, ""
-        return False, f"Write denied: '{file_path}' — stage only allows writes to artifacts/ or .claude/"
-
     def check(self, tool_name: str, tool_input: dict | None = None) -> tuple[bool, str]:
         """Check if a tool call is allowed. Returns (allowed, message)."""
         self.machine._state = self.machine._load_state()
@@ -60,10 +52,41 @@ class StageGuard:
         if not base_result[0]:
             return base_result
 
-        if self._enforce_path_guard and tool_input and tool_name in WRITE_TOOLS:
-            path_ok, msg = self._check_write_path(tool_input)
-            if not path_ok:
-                return path_ok, msg
+        if not self._enforce_path_guard or not tool_input:
+            return base_result
+
+        current = self.machine.current_stage
+        if current is None:
+            return base_result
+
+        stage = self.registry.get_stage(current)
+        if stage is None:
+            return base_result
+
+        access_config = stage.extra.get("access") if stage.extra else None
+        policy = AccessPolicy(access_config)
+        variables = self.machine.get_all_vars()
+        project_root = str(self.machine.base_path)
+
+        if tool_name in _READ_TOOLS and policy.has_read_policy:
+            path = _extract_file_path(tool_name, tool_input)
+            if path is None:
+                return False, (
+                    f"access.read: '{tool_name}' requires a file path or "
+                    f"search root when stage '{current}' has a read policy"
+                )
+            if tool_name in ("Grep", "Glob"):
+                return policy.check_search(path, project_root, variables)
+            return policy.check_read(path, project_root, variables)
+
+        if tool_name in _WRITE_TOOLS and policy.has_write_policy:
+            path = _extract_file_path(tool_name, tool_input)
+            if path is None:
+                return False, (
+                    f"access.write: '{tool_name}' requires a file_path when "
+                    f"stage '{current}' has a write policy"
+                )
+            return policy.check_write(path, project_root, variables)
 
         return base_result
 
@@ -81,7 +104,7 @@ class StageGuard:
             "tool": tool_name,
             "stage": self.machine.current_stage,
             "reason": reason,
-            "timestamp": None,  # Will be set by hook
+            "timestamp": None,
         }
         log_path = Path(self.machine.base_path) / ".claude" / "guard_violations.jsonl"
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -95,18 +118,15 @@ def claude_hook_main():
     Reads hook input from stdin (JSON with tool_name and tool_input),
     checks against current stage, and outputs allow/block decision.
 
-    Hook config in settings.json:
-        "PreToolUse": [
-            {
-                "matcher": "",
-                "hooks": [{"command": "python .claude/hooks/stage_guard.py"}]
-            }
-        ]
+    .. deprecated::
+        Prefer ``stageflow hook`` (``cmd_hook`` in ``__main__.py``) which
+        enforces the full tool + access policy in a unified entrypoint.
+        This function remains for backward compatibility with legacy hook
+        configurations that invoke ``python .claude/hooks/stage_guard.py``.
     """
     try:
         input_data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, IOError) as e:
-        # If we can't read hook input, allow by default to avoid deadlock
         print(json.dumps({"decision": "allow", "reason": f"Hook input error: {e}"}))
         return
 
