@@ -2283,6 +2283,103 @@ class TestJsonCount:
         })
         assert passed
 
+
+class TestChecklistCompletion:
+    """Demo: verify→done gating via file_not_contains checking for unchecked
+    ``- [ ]`` items in a task plan. Unchecked items block completion;
+    checked items allow it."""
+
+    CHECKLIST_PATTERN = r"- \[ \]"
+
+    def test_unchecked_items_block_completion(self, temp_dir):
+        plan = (temp_dir / "task_plan.md")
+        plan.write_text("""# Task Plan
+
+- [ ] task-1: do something
+- [x] task-2: already done
+- [ ] task-3: still pending
+""")
+        passed, msg = evaluate("file_not_contains", {
+            "base_path": str(temp_dir),
+            "path": "task_plan.md",
+            "pattern": self.CHECKLIST_PATTERN,
+        })
+        assert not passed, f"Unchecked items should block: {msg}"
+        assert "found" in msg.lower()
+
+    def test_all_checked_allows_completion(self, temp_dir):
+        plan = (temp_dir / "task_plan.md")
+        plan.write_text("""# Task Plan
+
+- [x] task-1: completed
+- [x] task-2: completed
+- [x] task-3: completed
+""")
+        passed, msg = evaluate("file_not_contains", {
+            "base_path": str(temp_dir),
+            "path": "task_plan.md",
+            "pattern": self.CHECKLIST_PATTERN,
+        })
+        assert passed, f"All checked should allow: {msg}"
+
+    def test_empty_task_plan_allows_completion(self, temp_dir):
+        plan = (temp_dir / "task_plan.md")
+        plan.write_text("# Task Plan\n\nNo tasks yet.\n")
+        passed, msg = evaluate("file_not_contains", {
+            "base_path": str(temp_dir),
+            "path": "task_plan.md",
+            "pattern": self.CHECKLIST_PATTERN,
+        })
+        assert passed, f"Empty plan should allow: {msg}"
+
+    def test_inline_unchecked_caught(self, temp_dir):
+        """Unchecked items on the same line as text still match."""
+        plan = (temp_dir / "task_plan.md")
+        plan.write_text("- [ ] fix the bug\n- [x] write tests\n")
+        passed, msg = evaluate("file_not_contains", {
+            "base_path": str(temp_dir),
+            "path": "task_plan.md",
+            "pattern": self.CHECKLIST_PATTERN,
+        })
+        assert not passed
+
+    def test_nested_indented_checklist(self, temp_dir):
+        plan = (temp_dir / "task_plan.md")
+        plan.write_text("""## Sub Tasks
+
+  - [ ] nested unchecked item
+  - [x] nested checked item
+""")
+        passed, msg = evaluate("file_not_contains", {
+            "base_path": str(temp_dir),
+            "path": "task_plan.md",
+            "pattern": self.CHECKLIST_PATTERN,
+        })
+        assert not passed, f"Nested unchecked should block: {msg}"
+
+    def test_checked_uppercase_X(self, temp_dir):
+        """Upper-case X in [X] should also count as checked (not match [ ])."""
+        plan = (temp_dir / "task_plan.md")
+        plan.write_text("- [X] done\n- [x] also done\n")
+        passed, msg = evaluate("file_not_contains", {
+            "base_path": str(temp_dir),
+            "path": "task_plan.md",
+            "pattern": self.CHECKLIST_PATTERN,
+        })
+        assert passed, f"All checked with [X] should allow: {msg}"
+
+    def test_file_missing_fails_condition(self, temp_dir):
+        """file_not_contains returns False when the file does not exist."""
+        passed, msg = evaluate("file_not_contains", {
+            "base_path": str(temp_dir),
+            "path": "nonexistent.md",
+            "pattern": self.CHECKLIST_PATTERN,
+        })
+        assert not passed, "Missing file should fail closed"
+        assert "not found" in msg.lower()
+
+
+class TestJsonCountEdgeCases:
     def test_max_count_exceeded(self, temp_dir):
         """lines 960-961: count exceeds max_count."""
         (temp_dir / "data.json").write_text('[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]')

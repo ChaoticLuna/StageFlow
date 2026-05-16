@@ -143,7 +143,7 @@
 | 39.3 | 在 stageflow hook 中强制执行 access | ✅ | cmd_hook + 18 tests → task-130 |
 | 39.4 | 统一 guard.py 与 hook 行为 | ✅ | guard.py + 4 new tests → task-131 |
 | 39.5 | Editor 导入/导出保留 access 字段 | ✅ | types.ts + yaml.ts + 6 tests → task-132 |
-| 39.6 | Checklist 完成条件演示 | ⬜ | task-133 |
+| 39.6 | Checklist 完成条件演示 | ✅ | 7 tests → task-133 |
 | 39.7 | 文件访问控制分层验证 | ⬜ | task-134 |
 
 ---
