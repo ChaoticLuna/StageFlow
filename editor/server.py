@@ -436,6 +436,80 @@ def save_workflow(name: str, req: WorkflowSaveRequest):
     return {"name": name, "saved": True, "valid": True}
 
 
+class ProjectSaveRequest(BaseModel):
+    yaml: str
+
+
+class ProjectSaveResponse(BaseModel):
+    saved: bool
+    config_path: str
+    message: str
+
+
+@app.post("/api/project/save-config", response_model=ProjectSaveResponse)
+def save_project_config(req: ProjectSaveRequest):
+    """Save workflow YAML to the discovered StageFlow project config.
+
+    Save gate: allowed only when current_stage is null (after init, after
+    complete, or after reset). Blocked while a run is active.
+    """
+    from stageflow.core.discovery import discover_project
+
+    root = discover_project()
+    if root is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No StageFlow project found. Run 'stageflow init' first.",
+        )
+
+    # Read current state
+    current_stage = None
+    run_status = None
+    if root.state_path.exists():
+        try:
+            state_data = json.loads(root.state_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, ValueError):
+            state_data = {}
+        current_stage = state_data.get("current_stage")
+        run_status = state_data.get("run_status")
+
+    if current_stage is not None:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Cannot save workflow config while a run is active "
+                f"(current stage: '{current_stage}'). "
+                f"Complete the run with 'stageflow complete' (terminal stage) "
+                f"or use 'stageflow reset' to abandon it before editing."
+            ),
+        )
+
+    # Validate YAML
+    try:
+        doc = yaml.safe_load(req.yaml)
+    except yaml.YAMLError as e:
+        raise HTTPException(status_code=400, detail=f"YAML parse error: {e}")
+    if doc is None:
+        raise HTTPException(status_code=400, detail="YAML document is empty")
+
+    valid, errors = validate_stages_config(doc)
+    if not valid:
+        raise HTTPException(status_code=400, detail=f"Invalid config: {'; '.join(errors)}")
+
+    # Write to project config
+    root.config_path.parent.mkdir(parents=True, exist_ok=True)
+    root.config_path.write_text(req.yaml, encoding="utf-8")
+
+    return ProjectSaveResponse(
+        saved=True,
+        config_path=str(root.config_path),
+        message=(
+            f"Config saved to {root.config_path}. "
+            f"Current state: {'completed run' if run_status == 'completed' else 'no active run'}."
+        ),
+    )
+
+
 @app.delete("/api/workflows/{name}")
 def delete_workflow(name: str):
     """Delete a saved workflow."""

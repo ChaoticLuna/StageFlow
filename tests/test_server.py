@@ -658,6 +658,234 @@ transitions:
             _workflow_engines.pop(name, None)
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Project save-config endpoint (save gate with run-state check)
+# ═══════════════════════════════════════════════════════════════════════════
+
+VALID_PROJECT_YAML = """
+stages:
+  - name: alpha
+    tools: [Read]
+  - name: beta
+    tools: [Read, Grep]
+  - name: gamma
+    tools: []
+transitions:
+  - from: alpha
+    to: beta
+    conditions:
+      - always: true
+  - from: beta
+    to: gamma
+    conditions:
+      - always: true
+"""
+
+
+class TestProjectSaveGate:
+    def _make_project(self, tmp_path, current_stage=None, run_status=None):
+        """Set up a minimal StageFlow project under tmp_path."""
+        cfg_dir = tmp_path / ".stageflow" / "config"
+        cfg_dir.mkdir(parents=True)
+        (cfg_dir / "stages.yaml").write_text(VALID_PROJECT_YAML, encoding="utf-8")
+
+        state_path = tmp_path / ".stageflow" / "current_stage.json"
+        state = {"current_stage": current_stage, "variables": {"run_id": "test-run-id"}}
+        if run_status:
+            state["run_status"] = run_status
+            if run_status == "completed":
+                state["completed_at"] = "2026-01-01T00:00:00+00:00"
+                state["final_stage"] = "gamma"
+        if current_stage is None:
+            state.pop("current_stage", None)
+            # If null but we want a non-existent key:
+            if current_stage is None and run_status is None:
+                # fresh init — no current_stage key at all
+                pass
+            elif current_stage is None:
+                # completed or reset — explicit null
+                state["current_stage"] = None
+
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        return tmp_path
+
+    def test_save_allowed_after_init(self, tmp_path):
+        """Save succeeds when no run is active (fresh init — no current_stage)."""
+        proj = self._make_project(tmp_path, current_stage=None)
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config", json={"yaml": VALID_PROJECT_YAML})
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["saved"] is True
+            assert "no active run" in d["message"]
+            # Verify file was actually written
+            saved = (proj / ".stageflow" / "config" / "stages.yaml").read_text()
+            assert "alpha" in saved
+        finally:
+            os.chdir(orig)
+
+    def test_save_allowed_after_complete(self, tmp_path):
+        """Save succeeds after run completed (current_stage=null, run_status=completed)."""
+        proj = self._make_project(tmp_path, current_stage=None, run_status="completed")
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config", json={"yaml": VALID_PROJECT_YAML})
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["saved"] is True
+            assert "completed run" in d["message"]
+        finally:
+            os.chdir(orig)
+
+    def test_save_allowed_after_reset(self, tmp_path):
+        """Save succeeds after reset (current_stage=null, no run_status)."""
+        proj = self._make_project(tmp_path, current_stage=None)
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config", json={"yaml": VALID_PROJECT_YAML})
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["saved"] is True
+        finally:
+            os.chdir(orig)
+
+    def test_save_blocked_during_active_run(self, tmp_path):
+        """Save blocked when a run is active (current_stage is set)."""
+        proj = self._make_project(tmp_path, current_stage="alpha")
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config", json={"yaml": VALID_PROJECT_YAML})
+            assert r.status_code == 403, r.text
+            d = r.json()
+            assert "active" in d["detail"].lower()
+            assert "alpha" in d["detail"]
+        finally:
+            os.chdir(orig)
+
+    def test_save_blocked_during_mid_run(self, tmp_path):
+        """Save blocked at a mid-pipeline stage (beta), not just alpha."""
+        proj = self._make_project(tmp_path, current_stage="beta")
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config", json={"yaml": VALID_PROJECT_YAML})
+            assert r.status_code == 403, r.text
+            d = r.json()
+            assert "beta" in d["detail"]
+        finally:
+            os.chdir(orig)
+
+    def test_save_no_project_found(self, tmp_path):
+        """Save returns 400 when no StageFlow project exists."""
+        empty = tmp_path / "empty_dir"
+        empty.mkdir()
+        orig = os.getcwd()
+        try:
+            os.chdir(str(empty))
+            r = client.post("/api/project/save-config", json={"yaml": VALID_PROJECT_YAML})
+            assert r.status_code == 400, r.text
+            assert "No StageFlow project" in r.json()["detail"]
+        finally:
+            os.chdir(orig)
+
+    def test_save_invalid_yaml_with_gate_pass(self, tmp_path):
+        """Even when gate passes, invalid YAML is rejected."""
+        proj = self._make_project(tmp_path, current_stage=None)
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config", json={"yaml": "not: [valid: yaml"})
+            assert r.status_code == 400, r.text
+            assert "YAML parse error" in r.json()["detail"]
+        finally:
+            os.chdir(orig)
+
+    def test_save_empty_yaml_with_gate_pass(self, tmp_path):
+        """Even when gate passes, empty YAML is rejected."""
+        proj = self._make_project(tmp_path, current_stage=None)
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config", json={"yaml": ""})
+            assert r.status_code == 400, r.text
+            assert "empty" in r.json()["detail"].lower()
+        finally:
+            os.chdir(orig)
+
+    def test_save_invalid_config_with_gate_pass(self, tmp_path):
+        """Even when gate passes, invalid StageFlow config is rejected."""
+        proj = self._make_project(tmp_path, current_stage=None)
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config", json={"yaml": "stages: not_a_list"})
+            assert r.status_code == 400, r.text
+            assert "Invalid config" in r.json()["detail"]
+        finally:
+            os.chdir(orig)
+
+    def test_save_preserves_yaml_content(self, tmp_path):
+        """The exact YAML content is written to the project config path."""
+        proj = self._make_project(tmp_path, current_stage=None)
+        custom = """
+stages:
+  - name: uno
+    tools: [Read]
+  - name: dos
+    tools: []
+transitions:
+  - from: uno
+    to: dos
+    conditions:
+      - always: true
+"""
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config", json={"yaml": custom})
+            assert r.status_code == 200, r.text
+            saved = (proj / ".stageflow" / "config" / "stages.yaml").read_text()
+            assert "uno" in saved
+            assert "dos" in saved
+            assert "alpha" not in saved
+        finally:
+            os.chdir(orig)
+
+    def test_save_gate_does_not_require_run_status_field(self, tmp_path):
+        """Fresh projects without run_status key are allowed (null check only)."""
+        proj = self._make_project(tmp_path, current_stage=None)
+        # Explicitly remove run_status from state
+        state_path = proj / ".stageflow" / "current_stage.json"
+        state = json.loads(state_path.read_text())
+        state.pop("run_status", None)
+        state["current_stage"] = None
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config", json={"yaml": VALID_PROJECT_YAML})
+            assert r.status_code == 200, r.text
+            assert r.json()["saved"] is True
+        finally:
+            os.chdir(orig)
+
+    def test_save_gate_blocked_even_at_terminal_stage_if_not_completed(self, tmp_path):
+        """If a run is at a terminal stage but not completed, save is still blocked."""
+        proj = self._make_project(tmp_path, current_stage="gamma")
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config", json={"yaml": VALID_PROJECT_YAML})
+            assert r.status_code == 403, r.text
+        finally:
+            os.chdir(orig)
+
+
 class TestGenerateEndpoint:
     def test_generate_default_template_does_not_crash(self):
         """Regression: PromptTemplate.GENERAL (typo) crashed the endpoint."""

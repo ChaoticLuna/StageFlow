@@ -2,9 +2,28 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-120 — status output and docs updated for completion semantics
+> **交接原因**: task-121 — editor save gate with run-state check
 
 ---
+
+## task-121 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Added `POST /api/project/save-config` endpoint** to `editor/server.py` — save gate using StageFlow project root discovery
+2. **Save gate logic**: discovers project root from cwd, reads `current_stage` from state file, blocks save (403) when non-null, allows when null
+3. **Gate allows**: after `init` (no current_stage), after `complete` (null + run_status="completed"), after `reset` (null, no run_status)
+4. **Gate blocks**: any active run (current_stage set to any stage name, including terminal stage if not completed)
+5. **Saves to** discovered `.stageflow/config/stages.yaml` (new-style) or legacy path
+6. **12 new tests** in `test_server.py` (49→61): TestProjectSaveGate class covering all gate states
+7. **1234 tests passing**, 1 skipped (unchanged)
+
+### 当前状态
+- Phase 37: 121/122 tasks complete
+- Serving save-gate capability to the React editor via `/api/project/save-config`
+- Next: task-122 — staged verification
+
+### 已知问题
+- Editor end-to-end component tests unchanged (107 passing) — frontend must call `/api/project/save-config` instead of `/api/workflows/{name}` to get save-gate protection
 
 ## task-120 会话总结 (2026-05-16)
 
