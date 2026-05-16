@@ -2,7 +2,31 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-125 — add `stageflow editor` CLI command
+> **交接原因**: task-126 — end-to-end editor workflow tests (8 layers)
+
+---
+
+## task-126 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Created `tests/test_editor_e2e.py`** — 29 tests across 8 layers of increasing difficulty:
+   - **Layer 1 (5 tests)**: Built dist exists — index.html, JS/CSS assets, index references JS, Save UI code in bundle
+   - **Layer 2 (3 tests)**: FastAPI serves frontend — root returns HTML, index.html served, favicon
+   - **Layer 3 (5 tests)**: Bound config API — custom YAML returned, save_allowed true/false based on run state, 404 when config missing, marker_type is "new"
+   - **Layer 4 (5 tests)**: Save gate — blocked when active, allowed when no run, allowed after complete, invalid YAML preserves previous, save writes to bound path
+   - **Layer 5 (3 tests)**: CLI startup — prints project root, reports custom host/port, fails outside project
+   - **Layer 6 (2 tests)**: Nested directory — binds ancestor root, save from nested updates ancestor config
+   - **Layer 7 (3 tests)**: Save round-trip — load→save→reload full cycle, active run blocks save, invalid YAML preserved
+   - **Layer 8 (3 tests)**: Source isolation — external project doesn't touch source config, CLI doesn't mutate source state, multi-project isolation
+
+### 当前状态
+- Phase 38: tasks 123-126 complete
+- All tests: 1311 passed, 1 skipped (was 1282; +29 from task-126)
+- Editor tests: 130 passed (7 files, unchanged)
+- Next: task-127 — update docs and usage examples
+
+### 已知问题
+- None
 
 ---
 
