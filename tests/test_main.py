@@ -1435,6 +1435,120 @@ class TestHookCommand:
         r = self._hook(tmp_path, "Read", {"file_path": "artifacts/data.txt"})
         assert r.returncode == 0, r.stderr
 
+    # ── Default read tools (Phase 42) ──────────────────────────────────
+
+    def test_glob_allowed_when_omitted_from_tools(self, tmp_path):
+        """Glob is a default read tool — allowed even when omitted from stage.tools."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            stages=[{"name": "locked", "tools": ["Read"], "meta": {"description": "No glob"}}],
+            transitions=[],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "locked"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Glob", {"pattern": "**/*.py"})
+        assert r.returncode == 0, f"Glob should be allowed as default read tool, rc={r.returncode}"
+        assert "allow" in r.stdout
+
+    def test_read_blocked_by_access_read_allow_when_omitted(self, tmp_path):
+        """Read omitted from tools, access.read.allow restricts → blocked outside allow."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["artifacts/**", "*.md"]}},
+            tools=["Write"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Read", {"file_path": "secret.env"})
+        assert r.returncode != 0, f"Read outside allow list should be blocked when omitted from tools, rc={r.returncode}"
+        assert "block" in r.stdout
+
+    def test_read_allowed_by_access_read_allow_when_omitted(self, tmp_path):
+        """Read omitted from tools, access.read.allow → allowed inside allow list."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["artifacts/**", "*.md"]}},
+            tools=["Write"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Read", {"file_path": "artifacts/data.txt"})
+        assert r.returncode == 0, f"Read inside allow list should be allowed: {r.stderr}"
+        assert "allow" in r.stdout
+
+    def test_grep_blocked_by_access_read_deny_dir_when_omitted(self, tmp_path):
+        """Grep omitted from tools, access.read.deny covers dir → blocked."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"deny": ["secrets/**", "*.env"]}},
+            tools=["Write"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Grep", {"pattern": "KEY", "path": "secrets"})
+        assert r.returncode != 0, f"Grep in denied dir should be blocked when omitted: {r.returncode}"
+        assert "block" in r.stdout
+
+    def test_grep_blocked_by_missing_search_root_when_omitted(self, tmp_path):
+        """Grep omitted from tools, access.read policy, no path → fail closed."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["artifacts/**"]}},
+            tools=["Write"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Grep", {"pattern": "TODO"})
+        assert r.returncode != 0, f"Grep without search root should fail closed: {r.returncode}"
+        assert "block" in r.stdout
+
+    def test_grep_blocked_by_dir_not_in_allow_when_omitted(self, tmp_path):
+        """Grep omitted from tools, access.read.allow restricts → dir outside blocked."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["artifacts/**", "*.md"]}},
+            tools=["Write"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Grep", {"pattern": "TODO", "path": "stageflow"})
+        assert r.returncode != 0, f"Grep outside allow list should be blocked when omitted: {r.returncode}"
+        assert "block" in r.stdout
+
+    def test_glob_blocked_by_access_read_deny_when_omitted(self, tmp_path):
+        """Glob omitted from tools, access.read.deny → blocked for denied path."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"deny": ["secrets/**", "*.env"]}},
+            tools=["Write"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Glob", {"pattern": "**/*.key", "path": "secrets"})
+        assert r.returncode != 0, f"Glob in denied dir should be blocked when omitted: {r.returncode}"
+        assert "block" in r.stdout
+
+    def test_write_blocked_when_omitted_even_if_path_allowed(self, tmp_path):
+        """Write omitted from tools → blocked even when access.write would allow."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"write": {"allow": ["artifacts/**"]}},
+            tools=["Read"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Write", {"file_path": "artifacts/output.txt"})
+        assert r.returncode != 0, f"Write omitted from tools should be blocked: {r.returncode}"
+        assert "block" in r.stdout
+
 
 class TestLegacyCompatibility:
     """CLI commands work against legacy projects (stageflow/config/stages.yaml + .claude/current_stage.json)."""

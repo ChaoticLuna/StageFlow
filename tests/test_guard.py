@@ -351,6 +351,129 @@ class TestPathGuard:
         assert not allowed, f"Read without file_path should fail closed: {msg}"
         assert "read" in msg.lower()
 
+    # ── Default read tools (Phase 42) ──────────────────────────────────
+
+    def test_read_omitted_from_tools_allowed(self, registry, temp_dir):
+        """Read omitted from stage.tools, no access policy → allowed."""
+        self._register_secured_stage(registry, "locked", tools=["Write"])
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Read", {"file_path": "README.md"})
+        assert allowed, f"Read should be default-allowed: {msg}"
+
+    def test_grep_omitted_from_tools_allowed(self, registry, temp_dir):
+        """Grep omitted from stage.tools, no access policy → allowed."""
+        self._register_secured_stage(registry, "locked", tools=["Write"])
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Grep", {"pattern": "TODO", "path": "src"})
+        assert allowed, f"Grep should be default-allowed: {msg}"
+
+    def test_glob_omitted_from_tools_allowed(self, registry, temp_dir):
+        """Glob omitted from stage.tools, no access policy → allowed."""
+        self._register_secured_stage(registry, "locked", tools=["Write"])
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Glob", {"pattern": "**/*.py"})
+        assert allowed, f"Glob should be default-allowed: {msg}"
+
+    def test_read_omitted_blocked_by_access_read_deny(self, registry, temp_dir):
+        """Read omitted from tools, access.read.deny → blocked for denied path."""
+        self._register_secured_stage(
+            registry, "locked", tools=["Write"],
+            access={"read": {"deny": ["secrets/**", "*.env"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Read", {"file_path": "secrets/key.txt"})
+        assert not allowed, f"Read should be blocked by access.read.deny: {msg}"
+        # But unlisted path is allowed (deny-only policy)
+        allowed2, _ = guard.check("Read", {"file_path": "README.md"})
+        assert allowed2, "Read of unlisted path should be allowed with deny-only"
+
+    def test_read_omitted_blocked_by_access_read_allow(self, registry, temp_dir):
+        """Read omitted from tools, access.read.allow → blocked outside allow list."""
+        self._register_secured_stage(
+            registry, "locked", tools=["Write"],
+            access={"read": {"allow": ["artifacts/**", "*.md"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Read", {"file_path": "secret.env"})
+        assert not allowed, f"Read outside allow list should be blocked: {msg}"
+
+    def test_read_omitted_allowed_by_access_read_allow(self, registry, temp_dir):
+        """Read omitted from tools, access.read.allow → allowed inside allow list."""
+        self._register_secured_stage(
+            registry, "locked", tools=["Write"],
+            access={"read": {"allow": ["artifacts/**", "*.md"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Read", {"file_path": "artifacts/data.txt"})
+        assert allowed, f"Read inside allow list should be allowed: {msg}"
+
+    def test_grep_omitted_blocked_by_missing_search_root(self, registry, temp_dir):
+        """Grep omitted from tools, read policy exists, no path → fail closed."""
+        self._register_secured_stage(
+            registry, "locked", tools=["Write"],
+            access={"read": {"allow": ["artifacts/**"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Grep", {"pattern": "TODO"})
+        assert not allowed, f"Grep without search root should fail closed: {msg}"
+        assert "read" in msg.lower()
+
+    def test_grep_omitted_blocked_by_access_read_deny_dir(self, registry, temp_dir):
+        """Grep omitted from tools, access.read.deny covers search root → blocked."""
+        self._register_secured_stage(
+            registry, "locked", tools=["Write"],
+            access={"read": {"deny": ["secrets/**", "*.env"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Grep", {"pattern": "KEY", "path": "secrets"})
+        assert not allowed, f"Grep in denied directory should be blocked: {msg}"
+
+    def test_grep_omitted_blocked_by_access_read_allow_dir(self, registry, temp_dir):
+        """Grep omitted from tools, access.read.allow restricts → dir not allowed."""
+        self._register_secured_stage(
+            registry, "locked", tools=["Write"],
+            access={"read": {"allow": ["artifacts/**", "*.md"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Grep", {"pattern": "TODO", "path": "stageflow"})
+        assert not allowed, f"Grep outside allow list should be blocked: {msg}"
+
+    def test_write_still_blocked_when_omitted_from_tools(self, registry, temp_dir):
+        """Write omitted from tools → blocked even with no access policy."""
+        self._register_secured_stage(registry, "locked", tools=["Read"])
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Write", {"file_path": "output.txt"})
+        assert not allowed, f"Write omitted from tools should be blocked: {msg}"
+
+    def test_edit_still_blocked_when_omitted_from_tools(self, registry, temp_dir):
+        """Edit omitted from tools → blocked even with no access policy."""
+        self._register_secured_stage(registry, "locked", tools=["Read", "Write"])
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Edit", {"file_path": "src/app.py"})
+        assert not allowed, f"Edit omitted from tools should be blocked: {msg}"
+
 
 class TestGuardLogViolation:
     def test_log_violation_writes_to_file(self, registry, temp_dir):

@@ -6,6 +6,38 @@
 
 ---
 
+## task-140 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Added 11 StageGuard tests** in `test_guard.py` (TestPathGuard class):
+   - Default read tools allowed when omitted: Read, Grep, Glob without access policy
+   - Read blocked by access.read.deny when omitted (deny-only: unlisted path still allowed)
+   - Read blocked by access.read.allow when omitted (outside allow list → blocked)
+   - Read allowed by access.read.allow when omitted (inside allow list → allowed)
+   - Grep blocked by missing search root when read policy exists (fail-closed)
+   - Grep blocked by access.read.deny directory coverage
+   - Grep blocked by access.read.allow directory restrictions
+   - Write-when-omitted still blocked
+   - Edit-when-omitted still blocked
+2. **Added 8 hook-level tests** in `test_main.py` (TestHookCommand class):
+   - Glob allowed when omitted from tools
+   - Read blocked/allowed by access.read.allow when omitted
+   - Grep blocked by access.read.deny/allow dir when omitted
+   - Grep blocked by missing search root when omitted
+   - Glob blocked by access.read.deny when omitted
+   - Write blocked when omitted even if path would pass access.write
+3. **Updated CLAUDE.md** stats — 1662 tests (1532 Python + 130 editor), 1 skipped
+
+### 当前状态
+- task-140 complete: 19 new tests (11 guard + 8 hook), all passing
+- Phase 42: tasks 139-140 done, 141-144 remain
+- All 1532 Python + 130 editor = 1662 tests pass, 1 skipped
+
+### 下一步
+task-141: Preserve write-tool strictness — add/update tests proving Write/Edit/MultiEdit/NotebookEdit blocked when omitted from stage.tools
+
+---
+
 ## task-139 会话总结 (2026-05-16)
 
 ### 做了什么
