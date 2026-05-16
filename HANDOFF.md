@@ -2,7 +2,7 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-142 — Updated docs for default read tools and access policy
+> **交接原因**: Phase 42 Complete — Default read tools with access-controlled sensitive stages
 
 ---
 
@@ -1742,3 +1742,22 @@ Ralph:           task-025-LOOP complete (8 iterations today)
 **当前状态**: task-142 完成。处于 implement 阶段。
 **下一步**: task-143 — 在 D:\2026_zju\test 下运行真实外部 CLI smoke demo
 **提交**: 71483f6 ralph: task-142 — update docs for default read tools and access policy
+
+---
+
+## task-143/144 会话总结 (2026-05-16) — Phase 42 完成
+
+**做了什么**:
+- **task-143**: 在 `D:\2026_zju\test\stageflow_phase42_demo` 创建外部 CLI smoke demo。使用 `stageflow init` + 自定义 YAML (`inspect` 和 `build` 两个阶段)。11 项 hook 测试验证：默认读取工具可用、`.env`/`secrets/**` 被阻止、Write 被限制在工具列表中、`access.write.allow` 控制写入路径、嵌套 cwd 发现正常。
+- **task-144**: QuixBugs QX_GCD 运行演练。从种子库复制 buggy_task.py + 测试文件。使用 inspect→fix→verify 工作流。修复前：4/4 失败（RecursionError）。一行修复：`gcd(a % b, b)` → `gcd(b, a % b)`。修复后：4/4 通过。Hook 检查验证了 inspect 中 Read 默认可用的行为。
+
+**Phase 42 完成**: 全部 6 个任务（task-139 至 task-144）均已完成。
+- 默认读取工具（Read, Grep, Glob）在省略时可用
+- 访问策略 deny 阻止敏感文件
+- 写入工具保持严格的阶段门控
+- 文档已更新（CLAUDE.md、api_reference.md、AGENT.md）
+- 外部 CLI 演示确认实际行为
+- QuixBugs 演练证明端到端工作流
+
+**提交**: 6c89a97 (task-143), 71f9184 (task-144)
+
