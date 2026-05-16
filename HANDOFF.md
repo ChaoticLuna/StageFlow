@@ -2,7 +2,36 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-118 — run completion semantics implemented
+> **交接原因**: task-119 — CLI complete command added
+
+---
+
+## task-119 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Added `cmd_complete()` to `__main__.py`**:
+   - Uses `_require_sm()` for project discovery
+   - Rejects no-active-run with guidance to `stageflow start`
+   - Rejects non-terminal stages via `sm.complete()` return
+   - Calls Python core API directly (no shell-out to scripts)
+2. **Added `complete` subparser** — no positional args, no `--force`
+3. **Updated `cmd_next`** — terminal-stage guidance now points to `stageflow complete`
+4. **Added 10 CLI tests** (`TestCLIComplete` class in test_main.py):
+   - complete from terminal stage (success, metadata verified)
+   - complete fails: no active run, non-terminal, outside project
+   - complete rejects positional arguments (no shortcut)
+   - preserves run_id, preserves history
+   - works from nested subdirectory
+   - next guides to complete at terminal
+   - multi-repo isolation (completion in repo A doesn't touch repo B)
+
+### 测试结果
+- TestCLIComplete: 10/10 passed
+- test_main.py: 210/210 passed
+- Full non-editor suite: 1173 passed, 1 skipped
+
+### 下一步
+- **task-120**: Update status output, docs, and agent instructions
 
 ---
 

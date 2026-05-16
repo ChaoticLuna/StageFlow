@@ -2231,3 +2231,177 @@ class TestRootCommand:
         r = self._run(nested, "root")
         assert r.returncode == 1
         assert "Not a StageFlow project" in r.stderr
+
+
+class TestCLIComplete:
+    """Tests for stageflow complete — run completion with custom stage names."""
+
+    COMPLETE_STAGES = {
+        "stages": [
+            {"name": "alpha", "tools": ["Read"],
+             "meta": {"description": "Starting stage"}},
+            {"name": "beta", "tools": ["Read", "Edit"],
+             "meta": {"description": "Middle stage"}},
+            {"name": "gamma", "tools": [],
+             "meta": {"description": "Terminal stage"}},
+        ],
+        "transitions": [
+            {"from": "alpha", "to": "beta", "conditions": [{"always": True}]},
+            {"from": "beta", "to": "gamma", "conditions": [{"always": True}]},
+        ],
+    }
+
+    @staticmethod
+    def _run(cwd, *args):
+        import subprocess, sys
+        return subprocess.run(
+            [sys.executable, "-m", "stageflow", *args],
+            capture_output=True, text=True, cwd=str(cwd), timeout=30,
+        )
+
+    @staticmethod
+    def _write_yaml(path, config):
+        import yaml
+        path.write_text(yaml.dump(config), encoding="utf-8")
+
+    @staticmethod
+    def _read_state(project_dir):
+        import json
+        return json.loads(
+            (project_dir / ".stageflow" / "current_stage.json").read_text()
+        )
+
+    def _init_project(self, project_dir):
+        project_dir.mkdir(parents=True, exist_ok=True)
+        self._run(project_dir, "init")
+        self._write_yaml(
+            project_dir / ".stageflow" / "config" / "stages.yaml",
+            self.COMPLETE_STAGES,
+        )
+
+    def test_complete_from_terminal_stage(self, tmp_path):
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        self._run(tmp_path, "next")  # alpha -> beta
+        self._run(tmp_path, "next")  # beta -> gamma
+        r = self._run(tmp_path, "complete")
+        assert r.returncode == 0, r.stderr
+        assert "Run completed" in r.stdout
+        state = self._read_state(tmp_path)
+        assert state["current_stage"] is None
+        assert state["run_status"] == "completed"
+        assert state["final_stage"] == "gamma"
+        assert "completed_at" in state
+
+    def test_complete_fails_when_no_active_run(self, tmp_path):
+        self._init_project(tmp_path)
+        r = self._run(tmp_path, "complete")
+        assert r.returncode != 0
+        assert "No active run" in r.stderr
+
+    def test_complete_fails_from_non_terminal_stage(self, tmp_path):
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        r = self._run(tmp_path, "complete")
+        assert r.returncode != 0
+        assert "not terminal" in r.stdout or "not terminal" in r.stderr
+
+    def test_complete_outside_project_fails(self, tmp_path):
+        r = self._run(tmp_path, "complete")
+        assert r.returncode != 0
+        assert "Not a StageFlow project" in r.stderr
+
+    def test_complete_rejects_positional_args(self, tmp_path):
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        self._run(tmp_path, "next")
+        self._run(tmp_path, "next")
+        r = self._run(tmp_path, "complete", "gamma")
+        assert r.returncode != 0
+
+    def test_complete_preserves_run_id(self, tmp_path):
+        import json
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        s1 = json.loads(
+            (tmp_path / ".stageflow" / "current_stage.json").read_text()
+        )
+        run_id = s1["variables"]["run_id"]
+        self._run(tmp_path, "next")
+        self._run(tmp_path, "next")
+        self._run(tmp_path, "complete")
+        s2 = self._read_state(tmp_path)
+        assert s2["variables"]["run_id"] == run_id
+
+    def test_complete_from_nested_subdir(self, tmp_path):
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        self._run(tmp_path, "next")
+        self._run(tmp_path, "next")
+        nested = tmp_path / "src" / "deep"
+        nested.mkdir(parents=True)
+        r = self._run(nested, "complete")
+        assert r.returncode == 0, r.stderr
+        state = self._read_state(tmp_path)
+        assert state["current_stage"] is None
+        assert state["final_stage"] == "gamma"
+
+    def test_next_guides_to_complete_at_terminal(self, tmp_path):
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        self._run(tmp_path, "next")
+        self._run(tmp_path, "next")
+        r = self._run(tmp_path, "next")
+        assert r.returncode != 0
+        assert "stageflow complete" in r.stderr
+
+    def test_complete_preserves_history(self, tmp_path):
+        self._init_project(tmp_path)
+        self._run(tmp_path, "start", "alpha")
+        self._run(tmp_path, "next")
+        self._run(tmp_path, "next")
+        history_before = len(self._read_state(tmp_path).get("history", []))
+        self._run(tmp_path, "complete")
+        state = self._read_state(tmp_path)
+        assert len(state["history"]) == history_before + 1
+
+    def test_multi_repo_complete_isolation(self, tmp_path):
+        import json
+        repo_a = tmp_path / "repo_a"
+        repo_b = tmp_path / "repo_b"
+        repo_a.mkdir(exist_ok=True)
+        repo_b.mkdir(exist_ok=True)
+        self._run(repo_a, "init")
+        self._write_yaml(
+            repo_a / ".stageflow" / "config" / "stages.yaml",
+            self.COMPLETE_STAGES,
+        )
+        self._run(repo_b, "init")
+        self._write_yaml(
+            repo_b / ".stageflow" / "config" / "stages.yaml",
+            {
+                "stages": [
+                    {"name": "uno", "tools": ["Read"]},
+                    {"name": "dos", "tools": []},
+                ],
+                "transitions": [
+                    {"from": "uno", "to": "dos",
+                     "conditions": [{"always": True}]},
+                ],
+            },
+        )
+        self._run(repo_a, "start", "alpha")
+        self._run(repo_a, "next")
+        self._run(repo_a, "next")
+        self._run(repo_b, "start", "uno")
+        self._run(repo_b, "next")
+
+        r = self._run(repo_a, "complete")
+        assert r.returncode == 0, r.stderr
+        a_state = self._read_state(repo_a)
+        assert a_state["current_stage"] is None
+        assert a_state["run_status"] == "completed"
+
+        b_state = self._read_state(repo_b)
+        assert b_state["current_stage"] == "dos"
+        assert "run_status" not in b_state

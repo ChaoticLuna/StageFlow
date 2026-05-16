@@ -159,6 +159,7 @@ def cmd_next(args):
             available = reg.get_next_stages(sm.current_stage)
             if not available:
                 print(f"No transitions from '{sm.current_stage}'", file=sys.stderr)
+                print("Use 'stageflow complete' to close this terminal run.", file=sys.stderr)
                 return 1
             target = available[0]
         ok, msgs = sm.can_transition_to(target)
@@ -173,6 +174,7 @@ def cmd_next(args):
             available = reg.get_next_stages(sm.current_stage)
             if not available:
                 print(f"No transitions from '{sm.current_stage}'", file=sys.stderr)
+                print("Use 'stageflow complete' to close this terminal run.", file=sys.stderr)
                 return 1
             target = available[0]
         ok, msgs = sm.transition_to(target)
@@ -230,6 +232,24 @@ def cmd_reset(args):
         print("State fully reset. Use 'stageflow start' to begin a new run.")
     else:
         print("StageFlow state cleared. Use 'stageflow start' to begin a new run.")
+
+
+def cmd_complete(args):
+    """Complete the current run if the current stage is terminal."""
+    reg, sm, root = _require_sm()
+    if sm is None:
+        return 1
+    if sm.current_stage is None:
+        print("No active run to complete.", file=sys.stderr)
+        print("Use 'stageflow start' to begin a run.", file=sys.stderr)
+        return 1
+    ok, msgs = sm.complete()
+    for m in msgs:
+        print(f"  {m}")
+    if ok:
+        print(f"\nRun completed at stage '{sm._state['final_stage']}'.")
+        print(f"State preserved — use 'stageflow start' to begin a new run.")
+    return 0 if ok else 1
 
 
 def cmd_graph(args):
@@ -943,6 +963,8 @@ Examples:
     p.add_argument("--hard", action="store_true")
     p.add_argument("--clean-artifacts", action="store_true", help="Delete the current run's artifact directory before resetting")
 
+    p = sub.add_parser("complete", help="Complete the current run (terminal stage only)")
+
     p = sub.add_parser("graph", help="Generate Mermaid flowchart")
 
     p = sub.add_parser("list", help="List all stages and transitions")
@@ -991,7 +1013,7 @@ Examples:
 
     commands = {
         "status": cmd_status, "next": cmd_next, "back": cmd_back,
-        "jump": cmd_jump, "reset": cmd_reset, "graph": cmd_graph,
+        "jump": cmd_jump, "reset": cmd_reset, "complete": cmd_complete, "graph": cmd_graph,
         "list": cmd_list, "init": cmd_init, "start": cmd_start,
         "check": cmd_check,
         "cond": cmd_cond, "generate": cmd_generate, "hook": cmd_hook, "migrate": cmd_migrate, "root": cmd_root, "mcp": cmd_mcp,
