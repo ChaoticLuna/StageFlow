@@ -20,7 +20,7 @@ StageFlow 是一套**声明式、可扩展的阶段化状态机框架**，用于
 ```
 Framework files:  18 modules (~2,500 lines)
 Test files:      27 files (~14,000 lines)
-Tests:           1362 passed, 0 failed (1255 Python + 107 editor), 1 skipped
+Tests:           1412 passed, 0 failed (1282 Python + 130 editor), 1 skipped
 Coverage:        84% overall (core: engine 100%, schema 100%, audit 100%, registry 100%)
 mypy:            clean (17 source files, 0 issues)
 Conditions:       30 types
@@ -327,7 +327,7 @@ npm test               # watch 模式 (vitest)
 ```
 - 测试文件位于 `editor/src/**/*.test.{ts,tsx}`
 - 使用 `@testing-library/react` + `vitest` + `jsdom`
-- 当前覆盖: YAML 工具 (23 tests), 条件定义工具 (11 tests), StageNode (8 tests), PropertiesPanel (25 tests), EdgeEditor (26 tests), App (12 tests) — 共 6 文件 107 tests
+- 当前覆盖: YAML 工具 (23 tests), 条件定义工具 (11 tests), StageNode (8 tests), PropertiesPanel (25 tests), EdgeEditor (26 tests), App (27 tests), API 工具 (10 tests) — 共 7 文件 130 tests
 
 ## 工作约束（Claude 模型须知）
 
@@ -392,10 +392,10 @@ auto_workflow/
 │   ├── test_generator.py      # 50 tests
 │   ├── test_hooks_integration.py # 17 tests
 │   ├── test_hybrid.py         # 30 tests
-│   ├── test_main.py           # 124 tests
+│   ├── test_main.py           # 218 tests
 │   ├── test_orchestrator.py   # 33 tests
 │   ├── test_perf.py           # 7 tests
-│   ├── test_server.py         # 49 tests
+│   ├── test_server.py         # 80 tests
 │   ├── test_audit.py          # 18 tests
 │   ├── test_mcp_server.py     # 19 tests
 │   └── test_stress.py         # 18 tests

@@ -2,7 +2,33 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-124 — wire frontend to project APIs + rebuild
+> **交接原因**: task-125 — add `stageflow editor` CLI command
+
+---
+
+## task-125 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Added `cmd_editor()` to `stageflow/__main__.py`** — discovers project root from cwd, rejects non-project/legacy projects, creates bound FastAPI app via `create_app(project_root=root)`, prints project info + URL, flushes stdout, opens browser (unless `--no-open`), starts uvicorn in foreground
+2. **Added `editor` subparser** — `--host` (default 127.0.0.1), `--port` (default 8000), `--no-open` flag
+3. **Added `sys.stdout.flush()`** before uvicorn startup — prevents pipe buffering from swallowing the startup banner in subprocess tests
+4. **Added 8 CLI tests** (`TestCLIEditor` in test_main.py):
+   - Help output: `test_editor_help`, `test_editor_in_main_help`
+   - Outside project: `test_outside_project_fails`, `test_legacy_project_rejected`
+   - Nested directory root binding: `test_nested_directory_shows_correct_root`
+   - Port/host args: `test_custom_host_port_printed`
+   - Port busy: `test_port_busy_fails_cleanly`
+   - Startup info: `test_prints_project_info_at_startup`
+5. **Subprocess pattern**: `_start_editor()` helper uses `stderr=subprocess.STDOUT` + background reader thread to avoid pipe-blocking; `_wait_for_output()` polls lines until marker appears
+
+### 当前状态
+- Phase 38: tasks 123-125 complete
+- All tests: 1282 passed, 1 skipped (was 1255 Python; +27 from task-123/124/125)
+- Editor tests: 130 passed (7 files, unchanged)
+- Next: task-126 — end-to-end editor workflow tests
+
+### 已知问题
+- None
 
 ---
 

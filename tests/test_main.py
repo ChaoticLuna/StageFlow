@@ -2405,3 +2405,216 @@ class TestCLIComplete:
         b_state = self._read_state(repo_b)
         assert b_state["current_stage"] == "dos"
         assert "run_status" not in b_state
+
+
+class TestCLIEditor:
+    """Tests for stageflow editor — visual workflow editor command."""
+
+    EDITOR_STAGES = {
+        "stages": [
+            {"name": "alpha", "tools": ["Read"],
+             "meta": {"description": "First stage"}},
+            {"name": "beta", "tools": [],
+             "meta": {"description": "Terminal stage"}},
+        ],
+        "transitions": [
+            {"from": "alpha", "to": "beta", "conditions": [{"always": True}]},
+        ],
+    }
+
+    @staticmethod
+    def _run(cwd, *args):
+        import subprocess, sys
+        return subprocess.run(
+            [sys.executable, "-m", "stageflow", *args],
+            capture_output=True, text=True, cwd=str(cwd), timeout=30,
+        )
+
+    @staticmethod
+    def _write_yaml(path, config):
+        import yaml
+        path.write_text(yaml.dump(config), encoding="utf-8")
+
+    def _init_project(self, project_dir):
+        project_dir.mkdir(parents=True, exist_ok=True)
+        self._run(project_dir, "init")
+        self._write_yaml(
+            project_dir / ".stageflow" / "config" / "stages.yaml",
+            self.EDITOR_STAGES,
+        )
+
+    @staticmethod
+    def _start_editor(cwd, *extra_args):
+        """Start editor as a subprocess, return (proc, output_lines).
+
+        Uses a background thread to read stdout (merged with stderr) so the
+        pipe buffer never fills.  Caller must terminate the process.
+        """
+        import subprocess, sys, threading
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "stageflow", "editor", "--no-open", *extra_args],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            cwd=str(cwd),
+        )
+        lines = []
+        def _reader():
+            try:
+                for line in iter(proc.stdout.readline, ""):
+                    lines.append(line)
+            except Exception:
+                pass
+        t = threading.Thread(target=_reader, daemon=True)
+        t.start()
+        return proc, lines, t
+
+    @staticmethod
+    def _wait_for_output(lines, marker, timeout=15):
+        """Poll *lines* (filled by reader thread) until *marker* appears."""
+        import time
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            combined = "".join(lines)
+            if marker in combined:
+                return combined
+            time.sleep(0.1)
+        return "".join(lines)
+
+    # ── Help output ───────────────────────────────────────────────────
+
+    def test_editor_help(self):
+        """stageflow editor --help shows editor-specific options."""
+        r = _stageflow("editor", "--help")
+        assert r.returncode == 0, r.stderr
+        assert "--host" in r.stdout
+        assert "--port" in r.stdout
+        assert "--no-open" in r.stdout
+
+    def test_editor_in_main_help(self):
+        """stageflow --help lists the editor command."""
+        r = _stageflow("--help")
+        assert r.returncode == 0, r.stderr
+        assert "editor" in r.stdout
+
+    # ── Outside project ───────────────────────────────────────────────
+
+    def test_outside_project_fails(self, tmp_path):
+        """stageflow editor outside a project fails with guidance."""
+        r = self._run(tmp_path, "editor", "--no-open")
+        assert r.returncode != 0
+        assert "Not a StageFlow project" in r.stderr
+
+    def test_legacy_project_rejected(self, tmp_path):
+        """Editor rejects legacy (non-.stageflow/) projects with migration guidance."""
+        import json
+        # Create a legacy-style project
+        (tmp_path / "stageflow" / "config").mkdir(parents=True)
+        import yaml
+        (tmp_path / "stageflow" / "config" / "stages.yaml").write_text(
+            yaml.dump(self.EDITOR_STAGES), encoding="utf-8"
+        )
+        (tmp_path / ".claude").mkdir(parents=True)
+        (tmp_path / ".claude" / "current_stage.json").write_text(
+            json.dumps({"current_stage": None}), encoding="utf-8"
+        )
+        r = self._run(tmp_path, "editor", "--no-open")
+        assert r.returncode != 0, f"Expected non-zero exit, got {r.returncode}"
+        assert "migrate" in r.stderr.lower(), f"Expected migration guidance in: {r.stderr}"
+
+    # ── Nested directory root binding ─────────────────────────────────
+
+    def test_nested_directory_shows_correct_root(self, tmp_path):
+        """Editor launched from a nested directory binds the ancestor root."""
+        import time
+        self._init_project(tmp_path)
+        nested = tmp_path / "src" / "sub" / "deep"
+        nested.mkdir(parents=True)
+        proc, lines, thr = self._start_editor(nested, "--port", "8765")
+        try:
+            output = self._wait_for_output(lines, "Started server process", timeout=15)
+            # Terminate once started
+            proc.terminate()
+            proc.wait(timeout=5)
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    proc.kill()
+                    proc.wait()
+        assert str(tmp_path) in output, f"Missing project root in output:\n{output}"
+        assert "Project root" in output, f"Missing 'Project root' in:\n{output}"
+
+    # ── Host / port argument parsing ──────────────────────────────────
+
+    def test_custom_host_port_printed(self, tmp_path):
+        """Custom --host and --port appear in the startup banner."""
+        import time
+        self._init_project(tmp_path)
+        proc, lines, thr = self._start_editor(
+            tmp_path, "--host", "0.0.0.0", "--port", "9876",
+        )
+        try:
+            output = self._wait_for_output(lines, "0.0.0.0", timeout=15)
+            proc.terminate()
+            proc.wait(timeout=5)
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    proc.kill()
+                    proc.wait()
+        assert "0.0.0.0" in output, f"Expected 0.0.0.0 in output:\n{output}"
+        assert "9876" in output, f"Expected 9876 in output:\n{output}"
+
+    # ── Port busy ─────────────────────────────────────────────────────
+
+    def test_port_busy_fails_cleanly(self, tmp_path):
+        """Editor fails when the selected port is busy."""
+        import subprocess, sys, socket
+        self._init_project(tmp_path)
+
+        # Bind a socket to hold the port
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("127.0.0.1", 9877))
+        sock.listen(1)
+
+        try:
+            r = subprocess.run(
+                [sys.executable, "-m", "stageflow", "editor",
+                 "--port", "9877", "--no-open"],
+                capture_output=True, text=True, cwd=str(tmp_path), timeout=20,
+            )
+            # uvicorn exits non-zero when the port is in use
+            combined = (r.stdout or "") + (r.stderr or "")
+            assert r.returncode != 0 or "ERROR" in combined.upper() or "address already in use" in combined.lower(), \
+                f"Expected failure on busy port, got rc={r.returncode}\nstdout:\n{r.stdout}\nstderr:\n{r.stderr}"
+        finally:
+            sock.close()
+
+    # ── Prints project info at startup ────────────────────────────────
+
+    def test_prints_project_info_at_startup(self, tmp_path):
+        """Editor prints project root and config path at startup."""
+        import time
+        self._init_project(tmp_path)
+        proc, lines, thr = self._start_editor(tmp_path, "--port", "8766")
+        try:
+            output = self._wait_for_output(lines, "Project root", timeout=15)
+            proc.terminate()
+            proc.wait(timeout=5)
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    proc.kill()
+                    proc.wait()
+        assert "Project root" in output, f"Missing 'Project root' in:\n{output}"
+        assert str(tmp_path) in output, f"Missing project path in:\n{output}"
+        assert "Config" in output, f"Missing 'Config' in:\n{output}"
+        assert "URL" in output, f"Missing 'URL' in:\n{output}"

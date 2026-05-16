@@ -9,6 +9,7 @@ Usage:
     stageflow back [target]       Go back to previous stage
     stageflow jump <target>       Jump to a specific stage
     stageflow reset [stage]       Reset to initial or specified stage
+    stageflow editor              Start the visual workflow editor
     stageflow graph               Generate Mermaid graph of the state machine
     stageflow list                List all stages and transitions
     stageflow check <target>      Dry-run: check conditions without advancing
@@ -267,6 +268,43 @@ def cmd_complete(args):
         print(f"\nRun completed at stage '{sm._state['final_stage']}'.")
         print(f"State preserved — use 'stageflow start' to begin a new run.")
     return 0 if ok else 1
+
+
+def cmd_editor(args):
+    """Start the visual workflow editor bound to the current StageFlow project."""
+    from stageflow.core.discovery import discover_project
+
+    root = discover_project()
+    if root is None:
+        print("Not a StageFlow project (or any parent directory).", file=sys.stderr)
+        print("Run 'stageflow init' to create one here.", file=sys.stderr)
+        return 1
+
+    # Only new-style projects (.stageflow/) are supported
+    if root.marker_type != "new":
+        print("Editor requires a new-style project (.stageflow/).", file=sys.stderr)
+        print("Run 'stageflow migrate' to convert this project, then try again.", file=sys.stderr)
+        return 1
+
+    from editor.server import create_app
+
+    target_app = create_app(project_root=root)
+
+    url = f"http://{args.host}:{args.port}"
+
+    print(f"StageFlow Editor")
+    print(f"  Project root: {root.path}")
+    print(f"  Config:       {root.config_path}")
+    print(f"  URL:          {url}")
+    sys.stdout.flush()
+
+    if not getattr(args, 'no_open', False):
+        import webbrowser
+        webbrowser.open(url)
+
+    import uvicorn
+    uvicorn.run(target_app, host=args.host, port=args.port)
+    return 0
 
 
 def cmd_graph(args):
@@ -1021,6 +1059,11 @@ Examples:
     p = sub.add_parser("root", help="Print the discovered project root path")
     p.add_argument("--json", "-j", action="store_true", help="JSON output")
 
+    p = sub.add_parser("editor", help="Start the visual workflow editor")
+    p.add_argument("--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
+    p.add_argument("--port", type=int, default=8000, help="Port to bind (default: 8000)")
+    p.add_argument("--no-open", action="store_true", help="Don't open browser automatically")
+
     p = sub.add_parser("mcp", help="Start MCP server (stdio transport)")
 
     args = parser.parse_args()
@@ -1030,7 +1073,7 @@ Examples:
 
     commands = {
         "status": cmd_status, "next": cmd_next, "back": cmd_back,
-        "jump": cmd_jump, "reset": cmd_reset, "complete": cmd_complete, "graph": cmd_graph,
+        "jump": cmd_jump, "reset": cmd_reset, "complete": cmd_complete, "editor": cmd_editor, "graph": cmd_graph,
         "list": cmd_list, "init": cmd_init, "start": cmd_start,
         "check": cmd_check,
         "cond": cmd_cond, "generate": cmd_generate, "hook": cmd_hook, "migrate": cmd_migrate, "root": cmd_root, "mcp": cmd_mcp,
