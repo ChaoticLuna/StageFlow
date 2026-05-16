@@ -2,7 +2,7 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-139 — Default read tools (Read, Grep, Glob) in hook and guard
+> **交接原因**: task-142 — Updated docs for default read tools and access policy
 
 ---
 
@@ -1729,3 +1729,16 @@ Ralph:           task-025-LOOP complete (8 iterations today)
 
 ### 长期（Phase 11）
 - GitHub Actions CI、Docker 镜像、VS Code 扩展、Linear/Notion 同步
+
+---
+
+## task-142 会话总结 (2026-05-16)
+
+**做了什么**: 更新了所有文档以反映 Phase 42 的语义变更：
+- `.ralph/AGENT.md`: 更新测试计数 (1539+130=1669)、每个文件的测试计数、新增默认读取工具和文件访问策略说明
+- `CLAUDE.md`: 已在上一会话中更新——新增"默认读取工具 (Phase 42)"和"细粒度文件访问控制 (access 策略)"子章节，附完整 YAML 示例
+- `docs/api_reference.md`: 已在上一会话中更新——扩展 StageGuard 文档，附 enforce_path_guard 参数和工具检查顺序
+
+**当前状态**: task-142 完成。处于 implement 阶段。
+**下一步**: task-143 — 在 D:\2026_zju\test 下运行真实外部 CLI smoke demo
+**提交**: 71483f6 ralph: task-142 — update docs for default read tools and access policy
