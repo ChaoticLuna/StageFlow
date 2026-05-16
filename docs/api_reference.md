@@ -613,12 +613,127 @@ python -m stageflow root --json                  # JSON output
 
 Output fields: `root`, `marker_type` (new/legacy/legacy_state_only), `config_path`, `state_path`, `artifacts_dir`, `audit_dir`. Exits with code 1 and "Not a StageFlow project" message outside a project.
 
+### `editor [--host HOST] [--port PORT] [--no-open]`
+
+Start the visual workflow editor bound to the current StageFlow project.
+
+```
+stageflow editor                              # Start on 127.0.0.1:8000, open browser
+stageflow editor --port 9000                  # Custom port
+stageflow editor --host 0.0.0.0 --port 8080  # Custom host and port
+stageflow editor --no-open                    # Headless (no browser)
+stageflow editor --no-open --port 8765        # Headless + custom port
+```
+
+The editor discovers the project root from cwd (walking upward for `.stageflow/`). It must be run inside a StageFlow project — running outside a project exits with an error and guidance to run `stageflow init`.
+
+Only new-style projects (`.stageflow/` marker) are supported. Legacy projects must be migrated first with `stageflow migrate`.
+
+The editor server stays in the foreground. Use `Ctrl+C` to stop.
+
+**Save gate**: The editor's Save button writes to `<project>/.stageflow/config/stages.yaml` only when no run is active (`current_stage` is null). While a run is active, Save is blocked with a 403 error and a message telling the user to run `stageflow complete` or `stageflow reset` first.
+
 ### Other Commands
 
 ```
 python -m stageflow hook                        # Claude Code PreToolUse Hook entrypoint
 python -m stageflow generate <desc>             # LLM workflow generator
 python -m stageflow mcp                         # Start MCP server (stdio)
+```
+
+### Editor Server API
+
+The visual workflow editor is backed by a FastAPI server (`editor/server.py`). When launched via `stageflow editor`, the server is bound to the discovered project root. Endpoints marked "project-scoped" use the bound root and do not rediscover from cwd.
+
+#### `GET /api/project/config`
+
+Load the current project's `stages.yaml` and metadata.
+
+**Response** (200):
+```json
+{
+  "yaml": "stages:\n  - name: alpha\n...",
+  "config_path": "/proj/.stageflow/config/stages.yaml",
+  "project_root": "/proj",
+  "marker_type": "new",
+  "current_stage": null,
+  "run_status": null,
+  "save_allowed": true
+}
+```
+
+- `save_allowed` is `true` when `current_stage` is `null` (no active run)
+- Returns 400 if no StageFlow project is found
+- Returns 404 if the config file is missing
+
+#### `GET /api/project/status`
+
+Return detailed project run state.
+
+**Response** (200):
+```json
+{
+  "project_root": "/proj",
+  "marker_type": "new",
+  "current_stage": "alpha",
+  "run_status": null,
+  "final_stage": null,
+  "completed_at": null,
+  "run_id": "abc123-...",
+  "save_allowed": false,
+  "history_count": 3,
+  "variable_keys": ["run_id"],
+  "retry_count": {},
+  "iterations": {},
+  "state_path": "/proj/.stageflow/current_stage.json",
+  "config_path": "/proj/.stageflow/config/stages.yaml"
+}
+```
+
+#### `POST /api/project/save-config`
+
+Save workflow YAML to the project config. Project-scoped — uses the bound root.
+
+**Request**:
+```json
+{"yaml": "stages:\n  - name: alpha\n..."}
+```
+
+**Success** (200):
+```json
+{
+  "saved": true,
+  "config_path": "/proj/.stageflow/config/stages.yaml",
+  "message": "Config saved to /proj/.stageflow/config/stages.yaml. Current state: no active run."
+}
+```
+
+**Blocked** (403): Active run exists — `current_stage` is not null.
+**Invalid** (400): YAML parse error or StageFlow schema validation failure.
+**No project** (400): No StageFlow project found.
+
+**Save gate**: The endpoint reads the current state file and blocks if `current_stage` is not null. Previous config bytes are preserved on validation failure.
+
+#### `GET /api/conditions`
+
+Return all 30 condition type definitions with parameter schemas (for the edge editor UI).
+
+#### `POST /api/validate`
+
+Validate arbitrary YAML against the StageFlow schema.
+
+```json
+// Request:  {"yaml": "..."}
+// Response: {"valid": true, "errors": []}
+```
+
+#### `POST /api/run`
+
+Dry-run a transition: evaluate conditions from the provided YAML without persisting state.
+
+```json
+// Request:  {"yaml": "...", "from_stage": "alpha", "to_stage": "beta"}
+// Response: {"can_transition": true, "messages": ["always: passed"]}
 ```
 
 ### Legacy Scripts

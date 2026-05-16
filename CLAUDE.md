@@ -244,6 +244,7 @@ stageflow root [--json]                       # 打印发现的项目根路径
 ```bash
 stageflow hook                             # Claude Code PreToolUse Hook 入口
 stageflow generate <desc> [--template T]   # LLM 工作流生成
+stageflow editor [--host HOST] [--port PORT] [--no-open]  # 启动可视化工作流编辑器
 stageflow mcp                              # 启动 MCP Server
 ```
 
@@ -264,12 +265,54 @@ stageflow mcp                              # 启动 MCP Server
 StageFlow 运行遵循明确的生命周期：
 
 1. **stageflow init** — 创建项目元数据，无活跃运行
-2. **stageflow start** — 在 YAML 入口阶段开始新运行，创建 run_id
-3. **stageflow next** — 通过条件门控的转移推进阶段
-4. **stageflow complete** — 在终端阶段正常关闭运行，保留 current_stage: null 和完成元数据
-5. **stageflow reset** — 放弃或清除状态，不是成功的正常结束路径
+2. **stageflow editor** 或 **stageflow generate** — 编辑工作流配置（两种路径，见下文）
+3. **stageflow start** — 在 YAML 入口阶段开始新运行，创建 run_id
+4. **stageflow next** — 通过条件门控的转移推进阶段
+5. **stageflow complete** — 在终端阶段正常关闭运行，保留 current_stage: null 和完成元数据
+6. **stageflow reset** — 放弃或清除状态，不是成功的正常结束路径
 
 终端阶段是结构性的（零出站转移），不是基于名称判断的。
+
+### 工作流编辑器 (Visual Workflow Editor)
+
+`stageflow editor` 启动一个基于浏览器的可视化编辑器，用于创建和修改工作流配置。
+提供两种工作流配置路径：
+
+**路径 1: AI 辅助生成**
+```bash
+stageflow init                                                  # 1. 初始化项目
+stageflow generate "CI/CD pipeline with test and deploy" \      # 2. 从描述生成
+    --output .stageflow/config/stages.yaml --validate
+stageflow editor                                                # 3. 可视化微调（可选）
+stageflow start                                                 # 4. 开始运行
+```
+
+**路径 2: 手动可视化编辑**
+```bash
+stageflow init                                                  # 1. 初始化项目
+stageflow editor                                                # 2. 在浏览器中拖拽编辑
+stageflow start                                                 # 3. 开始运行
+```
+
+### 编辑器保存规则 (Save Gate)
+
+- **允许保存**：无活跃运行时（`stageflow init` 后、`stageflow complete` 后、`stageflow reset` 后）
+- **阻止保存**：运行进行中（任何 `current_stage` 非 null 时）
+- **阻止时提示**：运行 `stageflow complete`（正常完成）或 `stageflow reset`（放弃运行）后再编辑
+- **无效 YAML 保护**：验证失败的保存不会覆盖已有配置文件
+
+### 编辑器命令行
+
+```bash
+stageflow editor                              # 启动编辑器（默认 127.0.0.1:8000，自动打开浏览器）
+stageflow editor --port 9000                  # 指定端口
+stageflow editor --host 0.0.0.0 --port 8080  # 指定主机和端口
+stageflow editor --no-open                    # 不打开浏览器（用于测试/无头环境）
+stageflow editor --no-open --port 8765        # 无头模式，指定端口（CI/测试友好）
+```
+
+编辑器自动发现项目根（从当前目录向上查找 `.stageflow/`），绑定到该项目的配置。
+从子目录启动时，更新的是祖先项目的 `.stageflow/config/stages.yaml`。
 
 ## 框架特性
 

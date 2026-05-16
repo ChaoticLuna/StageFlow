@@ -2,7 +2,34 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-126 — end-to-end editor workflow tests (8 layers)
+> **交接原因**: task-127 — update docs and usage examples for editor lifecycle
+
+---
+
+## task-127 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Updated `CLAUDE.md`**:
+   - Added `stageflow editor` to CLI command table
+   - Expanded "运行生命周期" section with editor as step 2 (two paths: AI generation + manual editing)
+   - Added "工作流编辑器" subsection with save gate rules, both workflow paths, and CLI examples
+2. **Updated `docs/api_reference.md`**:
+   - Added `### editor` CLI reference section with all flags, project discovery, save gate
+   - Added Editor Server API section documenting 6 endpoints: GET /api/project/config, GET /api/project/status, POST /api/project/save-config, GET /api/conditions, POST /api/validate, POST /api/run
+3. **Updated `.ralph/AGENT.md`**:
+   - Updated test count (1311 Python + 130 editor = 1441)
+   - Added `stageflow editor` commands to Run section
+   - Added "Editor Lifecycle" section with workflow diagram, dual paths, save gate, headless mode
+   - Added `editor/` directory to project structure
+   - Updated per-file test counts in project structure
+
+### 当前状态
+- Phase 38: all tasks (123-127) complete
+- All tests: 1441 passed (1311 Python + 130 editor), 1 skipped
+- fix_plan.md: all tasks marked [x], Phase 38 complete
+
+### 已知问题
+- None
 
 ---
 

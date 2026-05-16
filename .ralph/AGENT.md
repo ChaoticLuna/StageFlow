@@ -16,7 +16,7 @@ pip install jsonschema
 ## Test
 
 ```bash
-# Run all tests (362 currently passing)
+# Run all tests (1311 Python + 130 editor = 1441 total)
 pytest
 
 # Run with verbose output
@@ -74,6 +74,12 @@ python -m stageflow check verify
 
 # Generate Mermaid graph
 python -m stageflow graph
+
+# Start visual workflow editor (browser-based)
+python -m stageflow editor
+python -m stageflow editor --port 9000
+python -m stageflow editor --no-open             # Headless (no browser)
+python -m stageflow editor --no-open --port 8765 # Headless + custom port
 
 # Reset current run (abandon/restart — NOT normal completion)
 python -m stageflow reset
@@ -144,6 +150,14 @@ stageflow/
 ├── integrations/        # Linear + Notion sync clients
 └── __main__.py          # Git-like CLI entry point
 
+editor/                  # Visual workflow editor (React + FastAPI)
+├── server.py            # FastAPI backend (18 endpoints, project-scoped APIs)
+├── src/                 # React + ReactFlow frontend (TypeScript)
+│   ├── App.tsx          # Main app: auto-load, Save, theme
+│   ├── components/      # Canvas, StageNode, PropertiesPanel, EdgeEditor
+│   └── utils/           # YAML parser, API client, condition defs
+└── dist/                # Built production assets (served by FastAPI)
+
 scripts/
 ├── stage_next.py        # Legacy — use: stageflow next
 ├── stage_status.py      # Legacy — use: stageflow status
@@ -160,9 +174,11 @@ tests/
 ├── test_engine.py       # 92 tests
 ├── test_guard.py        # 23 tests
 ├── test_discovery.py    # 18 tests
-├── test_main.py         # 124 tests (CLI)
+├── test_main.py         # 218 tests (CLI)
+├── test_server.py       # 80 tests
+├── test_editor_e2e.py   # 29 tests
 ├── test_e2e.py          # 25 tests
-├── ...                  # 22 test files total
+├── ...                  # 28 test files total
 
 .claude/
 ├── settings.json        # Project hook config (PreToolUse → stageflow hook)
@@ -198,3 +214,23 @@ tests/
 - On Windows, `shell_test` uses `shell=True` which invokes cmd.exe — bash syntax may not work.
 - The `http_status` condition may fail behind corporate firewalls.
 - `json_schema` condition gracefully degrades if `jsonschema` package is not installed.
+
+## Editor Lifecycle
+
+```
+stageflow init     →  stageflow editor  →  stageflow start  →  stageflow next  →  stageflow complete
+                     (edit workflow)                                        ↓
+                                                                   stageflow editor
+                                                                   (edit for next run)
+```
+
+两种工作流配置方式：
+1. **AI 生成**: `stageflow generate "description" --output .stageflow/config/stages.yaml --validate`
+2. **可视化编辑**: `stageflow editor`（浏览器拖拽编辑节点、连线、条件）
+
+**保存门控 (Save Gate)**：
+- 仅当 `current_stage` 为 `null` 时允许保存（无活跃运行）
+- 运行进行中保存会被阻止 → 先 `stageflow complete` 或 `stageflow reset`
+- 无效 YAML 不会覆盖已有配置
+
+**无头模式**: `stageflow editor --no-open --port <port>` 用于测试/CI，不打开浏览器。
