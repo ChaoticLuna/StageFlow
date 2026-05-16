@@ -141,6 +141,24 @@ class TestLayer2_FastAPIServesFrontend:
         r = client.get("/favicon.svg")
         assert r.status_code in (200, 404)  # 404 if not built
 
+    def test_js_bundle_served_with_browser_executable_mime(self, tmp_path):
+        """Module scripts must not be served as text/plain."""
+        from fastapi.testclient import TestClient
+
+        app = self._make_bound_app(tmp_path)
+        client = TestClient(app)
+        assets_dir = DIST_DIR / "assets"
+        js_files = list(assets_dir.glob("*.js"))
+        assert js_files, "No JS bundle found in dist/assets"
+
+        r = client.get(f"/assets/{js_files[0].name}")
+        assert r.status_code == 200
+        content_type = r.headers["content-type"].split(";")[0]
+        assert content_type in {
+            "application/javascript",
+            "text/javascript",
+        }
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Layer 3: Server API loads config from bound root

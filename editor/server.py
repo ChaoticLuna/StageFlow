@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import mimetypes
 import os
 import sys
 import tempfile
@@ -39,6 +40,9 @@ WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_CONFIG = str(Path(__file__).resolve().parent.parent / "stageflow" / "config" / "stages.yaml")
 
 DIST_DIR = Path(__file__).parent / "dist"
+
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("application/javascript", ".mjs")
 
 
 def _resolve_project_root(request: Request):

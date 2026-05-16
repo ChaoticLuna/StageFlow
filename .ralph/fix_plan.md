@@ -454,6 +454,12 @@ Hard acceptance rules for this phase:
 
 ---
 
+## Phase 41: Editor MIME type + ResizeObserver fixes
+
+- [x] **task-138**: Fix editor JS bundle served as text/plain breaking module execution. Add `mimetypes.add_type("application/javascript", ".js")` and `".mjs"` to server.py. Add `resizeObserverFallback.ts` polyfill for jsdom test environment (ResizeObserver not in jsdom). Import polyfill in main.tsx. Add test verifying JS bundles get browser-executable MIME type.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |
