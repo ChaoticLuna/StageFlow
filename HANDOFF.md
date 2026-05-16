@@ -2,11 +2,37 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-132 — Preserve access through editor import/export
+> **交接原因**: task-134 — Staged file access control verification (Phase 39 complete)
 
 ---
 
-## task-132 会话总结 (2026-05-16)
+## task-134 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Created `tests/test_access_layered.py`** — 44 layered tests across 8 layers of increasing difficulty:
+   - Layer 1 (6 tests): Schema load — YAML with access policy parses into Stage.extra
+   - Layer 2 (11 tests): Policy helper — AccessPolicy.check_read/check_write/check_search in isolation
+   - Layer 3 (6 tests): StageGuard programmatic check with state file
+   - Layer 4 (6 tests): Hook from project root via subprocess
+   - Layer 5 (2 tests): Hook from nested CWD resolving relative paths
+   - Layer 6 (4 tests): Windows/absolute path escapes blocked
+   - Layer 7 (5 tests): YAML round-trip preserves access fields in Stage.extra
+   - Layer 8 (4 tests): Old-workflow backward compatibility (no access policy)
+2. **Created `docs/access_policy_verification.md`** — verification guide with exact commands and expected results for each layer, plus manual command examples
+3. **Fixed initial test issues**: Layer 1 used wrong validation method (reg.validate() reports isolated stages), Layer 3/8 needed state file via StateMachine.initialize(), Layer 7 used wrong API (get_stage() not get_stage_info())
+
+### 当前状态
+- Phase 39: ALL 7 tasks complete (128-134) ✅
+- All tests: 1499 passed, 1 skipped (was 1495; +44 from task-134)
+- Editor tests: 130 passed (unchanged)
+- New files: tests/test_access_layered.py (44 tests), docs/access_policy_verification.md
+- All 8 layers pass independently and in sequence
+
+### 已知问题
+- None — Phase 39 is complete
+
+---
+
 
 ### 做了什么
 1. **Added `extra` field to `StageData` interface** (types.ts) — carries unknown YAML fields that aren't part of the standard stage shape
