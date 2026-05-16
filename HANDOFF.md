@@ -2,7 +2,44 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-129 — Implement core path policy evaluation
+> **交接原因**: task-130 — Enforce access in stageflow hook entrypoint
+
+---
+
+## task-130 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Restructured `cmd_hook` in `__main__.py`** — wire AccessPolicy into the hook:
+   - Split always-allow tools: non-file tools (TaskCreate, AskUserQuestion) always allowed; Read/Grep/Glob always tool-allowed but subject to read access policy
+   - Project discovery moved before tool check so access policy can apply to Read
+   - Added `_extract_file_path()` helper for NotebookEdit/Grep/Glob path extraction
+   - Added `_log_hook_violation()` helper extracted from inline code
+   - Added `_resolve_hook_path()` to resolve relative paths against CWD (fixes nested cwd)
+   - Unrestricted stages (empty tools) with NO access policy still allow everything; with access policy, fall through to enforcement
+
+2. **Added 18 hook-level access policy tests in `test_main.py`**:
+   - Read allowed/blocked, deny-over-allow, missing path fails closed
+   - Write allowed in run scope, blocked to source, missing path fails closed
+   - Grep without path blocked, Grep in allowed dir works, Glob in denied dir blocked
+   - Path escape blocked, absolute outside blocked
+   - Nested CWD uses project root correctly
+   - Old workflow no policy keeps behavior
+   - NotebookEdit respects write policy (both allowed and blocked)
+   - Edit respects write policy
+   - Unrestricted stage with read policy still enforces access
+
+### 修复的问题
+- **Unrestricted stage early return**: restored when no access policy, so existing tests pass
+- **Nested CWD path resolution**: relative paths now resolved against `Path.cwd()` before access check
+- **Deny test path**: `config/secrets/db.yaml` → `secrets/db.yaml` to actually match `secrets/**` pattern
+
+### 当前状态
+- task-130 完成: `__main__.py` hook restructured + 18 hook tests
+- 全测试套件: 861 passed, 1 skipped, 0 failed
+- Phase 39: tasks 39.1/39.2/39.3 complete
+
+### 下一步
+task-131: Reconcile or remove duplicate guard behavior — unify StageGuard with cmd_hook.
 
 ---
 

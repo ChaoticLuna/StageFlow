@@ -29,6 +29,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from stageflow.core.registry import StageRegistry
 from stageflow.core.engine import StateMachine
 from stageflow.core.conditions import evaluate, list_conditions
+from stageflow.core.access_policy import AccessPolicy
 
 
 
@@ -842,10 +843,19 @@ def cmd_migrate(args):
     return 0
 
 
-ALWAYS_ALLOW_TOOLS = {
+# ── Tool classification for access policy enforcement ──
+
+# Non-file tools that never need access policy checks
+_NON_FILE_ALWAYS_ALLOW = {
     "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TaskOutput",
-    "Read", "AskUserQuestion",
+    "AskUserQuestion",
 }
+
+# Read is always tool-allowed but subject to access.read policy
+_READ_TOOLS = {"Read", "Grep", "Glob"}
+
+# Write-family tools subject to access.write policy
+_WRITE_TOOLS = {"Write", "Edit", "NotebookEdit"}
 
 ALWAYS_ALLOW_COMMANDS = [
     "python -m stageflow",
@@ -873,12 +883,38 @@ def _match_bash_pattern(pattern: str, cmd: str) -> bool:
     return bool(re.search(regex, stripped))
 
 
-def cmd_hook(args):
-    """Claude Code PreToolUse hook entrypoint. Discovers project root from cwd
-    and enforces stage tool allowlist. Outputs allow/block JSON to stdout.
-    """
+def _extract_file_path(tool_name: str, tool_input: dict) -> str | None:
+    """Extract the file or directory path from a tool's input dict."""
+    if tool_name == "NotebookEdit":
+        return tool_input.get("notebook_path") or tool_input.get("file_path")
+    if tool_name in ("Grep", "Glob"):
+        return tool_input.get("path")
+    return tool_input.get("file_path")
+
+
+def _log_hook_violation(root, tool_name: str, stage: str, reason: str):
+    """Log an access violation to the project's guard violation log."""
     import json as _json
     from datetime import datetime, timezone
+
+    violation_path = root.audit_dir / "guard_violations.jsonl"
+    violation_path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "tool": tool_name,
+        "stage": stage,
+        "reason": reason,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    with open(violation_path, "a", encoding="utf-8") as f:
+        f.write(_json.dumps(entry) + "\n")
+
+
+def cmd_hook(args):
+    """Claude Code PreToolUse hook entrypoint. Discovers project root from cwd
+    and enforces stage tool allowlist and file access policy.
+    Outputs allow/block JSON to stdout.
+    """
+    import json as _json
 
     try:
         input_data = _json.loads(sys.stdin.read())
@@ -889,12 +925,7 @@ def cmd_hook(args):
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input", {})
 
-    # Always allow certain tools to prevent deadlock
-    if tool_name in ALWAYS_ALLOW_TOOLS:
-        print(_json.dumps({"decision": "allow", "reason": f"{tool_name} is always allowed"}))
-        return 0
-
-    # Always allow operational stageflow commands via Bash
+    # Always allow operational stageflow commands via Bash/PowerShell
     if tool_name in ("Bash", "PowerShell"):
         cmd = tool_input.get("command", "")
         stripped = _strip_cd_prefix(cmd)
@@ -904,7 +935,7 @@ def cmd_hook(args):
                                    "reason": f"Bash({cmd[:60]}) is always allowed"}))
                 return 0
 
-    # Discover project root
+    # Discover project root (before always-allow so we can apply access policy)
     from stageflow.core.discovery import discover_project
     root = discover_project()
     if root is None:
@@ -934,49 +965,109 @@ def cmd_hook(args):
                            "reason": f"stage '{current_stage}' not found — allowing"}))
         return 0
 
+    # ── Non-file tools: always allowed, no access policy needed ──
+    if tool_name in _NON_FILE_ALWAYS_ALLOW:
+        print(_json.dumps({"decision": "allow",
+                           "reason": f"{tool_name} is always allowed"}))
+        return 0
+
+    # ── Build access policy from stage extras ──
+    access_config = stage.extra.get("access") if stage.extra else None
+    policy = AccessPolicy(access_config)
+
+    # ── Unrestricted stage with no access policy: allow everything ──
     allowed_tools = stage.tools
-    if not allowed_tools:
+    if not allowed_tools and not policy.has_policy:
         print(_json.dumps({"decision": "allow",
                            "reason": f"stage '{current_stage}' has unrestricted tools"}))
         return 0
 
-    # Check exact tool match
-    if tool_name in allowed_tools:
-        print(_json.dumps({"decision": "allow",
-                           "reason": f"'{tool_name}' allowed in stage '{current_stage}'"}))
-        return 0
+    # ── Tool allowlist check ──
+    variables = sm.get_all_vars() if hasattr(sm, 'get_all_vars') else {}
+    project_root_str = str(root.path)
 
-    # Check Bash(pattern) / PowerShell(pattern) constraints
-    if tool_name in ("Bash", "PowerShell"):
-        cmd = tool_input.get("command", "")
-        for allowed in allowed_tools:
-            if "(" in allowed and (allowed.startswith("Bash(") or allowed.startswith("PowerShell(")):
-                prefix = allowed.split("(")[0]
-                if tool_name == prefix:
-                    start = allowed.index("(")
-                    pattern = allowed[start + 1:-1].strip()
-                    if _match_bash_pattern(pattern, cmd):
-                        print(_json.dumps({"decision": "allow",
-                                           "reason": f"{tool_name}({cmd[:60]}) matches '{allowed}' in '{current_stage}'"}))
-                        return 0
+    if allowed_tools:
+        tool_ok = False
 
-    # Blocked
-    reason = (f"Tool '{tool_name}' is NOT allowed in stage '{current_stage}'. "
-              f"Allowed tools: {allowed_tools}")
-    print(_json.dumps({"decision": "block", "reason": reason}))
+        # Read and search tools: always pass the tool check (they're always
+        # allowed at the tool level), but are subject to access policy below.
+        if tool_name in _READ_TOOLS:
+            tool_ok = True
+        elif tool_name in allowed_tools:
+            tool_ok = True
+        elif tool_name in ("Bash", "PowerShell"):
+            cmd = tool_input.get("command", "")
+            for allowed in allowed_tools:
+                if "(" in allowed and (allowed.startswith("Bash(") or allowed.startswith("PowerShell(")):
+                    prefix = allowed.split("(")[0]
+                    if tool_name == prefix:
+                        start = allowed.index("(")
+                        pattern = allowed[start + 1:-1].strip()
+                        if _match_bash_pattern(pattern, cmd):
+                            tool_ok = True
+                            break
 
-    # Log violation
-    violation_path = root.audit_dir / "guard_violations.jsonl"
-    violation_path.parent.mkdir(parents=True, exist_ok=True)
-    entry = {
-        "tool": tool_name,
-        "stage": current_stage,
-        "reason": reason,
-        "at": datetime.now(timezone.utc).isoformat(),
-    }
-    with open(violation_path, "a", encoding="utf-8") as f:
-        f.write(_json.dumps(entry) + "\n")
-    return 1
+        if not tool_ok:
+            reason = (f"Tool '{tool_name}' is NOT allowed in stage '{current_stage}'. "
+                      f"Allowed tools: {allowed_tools}")
+            print(_json.dumps({"decision": "block", "reason": reason}))
+            _log_hook_violation(root, tool_name, current_stage, reason)
+            return 1
+    # else: empty allowed_tools with access policy → all tools allowed
+    # but still check access policy below
+
+    # ── File access policy check ──
+    # Resolve relative paths against CWD before checking (the user's paths
+    # are relative to wherever Claude Code is running, not project root).
+    def _resolve_hook_path(path_str: str) -> str:
+        p = Path(path_str)
+        if not p.is_absolute():
+            p = Path.cwd() / p
+        return str(p)
+
+    if tool_name in _READ_TOOLS:
+        if policy.has_read_policy:
+            path = _extract_file_path(tool_name, tool_input)
+            if path is None:
+                reason = (
+                    f"access.read: '{tool_name}' requires a file path or "
+                    f"search root when stage '{current_stage}' has a read policy"
+                )
+                print(_json.dumps({"decision": "block", "reason": reason}))
+                _log_hook_violation(root, tool_name, current_stage, reason)
+                return 1
+            path = _resolve_hook_path(path)
+            if tool_name in ("Grep", "Glob"):
+                allowed, reason = policy.check_search(path, project_root_str, variables)
+            else:
+                allowed, reason = policy.check_read(path, project_root_str, variables)
+            if not allowed:
+                print(_json.dumps({"decision": "block", "reason": reason}))
+                _log_hook_violation(root, tool_name, current_stage, reason)
+                return 1
+
+    elif tool_name in _WRITE_TOOLS:
+        if policy.has_write_policy:
+            path = _extract_file_path(tool_name, tool_input)
+            if path is None:
+                reason = (
+                    f"access.write: '{tool_name}' requires a file_path when "
+                    f"stage '{current_stage}' has a write policy"
+                )
+                print(_json.dumps({"decision": "block", "reason": reason}))
+                _log_hook_violation(root, tool_name, current_stage, reason)
+                return 1
+            path = _resolve_hook_path(path)
+            allowed, reason = policy.check_write(path, project_root_str, variables)
+            if not allowed:
+                print(_json.dumps({"decision": "block", "reason": reason}))
+                _log_hook_violation(root, tool_name, current_stage, reason)
+                return 1
+
+    # All checks passed
+    print(_json.dumps({"decision": "allow",
+                       "reason": f"'{tool_name}' allowed in stage '{current_stage}'"}))
+    return 0
 
 
 def main():

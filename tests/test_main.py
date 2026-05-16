@@ -1135,6 +1135,246 @@ class TestHookCommand:
         assert r.returncode == 0, r.stderr
         assert "unrestricted" in r.stdout
 
+    # ── Access policy enforcement ─────────────────────────────────────
+
+    @staticmethod
+    def _make_access_stages_yaml(yaml_path, access_config, tools=None):
+        import yaml
+        stage = {
+            "name": "secured",
+            "tools": tools or ["Read", "Write", "Edit", "Grep", "Glob"],
+            "meta": {"description": "Stage with access policy"},
+        }
+        if access_config is not None:
+            stage["access"] = access_config
+        config = {
+            "stages": [stage],
+            "transitions": [],
+        }
+        yaml_path.write_text(yaml.dump(config), encoding="utf-8")
+
+    def test_access_read_allowed_in_allow_list(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["artifacts/**", "*.md"]}},
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Read", {"file_path": "README.md"})
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    def test_access_read_blocked_outside_allow_list(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["artifacts/**", "*.md"]}},
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Read", {"file_path": "secret.env"})
+        assert r.returncode != 0, f"Read of secret.env should be blocked, rc={r.returncode}"
+        assert "block" in r.stdout
+
+    def test_access_read_denied_overrides_allow(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["**"], "deny": ["*.env", "secrets/**"]}},
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Read", {"file_path": "secrets/db.yaml"})
+        assert r.returncode != 0, r.stderr or "blocked"
+        assert "block" in r.stdout
+
+    def test_access_read_missing_path_fails_closed(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["**"]}},
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Read", {})
+        assert r.returncode != 0, f"Read without file_path should be blocked when read policy exists, rc={r.returncode}"
+        assert "block" in r.stdout
+
+    def test_access_write_allowed_in_run_scope(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"write": {"allow": ["artifacts/**"]}},
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Write", {"file_path": "artifacts/output.txt"})
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    def test_access_write_blocked_to_source_file(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"write": {"allow": ["artifacts/**"]}},
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Write", {"file_path": "stageflow/core/engine.py"})
+        assert r.returncode != 0, f"Write to engine.py should be blocked, rc={r.returncode}"
+        assert "block" in r.stdout
+
+    def test_access_write_missing_path_fails_closed(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"write": {"allow": ["artifacts/**"]}},
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Write", {})
+        assert r.returncode != 0, f"Write without file_path should be blocked when write policy exists, rc={r.returncode}"
+        assert "block" in r.stdout
+
+    def test_access_grep_without_path_in_restricted_stage(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["artifacts/**"]}},
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Grep", {"pattern": "TODO"})
+        assert r.returncode != 0, f"Grep without path should be blocked when read policy exists, rc={r.returncode}"
+        assert "block" in r.stdout
+
+    def test_access_grep_allowed_in_allowed_dir(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["artifacts/**"]}},
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Grep", {"pattern": "TODO", "path": "artifacts"})
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    def test_access_glob_denied_in_restricted_dir(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["artifacts/**"], "deny": ["artifacts/secrets/**"]}},
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Glob", {"pattern": "*.key", "path": "artifacts/secrets"})
+        assert r.returncode != 0, f"Glob in denied dir should be blocked, rc={r.returncode}"
+        assert "block" in r.stdout
+
+    def test_access_path_escape_blocked(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["**"]}},
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Read", {"file_path": "../../etc/passwd"})
+        assert r.returncode != 0, f"Path escape should be blocked, rc={r.returncode}"
+        assert "block" in r.stdout
+
+    def test_access_absolute_path_outside_blocked(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["**"]}},
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Read", {"file_path": "C:/Windows/System32/config/SAM"})
+        assert r.returncode != 0, f"Absolute path outside project should be blocked, rc={r.returncode}"
+        assert "block" in r.stdout
+
+    def test_access_from_nested_cwd(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["src/**", "*.md"]}},
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        nested = tmp_path / "src" / "components"
+        nested.mkdir(parents=True)
+        r = self._hook(nested, "Read", {"file_path": "Button.tsx"})
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    def test_access_old_workflow_no_policy_keeps_behavior(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Read", {"file_path": "stageflow/core/engine.py"})
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+        r = self._hook(tmp_path, "Write", {"file_path": "any_file.py"})
+        assert r.returncode != 0, "Write not in alpha's tools should still be blocked"
+
+    def test_access_notebook_edit_respects_write_policy(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"write": {"allow": ["artifacts/**"]}},
+            tools=["Read", "Write", "NotebookEdit"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "NotebookEdit", {"notebook_path": "artifacts/notes.ipynb"})
+        assert r.returncode == 0, r.stderr
+
+    def test_access_notebook_edit_blocked_outside(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"write": {"allow": ["artifacts/**"]}},
+            tools=["Read", "Write", "NotebookEdit"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "NotebookEdit", {"notebook_path": "scripts/bad.ipynb"})
+        assert r.returncode != 0, f"NotebookEdit outside artifacts should be blocked, rc={r.returncode}"
+
+    def test_access_edit_respects_write_policy(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"write": {"allow": ["artifacts/**"]}},
+            tools=["Read", "Edit"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Edit", {"file_path": "artifacts/file.txt"})
+        assert r.returncode == 0, r.stderr
+        r = self._hook(tmp_path, "Edit", {"file_path": "stageflow/core/engine.py"})
+        assert r.returncode != 0, f"Edit outside artifacts should be blocked, rc={r.returncode}"
+
+    def test_access_unrestricted_stage_with_read_policy(self, tmp_path):
+        """Unrestricted tools (empty list) with access policy still enforces access."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"read": {"allow": ["artifacts/**"]}},
+            tools=[],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Read", {"file_path": "secret.env"})
+        assert r.returncode != 0, f"Read outside artifacts should be blocked even with unrestricted tools, rc={r.returncode}"
+        r = self._hook(tmp_path, "Read", {"file_path": "artifacts/data.txt"})
+        assert r.returncode == 0, r.stderr
+
 
 class TestLegacyCompatibility:
     """CLI commands work against legacy projects (stageflow/config/stages.yaml + .claude/current_stage.json)."""
