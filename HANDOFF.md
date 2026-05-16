@@ -2,7 +2,42 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-128 — Define and validate access policy schema
+> **交接原因**: task-129 — Implement core path policy evaluation
+
+---
+
+## task-129 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Created `stageflow/core/access_policy.py`** — core access policy evaluator:
+   - `_interpolate()` — replaces `{{var.key}}` placeholders; unresolved vars → sentinel that never matches
+   - `_normalize_path()` — resolves relative/absolute paths relative to project root, detects escapes
+   - `_glob_to_regex()` — compiles path globs with `**` support to anchored regex
+   - `_match_glob()` — uses regex for multi-segment patterns, fnmatch for single-segment filenames
+   - `_pattern_prefix()` — extracts literal prefix from a glob pattern (stripping wildcards)
+   - `_pattern_covers_dir()` — conservative check: only True when pattern provably covers entire directory
+   - `AccessPolicy` class with `check_read()`, `check_write()`, `check_search()` public API
+   - `has_policy`, `has_read_policy`, `has_write_policy` properties
+
+2. **Created `tests/test_access_policy.py`** — 91 tests across 15 test classes:
+   - TestInterpolate (7), TestNormalizePath (8), TestGlobToRegex (7), TestMatchGlob (9 plus fnmatch fallback fix)
+   - TestPatternPrefix (4), TestPatternCoversDir (6), TestNoPolicy (3), TestDenyOnly (4), TestAllowOnly (4)
+   - TestDenyOverAllow (2), TestVariableInterpolation (4), TestPathEscape (3), TestAbsolutePathInside (2)
+   - TestCrossPlatform (3), TestCheckSearch (7), TestHasPolicy (5), TestIntegrationScenarios (6), TestFullPolicyExample (8)
+
+### 修复的问题
+- **SyntaxError**: raw string `r"...\"` — Python raw strings don't support escaped quotes. Fixed with regular string.
+- **fnmatch Fallback leak**: fnmatch's `*` matches `/` on Windows; multi-segment patterns now always use regex, fnmatch only for single-segment filenames.
+- **test_strips_double_star**: expected `"artifacts//plan"` but `_pattern_prefix` correctly produces `"artifacts/plan"` — updated test assertion.
+- **test_prefix_under_dir**: expected True for pattern narrower than search root, but conservative implementation correctly returns False — updated test assertion.
+
+### 当前状态
+- task-129 完成: `access_policy.py` (296 lines) + `test_access_policy.py` (91 tests, all passing)
+- 全测试套件: 729 passed, 1 skipped, 0 failed
+- task-128 (schema) + task-129 (policy) = Phase 39.1 + 39.2 complete
+
+### 下一步
+task-130: Enforce access in `stageflow hook` entrypoint — wire `AccessPolicy` into `cmd_hook()`.
 
 ---
 

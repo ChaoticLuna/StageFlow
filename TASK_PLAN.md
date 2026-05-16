@@ -1,7 +1,7 @@
 # StageFlow — Task Plan
 
 > **最后更新**: 2026-05-16
-> **当前阶段**: Phase 39 — Fine-grained file access policy 🔄 (task-128 complete, task-129 next)
+> **当前阶段**: Phase 39 — Fine-grained file access policy 🔄 (task-128/129 complete, task-130 next)
 > **Ralph 状态**: 活跃 — fix_plan.md 128/134 完成
 
 ---
@@ -139,7 +139,7 @@
 | # | 任务 | 状态 | 产出 |
 |---|------|------|------|
 | 39.1 | Access policy schema 定义与验证 | ✅ | schema.py + 23 tests → task-128 |
-| 39.2 | 核心路径策略评估 | ⬜ | task-129 |
+| 39.2 | 核心路径策略评估 | ✅ | access_policy.py + 91 tests → task-129 |
 | 39.3 | 在 stageflow hook 中强制执行 access | ⬜ | task-130 |
 | 39.4 | 统一 guard.py 与 hook 行为 | ⬜ | task-131 |
 | 39.5 | Editor 导入/导出保留 access 字段 | ⬜ | task-132 |
