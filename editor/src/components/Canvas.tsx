@@ -28,6 +28,8 @@ export interface CanvasHandle {
   getNodes: () => StageNodeType[];
   getEdges: () => Edge<EdgeData>[];
   getStageNames: () => string[];
+  loadFromYaml: (yamlStr: string) => boolean;
+  exportToYaml: () => string;
 }
 
 let _nodeCounter = 0;
@@ -134,6 +136,20 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     },
     getStageNames() {
       return nodes.map((n) => n.data?.name ?? n.id);
+    },
+    loadFromYaml(yamlStr: string) {
+      const result = importFromYaml(yamlStr);
+      if ("error" in result) {
+        console.error("Failed to load project config:", result.error);
+        return false;
+      }
+      _nodeCounter = result.nodes.length;
+      setNodes(result.nodes);
+      setEdges(result.edges);
+      return true;
+    },
+    exportToYaml() {
+      return exportToYaml(nodes as StageNodeType[], edges as Edge<EdgeData>[]);
     },
   }), [nodes, edges, setNodes, setEdges, pushUndo]);
 

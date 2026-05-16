@@ -2,7 +2,32 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-123 — project-bound editor server APIs
+> **交接原因**: task-124 — wire frontend to project APIs + rebuild
+
+---
+
+## task-124 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Created `editor/src/utils/api.ts`** — typed API client with `fetchProjectConfig()`, `saveProjectConfig(yaml)`, `ApiError` class
+2. **Added `loadFromYaml()` and `exportToYaml()` to Canvas imperative handle** — allows App to load project YAML into canvas and serialize current canvas to YAML
+3. **Rewired `App.tsx`** — auto-loads project config on mount via `GET /api/project/config`, passes YAML to canvas; added Save button that serializes canvas to YAML and POSTs to `/api/project/save-config`; shows project root path in header; displays success/error/blocked status messages in the UI (not alerts)
+4. **Added CSS** — `.save-btn`, `.app-save-status` (saved/error/blocked/saving), `.app-project-path`, `.app-load-error` with dark theme variants
+5. **Built `editor/dist`** — tsc + vite build, 231 modules, dist updated with auto-load + Save UI
+6. **Added 23 new frontend tests** (130 total, was 107):
+   - `api.test.ts` (8 tests): fetchProjectConfig success/400/404/500, saveProjectConfig success/403/400/POST body
+   - `App.test.tsx` (+15 tests): auto-load (fetch called, YAML loaded to canvas, project path shown, 500/404 errors, 400 silent), save button (renders, calls export+save, success/blocked/error states, disabled when not allowed, enabled when allowed), export preserved
+
+### 当前状态
+- Phase 38: tasks 123-124 complete
+- Server tests: 80 passed
+- Non-editor tests: 1194 passed, 1 skipped
+- Editor tests: 130 passed (7 files)
+- Editor build: tsc clean, vite build produces dist/
+- Next: task-125 — add `stageflow editor` CLI command
+
+### 已知问题
+- Save button disabled title doesn't show the reason unless you hover (minor UX)
 
 ---
 
