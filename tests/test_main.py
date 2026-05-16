@@ -963,16 +963,17 @@ class TestHookCommand:
     def _make_stages_yaml(yaml_path, stages=None, transitions=None):
         import yaml
         config = {
-            "stages": stages or [
+            "stages": [
                 {"name": "alpha", "tools": ["Read", "Grep", "Bash(git *)"], "meta": {"description": "First"}},
                 {"name": "beta", "tools": ["Read", "Edit", "Write"], "meta": {"description": "Second"}},
                 {"name": "gamma", "tools": [], "meta": {"description": "Terminal"}},
-            ],
-            "transitions": transitions or [
+            ] if stages is None else stages,
+            "transitions": [
                 {"from": "alpha", "to": "beta", "conditions": [{"always": True}]},
                 {"from": "beta", "to": "gamma", "conditions": [{"always": True}]},
-            ],
+            ] if transitions is None else transitions,
         }
+        yaml_path.parent.mkdir(parents=True, exist_ok=True)
         yaml_path.write_text(yaml.dump(config), encoding="utf-8")
 
 
@@ -1011,6 +1012,50 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Grep")
         assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    def test_read_allowed_when_omitted_from_tools(self, tmp_path):
+        """Read is a default read tool — allowed even when omitted from stage.tools."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            stages=[{"name": "locked", "tools": ["Write"], "meta": {"description": "No read in tools"}}],
+            transitions=[],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "locked"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Read", {"file_path": "README.md"})
+        assert r.returncode == 0, f"Read should be allowed as default read tool, rc={r.returncode}"
+        assert "allow" in r.stdout
+
+    def test_read_blocked_by_access_read_deny_when_omitted_from_tools(self, tmp_path):
+        """Default read tools still obey access.read.deny."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            stages=[{"name": "locked", "tools": ["Write"],
+                     "access": {"read": {"deny": ["secrets/**"]}},
+                     "meta": {"description": "No read but access.deny"}}],
+            transitions=[],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "locked"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Read", {"file_path": "secrets/key.txt"})
+        assert r.returncode != 0, f"Read should be blocked by access.read.deny, rc={r.returncode}"
+        assert "block" in r.stdout
+
+    def test_grep_allowed_when_omitted_from_tools(self, tmp_path):
+        """Grep is a default read tool — allowed even when omitted from stage.tools."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            stages=[{"name": "locked", "tools": ["Read"], "meta": {"description": "No grep in tools"}}],
+            transitions=[],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "locked"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Grep", {"pattern": "TODO", "path": "."})
+        assert r.returncode == 0, f"Grep should be allowed as default read tool, rc={r.returncode}"
         assert "allow" in r.stdout
 
     def test_allows_write_in_beta_stage(self, tmp_path):
@@ -1142,7 +1187,7 @@ class TestHookCommand:
         import yaml
         stage = {
             "name": "secured",
-            "tools": tools or ["Read", "Write", "Edit", "Grep", "Glob"],
+            "tools": ["Read", "Write", "Edit", "Grep", "Glob"] if tools is None else tools,
             "meta": {"description": "Stage with access policy"},
         }
         if access_config is not None:
@@ -1151,6 +1196,7 @@ class TestHookCommand:
             "stages": [stage],
             "transitions": [],
         }
+        yaml_path.parent.mkdir(parents=True, exist_ok=True)
         yaml_path.write_text(yaml.dump(config), encoding="utf-8")
 
     def test_access_read_allowed_in_allow_list(self, tmp_path):
@@ -1359,6 +1405,20 @@ class TestHookCommand:
         assert r.returncode == 0, r.stderr
         r = self._hook(tmp_path, "Edit", {"file_path": "stageflow/core/engine.py"})
         assert r.returncode != 0, f"Edit outside artifacts should be blocked, rc={r.returncode}"
+
+    def test_access_multiedit_respects_write_policy(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"write": {"allow": ["artifacts/**"]}},
+            tools=["Read", "MultiEdit"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "MultiEdit", {"file_path": "artifacts/file.txt", "edits": []})
+        assert r.returncode == 0, r.stderr
+        r = self._hook(tmp_path, "MultiEdit", {"file_path": "stageflow/core/engine.py", "edits": []})
+        assert r.returncode != 0, f"MultiEdit outside artifacts should be blocked, rc={r.returncode}"
 
     def test_access_unrestricted_stage_with_read_policy(self, tmp_path):
         """Unrestricted tools (empty list) with access policy still enforces access."""

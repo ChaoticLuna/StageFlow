@@ -44,7 +44,7 @@ def _write_access_config(path, access_config, tools=None, transitions=None,
     """Write a minimal stages.yaml with one *secured* stage carrying an access policy."""
     stage = {
         "name": "secured",
-        "tools": tools or ["Read", "Write", "Edit", "Grep", "Glob"],
+        "tools": ["Read", "Write", "Edit", "Grep", "Glob"] if tools is None else tools,
         "meta": {"description": "Stage with access policy"},
     }
     if access_config is not None:
@@ -52,6 +52,7 @@ def _write_access_config(path, access_config, tools=None, transitions=None,
     if extra_top:
         stage.update(extra_top)
     config = {"stages": [stage], "transitions": transitions or []}
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.dump(config, sort_keys=False), encoding="utf-8")
 
 
@@ -229,6 +230,13 @@ class TestLayer2PolicyHelper:
         ok, reason = policy.check_search("src", root)
         assert not ok, f"Search under unallowed dir should be blocked: {reason!r}"
 
+    def test_search_root_blocked_when_denied_child_is_inside_scope(self, temp_dir):
+        from stageflow.core.access_policy import AccessPolicy
+        root = str(temp_dir)
+        policy = AccessPolicy({"read": {"allow": ["**"], "deny": ["secrets/**"]}})
+        ok, reason = policy.check_search(".", root)
+        assert not ok, f"Project-wide search should be blocked by denied child: {reason!r}"
+
 
 # =============================================================================
 # Layer 3 — StageGuard programmatic check
@@ -296,6 +304,22 @@ class TestLayer3StageGuard:
         )
         ok, msg = guard.check("Write", {"file_path": "src/main.py"})
         assert not ok, f"Write to src should be blocked: {msg}"
+
+    def test_multiedit_blocked(self, temp_dir):
+        from stageflow.core.registry import StageRegistry
+        from stageflow.core.guard import StageGuard
+        _write_access_config(
+            temp_dir / "stages.yaml",
+            {"write": {"allow": ["artifacts/**"]}},
+            tools=["Read", "MultiEdit"],
+        )
+        reg = StageRegistry(str(temp_dir / "stages.yaml"))
+        _init_state(temp_dir, reg)
+        guard = StageGuard(
+            str(temp_dir / "stages.yaml"), str(temp_dir), registry=reg,
+        )
+        ok, msg = guard.check("MultiEdit", {"file_path": "src/main.py"})
+        assert not ok, f"MultiEdit to src should be blocked: {msg}"
 
     def test_tool_not_in_allowlist_still_blocked(self, temp_dir):
         from stageflow.core.registry import StageRegistry
@@ -624,6 +648,7 @@ class TestLayer8BackwardCompat:
                         "meta": {"description": "No access policy"}}],
             "transitions": [],
         }
+        yaml_path.parent.mkdir(parents=True, exist_ok=True)
         yaml_path.write_text(yaml.dump(config, sort_keys=False), encoding="utf-8")
         subprocess.run(
             [sys.executable, "-m", "stageflow", "start", "alpha"],
@@ -644,6 +669,7 @@ class TestLayer8BackwardCompat:
                         "meta": {"description": "Read-only stage"}}],
             "transitions": [],
         }
+        yaml_path.parent.mkdir(parents=True, exist_ok=True)
         yaml_path.write_text(yaml.dump(config, sort_keys=False), encoding="utf-8")
         subprocess.run(
             [sys.executable, "-m", "stageflow", "start", "alpha"],
@@ -663,6 +689,7 @@ class TestLayer8BackwardCompat:
                         "meta": {"description": "No restrictions"}}],
             "transitions": [],
         }
+        yaml_path.parent.mkdir(parents=True, exist_ok=True)
         yaml_path.write_text(yaml.dump(config, sort_keys=False), encoding="utf-8")
         subprocess.run(
             [sys.executable, "-m", "stageflow", "start", "unrestricted"],

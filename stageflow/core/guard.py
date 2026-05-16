@@ -18,7 +18,7 @@ from .access_policy import AccessPolicy
 
 
 _READ_TOOLS = {"Read", "Grep", "Glob"}
-_WRITE_TOOLS = {"Write", "Edit", "NotebookEdit"}
+_WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 
 
 def _extract_file_path(tool_name: str, tool_input: dict) -> str | None:
@@ -48,14 +48,21 @@ class StageGuard:
     def check(self, tool_name: str, tool_input: dict | None = None) -> tuple[bool, str]:
         """Check if a tool call is allowed. Returns (allowed, message)."""
         self.machine._state = self.machine._load_state()
+        current = self.machine.current_stage
         base_result = self.machine.is_tool_allowed(tool_name)
+
+        # Default read tools bypass the stage.tools name check when a run is
+        # active and the stage exists. access.read still applies below.
+        if not base_result[0] and tool_name in _READ_TOOLS and current is not None:
+            if self.registry.get_stage(current) is not None:
+                base_result = (True, f"'{tool_name}' is a default read tool")
+
         if not base_result[0]:
             return base_result
 
         if not self._enforce_path_guard or not tool_input:
             return base_result
 
-        current = self.machine.current_stage
         if current is None:
             return base_result
 

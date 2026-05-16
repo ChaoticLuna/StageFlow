@@ -851,11 +851,11 @@ _NON_FILE_ALWAYS_ALLOW = {
     "AskUserQuestion",
 }
 
-# Read is always tool-allowed but subject to access.read policy
+# Read/search-family tools subject to access.read policy
 _READ_TOOLS = {"Read", "Grep", "Glob"}
 
 # Write-family tools subject to access.write policy
-_WRITE_TOOLS = {"Write", "Edit", "NotebookEdit"}
+_WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 
 ALWAYS_ALLOW_COMMANDS = [
     "python -m stageflow",
@@ -989,8 +989,7 @@ def cmd_hook(args):
     if allowed_tools:
         tool_ok = False
 
-        # Read and search tools: always pass the tool check (they're always
-        # allowed at the tool level), but are subject to access policy below.
+        # Default read tools pass the tool-name gate even if omitted from stage.tools
         if tool_name in _READ_TOOLS:
             tool_ok = True
         elif tool_name in allowed_tools:

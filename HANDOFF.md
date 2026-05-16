@@ -2,7 +2,34 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-134 — Staged file access control verification (Phase 39 complete)
+> **交接原因**: task-139 — Default read tools (Read, Grep, Glob) in hook and guard
+
+---
+
+## task-139 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Updated `stageflow/core/guard.py`** — `StageGuard.check()` now treats `Read`, `Grep`, `Glob` as default read tools:
+   - When a run is active and the stage exists in the registry, read tools bypass the `stage.tools` name check
+   - `access.read` policy still applies when present (deny/allow/path checks)
+   - Write tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`) remain strictly stage-gated
+2. **Updated `stageflow/__main__.py`** `cmd_hook` — same default read-tool semantics in the hook entrypoint:
+   - `Read`/`Grep`/`Glob` pass the tool-name allowlist gate even when omitted from `stage.tools`
+   - Still checked against `access.read` when policy exists
+3. **Updated `tests/test_main.py`** — replaced 2 old tests with 3 new tests:
+   - `test_read_allowed_when_omitted_from_tools` — Read allowed without being in stage.tools
+   - `test_read_blocked_by_access_read_deny_when_omitted_from_tools` — access.read.deny still blocks default reads
+   - `test_grep_allowed_when_omitted_from_tools` — Grep allowed without being in stage.tools
+4. **Updated `CLAUDE.md`** stats — 1643 tests (1513 Python + 130 editor), 1 skipped
+
+### 当前状态
+- task-139 complete: Phase 42 first task done
+- All tests: 1513 passed, 1 skipped (Python), 130 passed (editor)
+- No regressions
+- Default read semantics: Read/Grep/Glob are baseline context tools; write tools remain explicit; sensitive stages add `access.read`
+
+### 下一步
+task-140: Update read-access tests — add hook-level and StageGuard tests proving both sides (allowed by default, blocked by access.read policy)
 
 ---
 

@@ -227,9 +227,9 @@ class AccessPolicy:
         deny_patterns = [_interpolate(p, variables)
                          for p in section.get("deny", [])]
 
-        # If deny pattern covers the search scope, block.
+        # If a deny pattern may match anything inside the search scope, block.
         for pat in deny_patterns:
-            if _pattern_covers_dir(pat, normalized):
+            if _pattern_intersects_dir(pat, normalized):
                 return False, (
                     f"access.{operation}: search root '{search_root}' "
                     f"intersects denied pattern '{pat}'"
@@ -293,3 +293,36 @@ def _pattern_covers_dir(pattern: str, dir_path: str) -> bool:
         return True
 
     return False
+
+
+def _pattern_intersects_dir(pattern: str, dir_path: str) -> bool:
+    """Return True if *pattern* may match any path under *dir_path*.
+
+    Used for deny rules on search roots. This is intentionally conservative:
+    if a deny pattern could apply somewhere inside the requested search scope,
+    the search is blocked unless the caller narrows the search root.
+    """
+    if _SENTINEL_UNRESOLVED in pattern:
+        return False
+
+    pattern_norm = pattern.replace("\\", "/")
+    prefix = _pattern_prefix(pattern_norm)
+    root_dir = dir_path in ("", ".")
+
+    # Single-segment deny patterns such as "*.env" may match a file anywhere
+    # below the requested directory, so a directory search cannot prove safety.
+    if "/" not in pattern_norm:
+        return True
+
+    if root_dir:
+        return True
+
+    if prefix:
+        if prefix == dir_path:
+            return True
+        if prefix.startswith(dir_path + "/"):
+            return True
+        if dir_path.startswith(prefix + "/"):
+            return True
+
+    return _match_glob(dir_path, pattern_norm)

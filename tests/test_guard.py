@@ -120,7 +120,11 @@ class TestPathGuard:
         kwargs = {}
         if access is not None:
             kwargs["access"] = access
-        registry.register_stage(name, tools=tools or ["Read", "Write", "Edit", "NotebookEdit"], **kwargs)
+        registry.register_stage(
+            name,
+            tools=["Read", "Write", "Edit", "NotebookEdit"] if tools is None else tools,
+            **kwargs,
+        )
 
     def test_write_to_artifacts_allowed(self, registry, temp_dir):
         self._register_secured_stage(
@@ -210,6 +214,20 @@ class TestPathGuard:
         assert not allowed, f"NotebookEdit outside allowed roots: {msg}"
         r = guard.check("NotebookEdit", {"notebook_path": "artifacts/ok.ipynb"})
         assert r[0], f"NotebookEdit in artifacts should be allowed: {r[1]}"
+
+    def test_multiedit_also_checked(self, registry, temp_dir):
+        self._register_secured_stage(
+            registry, "secured",
+            tools=["Read", "MultiEdit"],
+            access={"write": {"allow": ["artifacts/**"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("secured")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("MultiEdit", {"file_path": "scripts/evil.py"})
+        assert not allowed, f"MultiEdit outside allowed roots: {msg}"
+        r = guard.check("MultiEdit", {"file_path": "artifacts/ok.py"})
+        assert r[0], f"MultiEdit in artifacts should be allowed: {r[1]}"
 
     def test_write_without_file_path(self, registry, temp_dir):
         """No access policy → write without file_path passes through."""
