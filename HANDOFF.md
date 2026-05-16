@@ -2,9 +2,32 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-121 — editor save gate with run-state check
+> **交接原因**: task-122 — staged verification with 7 layers of increasing difficulty
 
 ---
+
+## task-122 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Created `tests/test_staged_verification.py`** — 21 staged verification tests across 7 layers of increasing difficulty
+2. **Layer 1 (4 tests)**: Engine-only complete — succeeds at terminal, fails non-terminal, fails no run, metadata prerequisites
+3. **Layer 2 (4 tests)**: Status output — no active run after init, active after start, JSON after complete, no active after reset
+4. **Layer 3 (2 tests)**: CLI complete from project root — full lifecycle, refused at non-terminal
+5. **Layer 4 (2 tests)**: CLI complete from nested directory — from src/lib/deep, status from a/b/c
+6. **Layer 5 (2 tests)**: Multi-repo isolation — repo A complete doesn't touch repo B, source checkout unaffected
+7. **Layer 6 (2 tests)**: Run-scoped artifacts — stale artifacts don't unlock new run, independent artifact dirs
+8. **Layer 7 (5 tests)**: Editor save gate — allowed after init/complete/reset, blocked during active/terminal-before-complete
+9. **Created `docs/staged_verification.md`** — exact commands and expected outputs for each layer, AI agent can replay
+10. **1255 tests passing**, 1 skipped (unchanged)
+
+### 当前状态
+- Phase 37: ALL 5 tasks complete (118-122) ✅
+- Test suite: 1255 passed, 1 skipped
+- All Phase 37 hard acceptance rules verified across 7 layered tests
+
+### 已知问题
+- No remaining issues in Phase 37
+- fix_plan.md has no more unchecked tasks — next phase needs to be defined
 
 ## task-121 会话总结 (2026-05-16)
 

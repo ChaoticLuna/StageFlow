@@ -1,8 +1,8 @@
 # StageFlow — Task Plan
 
 > **最后更新**: 2026-05-16
-> **当前阶段**: Phase 37 — Explicit run completion semantics (task-120 complete) ✅
-> **Ralph 状态**: 活跃 — fix_plan.md 121/122 完成
+> **当前阶段**: Phase 37 — Explicit run completion semantics ✅ (all 5 tasks complete)
+> **Ralph 状态**: 活跃 — fix_plan.md 122/122 完成
 
 ---
 
@@ -132,7 +132,7 @@
 | 37.2 | `stageflow complete` CLI 命令 | ✅ | task-119 |
 | 37.3 | Status 输出、文档、Agent 指令更新 | ✅ | task-120 |
 | 37.4 | Editor 保存门控连接完成语义 | ✅ | task-121 |
-| 37.5 | 分层验证 | ⬜ | task-122 |
+| 37.5 | 分层验证 | ✅ | task-122 |
 
 ---
 
