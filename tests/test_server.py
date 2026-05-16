@@ -886,6 +886,390 @@ transitions:
             os.chdir(orig)
 
 
+class TestProjectBoundAPIs:
+    """Tests for GET /api/project/config, GET /api/project/status, and
+    create_app(project_root=...) bound-root behaviour."""
+
+    def _make_project(self, tmp_path, current_stage=None, run_status=None,
+                      marker_type="new"):
+        """Set up a minimal StageFlow project under tmp_path."""
+        if marker_type == "new":
+            cfg_dir = tmp_path / ".stageflow" / "config"
+            cfg_dir.mkdir(parents=True)
+            (cfg_dir / "stages.yaml").write_text(VALID_PROJECT_YAML, encoding="utf-8")
+            state_path = tmp_path / ".stageflow" / "current_stage.json"
+        else:
+            # legacy
+            cfg_dir = tmp_path / "stageflow" / "config"
+            cfg_dir.mkdir(parents=True)
+            (cfg_dir / "stages.yaml").write_text(VALID_PROJECT_YAML, encoding="utf-8")
+            (tmp_path / ".claude").mkdir(parents=True, exist_ok=True)
+            state_path = tmp_path / ".claude" / "current_stage.json"
+
+        state = {}
+        if current_stage is not None:
+            state["current_stage"] = current_stage
+            state["variables"] = {"run_id": "test-run-id"}
+        if run_status:
+            state["run_status"] = run_status
+            if run_status == "completed":
+                state["completed_at"] = "2026-01-01T00:00:00+00:00"
+                state["final_stage"] = "gamma"
+                state["current_stage"] = None
+                state["variables"] = {"run_id": "completed-run-id"}
+        if current_stage is None and run_status is None:
+            state["current_stage"] = None
+
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        return tmp_path
+
+    # ── GET /api/project/config ────────────────────────────────────────
+
+    def test_config_returns_yaml_from_project(self, tmp_path):
+        """GET /api/project/config returns the project's stages.yaml content."""
+        proj = self._make_project(tmp_path)
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.get("/api/project/config")
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["yaml"] is not None
+            assert "alpha" in d["yaml"]
+            assert d["config_path"].endswith("stages.yaml")
+            assert d["project_root"] == str(proj)
+            assert d["marker_type"] == "new"
+        finally:
+            os.chdir(orig)
+
+    def test_config_save_allowed_true_when_no_run(self, tmp_path):
+        """save_allowed is True when current_stage is null."""
+        proj = self._make_project(tmp_path, current_stage=None)
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.get("/api/project/config")
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["save_allowed"] is True
+            assert d["current_stage"] is None
+        finally:
+            os.chdir(orig)
+
+    def test_config_save_blocked_when_run_active(self, tmp_path):
+        """save_allowed is False when a run is active."""
+        proj = self._make_project(tmp_path, current_stage="beta")
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.get("/api/project/config")
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["save_allowed"] is False
+            assert d["current_stage"] == "beta"
+        finally:
+            os.chdir(orig)
+
+    def test_config_no_project_returns_400(self, tmp_path):
+        """Outside a project, returns 400 with guidance."""
+        empty = tmp_path / "empty_dir"
+        empty.mkdir()
+        orig = os.getcwd()
+        try:
+            os.chdir(str(empty))
+            r = client.get("/api/project/config")
+            assert r.status_code == 400, r.text
+            assert "No StageFlow project" in r.json()["detail"]
+        finally:
+            os.chdir(orig)
+
+    def test_config_missing_file_returns_404(self, tmp_path):
+        """When .stageflow/ exists but config file is missing, return 404."""
+        cfg_dir = tmp_path / ".stageflow" / "config"
+        cfg_dir.mkdir(parents=True)
+        # deliberately don't create stages.yaml
+        state_path = tmp_path / ".stageflow" / "current_stage.json"
+        state_path.write_text('{"current_stage": null}', encoding="utf-8")
+        orig = os.getcwd()
+        try:
+            os.chdir(str(tmp_path))
+            r = client.get("/api/project/config")
+            assert r.status_code == 404, r.text
+            assert "not found" in r.json()["detail"].lower()
+        finally:
+            os.chdir(orig)
+
+    # ── GET /api/project/status ────────────────────────────────────────
+
+    def test_status_after_init(self, tmp_path):
+        """GET /api/project/status returns null stage, no run_status after init."""
+        proj = self._make_project(tmp_path, current_stage=None)
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.get("/api/project/status")
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["current_stage"] is None
+            assert d["run_status"] is None
+            assert d["save_allowed"] is True
+            assert d["project_root"] == str(proj)
+            assert d["history_count"] == 0
+            assert isinstance(d["variable_keys"], list)
+        finally:
+            os.chdir(orig)
+
+    def test_status_after_complete(self, tmp_path):
+        """Status shows completed run metadata after stageflow complete."""
+        proj = self._make_project(tmp_path, run_status="completed")
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.get("/api/project/status")
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["current_stage"] is None
+            assert d["run_status"] == "completed"
+            assert d["final_stage"] == "gamma"
+            assert d["completed_at"] == "2026-01-01T00:00:00+00:00"
+            assert d["run_id"] == "completed-run-id"
+            assert d["save_allowed"] is True
+        finally:
+            os.chdir(orig)
+
+    def test_status_during_active_run(self, tmp_path):
+        """Status shows active run details."""
+        proj = self._make_project(tmp_path, current_stage="alpha")
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.get("/api/project/status")
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["current_stage"] == "alpha"
+            assert d["run_status"] is None
+            assert d["run_id"] == "test-run-id"
+            assert d["save_allowed"] is False
+            assert d["state_path"].endswith("current_stage.json")
+            assert d["config_path"].endswith("stages.yaml")
+        finally:
+            os.chdir(orig)
+
+    def test_status_no_project_returns_400(self, tmp_path):
+        """Outside a project, returns 400."""
+        empty = tmp_path / "empty_dir"
+        empty.mkdir()
+        orig = os.getcwd()
+        try:
+            os.chdir(str(empty))
+            r = client.get("/api/project/status")
+            assert r.status_code == 400, r.text
+            assert "No StageFlow project" in r.json()["detail"]
+        finally:
+            os.chdir(orig)
+
+    # ── Bound root: create_app(project_root=...) ────────────────────────
+
+    def test_bound_app_uses_project_root_not_cwd(self, tmp_path):
+        """When app is created with a bound root, save targets that root
+        even when cwd is somewhere else."""
+        proj = self._make_project(tmp_path, current_stage=None)
+        from stageflow.core.discovery import discover_project
+        root = discover_project(str(proj))
+        assert root is not None
+
+        bound_app = create_app(project_root=root)
+        bound_client = TestClient(bound_app)
+
+        # Change cwd to a completely different directory
+        other = tmp_path / "other_dir"
+        other.mkdir()
+        orig = os.getcwd()
+        try:
+            os.chdir(str(other))
+            r = bound_client.post("/api/project/save-config",
+                                  json={"yaml": VALID_PROJECT_YAML})
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["saved"] is True
+            assert str(proj) in d["config_path"]
+            # Verify the actual project file was written, not something in other_dir
+            saved = (proj / ".stageflow" / "config" / "stages.yaml").read_text()
+            assert "alpha" in saved
+        finally:
+            os.chdir(orig)
+
+    def test_bound_app_save_blocked_reads_bound_state(self, tmp_path):
+        """Save gate reads state from the bound root, not cwd."""
+        proj = self._make_project(tmp_path, current_stage="alpha")
+        from stageflow.core.discovery import discover_project
+        root = discover_project(str(proj))
+        assert root is not None
+
+        bound_app = create_app(project_root=root)
+        bound_client = TestClient(bound_app)
+
+        # Make cwd a dir that has NO project (or a different project)
+        other = tmp_path / "other"
+        other.mkdir()
+        orig = os.getcwd()
+        try:
+            os.chdir(str(other))
+            r = bound_client.post("/api/project/save-config",
+                                  json={"yaml": VALID_PROJECT_YAML})
+            assert r.status_code == 403, r.text
+            assert "alpha" in r.json()["detail"]
+        finally:
+            os.chdir(orig)
+
+    def test_bound_app_config_loads_from_bound_root(self, tmp_path):
+        """GET /api/project/config from bound app returns bound root's config."""
+        proj = self._make_project(tmp_path, current_stage=None)
+        from stageflow.core.discovery import discover_project
+        root = discover_project(str(proj))
+        assert root is not None
+
+        bound_app = create_app(project_root=root)
+        bound_client = TestClient(bound_app)
+
+        other = tmp_path / "other"
+        other.mkdir()
+        orig = os.getcwd()
+        try:
+            os.chdir(str(other))
+            r = bound_client.get("/api/project/config")
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["project_root"] == str(proj)
+            assert "alpha" in d["yaml"]
+        finally:
+            os.chdir(orig)
+
+    def test_bound_app_status_from_bound_root(self, tmp_path):
+        """GET /api/project/status from bound app returns bound root's state."""
+        proj = self._make_project(tmp_path, current_stage="beta")
+        from stageflow.core.discovery import discover_project
+        root = discover_project(str(proj))
+        assert root is not None
+
+        bound_app = create_app(project_root=root)
+        bound_client = TestClient(bound_app)
+
+        other = tmp_path / "other"
+        other.mkdir()
+        orig = os.getcwd()
+        try:
+            os.chdir(str(other))
+            r = bound_client.get("/api/project/status")
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["project_root"] == str(proj)
+            assert d["current_stage"] == "beta"
+            assert d["run_id"] == "test-run-id"
+        finally:
+            os.chdir(orig)
+
+    # ── Invalid YAML does not overwrite ────────────────────────────────
+
+    def test_invalid_yaml_does_not_overwrite_previous_config(self, tmp_path):
+        """When save receives invalid YAML, the existing config is preserved."""
+        proj = self._make_project(tmp_path, current_stage=None)
+        orig_bytes = (proj / ".stageflow" / "config" / "stages.yaml").read_bytes()
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config",
+                            json={"yaml": "not: [valid: yaml"})
+            assert r.status_code == 400, r.text
+            # Verify original config unchanged
+            current_bytes = (proj / ".stageflow" / "config" / "stages.yaml").read_bytes()
+            assert current_bytes == orig_bytes
+        finally:
+            os.chdir(orig)
+
+    def test_invalid_config_does_not_overwrite_previous_config(self, tmp_path):
+        """When save receives invalid StageFlow config, existing bytes preserved."""
+        proj = self._make_project(tmp_path, current_stage=None)
+        orig_bytes = (proj / ".stageflow" / "config" / "stages.yaml").read_bytes()
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config",
+                            json={"yaml": "stages: not_a_list"})
+            assert r.status_code == 400, r.text
+            current_bytes = (proj / ".stageflow" / "config" / "stages.yaml").read_bytes()
+            assert current_bytes == orig_bytes
+        finally:
+            os.chdir(orig)
+
+    def test_previous_config_preserved_on_bound_app_save_failure(self, tmp_path):
+        """Bound app: failed save (active run) leaves config untouched."""
+        proj = self._make_project(tmp_path, current_stage="alpha")
+        orig_bytes = (proj / ".stageflow" / "config" / "stages.yaml").read_bytes()
+        from stageflow.core.discovery import discover_project
+        root = discover_project(str(proj))
+        bound_app = create_app(project_root=root)
+        bound_client = TestClient(bound_app)
+        orig = os.getcwd()
+        try:
+            os.chdir(str(tmp_path))
+            r = bound_client.post("/api/project/save-config",
+                                  json={"yaml": VALID_PROJECT_YAML})
+            assert r.status_code == 403, r.text
+            current_bytes = (proj / ".stageflow" / "config" / "stages.yaml").read_bytes()
+            assert current_bytes == orig_bytes
+        finally:
+            os.chdir(orig)
+
+    # ── Legacy project support ─────────────────────────────────────────
+
+    def test_legacy_project_config_loading(self, tmp_path):
+        """GET /api/project/config works with legacy project markers."""
+        proj = self._make_project(tmp_path, current_stage=None, marker_type="legacy")
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.get("/api/project/config")
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["marker_type"] == "legacy"
+            assert "alpha" in d["yaml"]
+            assert d["config_path"].endswith("stages.yaml")
+        finally:
+            os.chdir(orig)
+
+    def test_legacy_project_status(self, tmp_path):
+        """GET /api/project/status works with legacy project markers."""
+        proj = self._make_project(tmp_path, current_stage="alpha", marker_type="legacy")
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.get("/api/project/status")
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["marker_type"] == "legacy"
+            assert d["current_stage"] == "alpha"
+            assert d["state_path"].endswith("current_stage.json")
+        finally:
+            os.chdir(orig)
+
+    def test_legacy_project_save_blocked_active_run(self, tmp_path):
+        """Save gate works for legacy projects with active run."""
+        proj = self._make_project(tmp_path, current_stage="alpha", marker_type="legacy")
+        orig = os.getcwd()
+        try:
+            os.chdir(str(proj))
+            r = client.post("/api/project/save-config",
+                            json={"yaml": VALID_PROJECT_YAML})
+            assert r.status_code == 403, r.text
+        finally:
+            os.chdir(orig)
+
+
+# In case create_app isn't imported at the top of the file:
+from editor.server import create_app
+
+
 class TestGenerateEndpoint:
     def test_generate_default_template_does_not_crash(self):
         """Regression: PromptTemplate.GENERAL (typo) crashed the endpoint."""

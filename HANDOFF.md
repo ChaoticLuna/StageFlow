@@ -2,7 +2,35 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-122 — staged verification with 7 layers of increasing difficulty
+> **交接原因**: task-123 — project-bound editor server APIs
+
+---
+
+## task-123 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Added `_resolve_project_root(request)` and `_get_project_root_or_raise(request)` helpers** to `editor/server.py` — checks `request.app.state.project_root` first (bound root), falls back to `discover_project()` from cwd
+2. **Added `create_app(project_root=None)` factory** — creates a new FastAPI editor app bound to a specific StageFlow project root for its lifetime, sharing all routes from the reference app
+3. **Added `GET /api/project/config` endpoint** — returns config YAML, config_path, project_root, marker_type, current_stage, run_status, and save_allowed boolean
+4. **Added `GET /api/project/status` endpoint** — returns current_stage, run_status, final_stage, completed_at, run_id, save_allowed, history_count, variable_keys, retry_count, iterations, state_path, config_path, project_root, marker_type
+5. **Updated `POST /api/project/save-config`** — now uses `_get_project_root_or_raise(request)` instead of inline `discover_project()`, so bound app uses its project root without rediscovery
+6. **Updated `main()`** — added `--project-root` argument; when provided, discovers the project and creates a bound app via `create_app()`
+7. **Set `app.state.project_root = None`** on the module-level app (backward compatible — discovery from cwd)
+8. **Added 19 tests** (TestProjectBoundAPIs class in test_server.py):
+   - Config: returns YAML, save_allowed true when no run, save_allowed false when active, 400 outside project, 404 missing file
+   - Status: after init, after complete, during active run, outside project
+   - Bound root: save targets bound root not cwd, save gate reads bound state, config loads from bound root, status from bound root
+   - Invalid YAML: doesn't overwrite previous config (2 variants), bound app save failure preserves bytes
+   - Legacy: config loading, status, save blocked active run
+
+### 当前状态
+- Phase 38: task-123 complete
+- Test suite: 1274 passed (1194 non-editor + 80 server), 1 skipped
+- Server tests: 80 passed (61 existing + 19 new), 0 failed
+- Next: task-124 — wire frontend to project APIs and rebuild served assets
+
+### 已知问题
+- No regressions; editor frontend not yet calling /api/project/config or /api/project/status
 
 ---
 

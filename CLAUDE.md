@@ -256,8 +256,7 @@ stageflow mcp                              # 启动 MCP Server
 | `python scripts/stage_next.py` | `stageflow next` |
 | `python scripts/stage_status.py` | `stageflow status` |
 | `python scripts/stage_reset.py` | `stageflow reset` |
-| `python scripts/stage_jump.py <target>` | `stageflow complete                         # 完成当前运行（仅限终端阶段）
-stageflow jump <target>` |
+| `python scripts/stage_jump.py <target>` | `stageflow jump <target>` |
 | `python scripts/stage_back.py` | `stageflow back` |
 
 ## 运行生命周期

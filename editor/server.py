@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -38,9 +38,32 @@ WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_CONFIG = str(Path(__file__).resolve().parent.parent / "stageflow" / "config" / "stages.yaml")
 
-app = FastAPI(title="StageFlow Editor API", version="1.0.0")
-
 DIST_DIR = Path(__file__).parent / "dist"
+
+
+def _resolve_project_root(request: Request):
+    """Get the project root bound to the app, or discover from cwd.
+
+    When the app was created with create_app(project_root=...), that bound
+    root is used. Otherwise falls back to discover_project() from cwd.
+    """
+    from stageflow.core.discovery import discover_project
+    bound = getattr(request.app.state, 'project_root', None)
+    if bound is not None:
+        return bound
+    return discover_project()
+
+
+def _get_project_root_or_raise(request: Request):
+    """Resolve project root or raise HTTPException(400) if not found."""
+    root = _resolve_project_root(request)
+    if root is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No StageFlow project found. Run 'stageflow init' first.",
+        )
+    return root
+
 
 CONDITION_DEFS = [
     {"type": "always", "label": "Always", "description": "Always passes (no-op condition)", "params": []},
@@ -170,6 +193,9 @@ CONDITION_DEFS = [
         {"name": "name", "label": "Container name", "kind": "text", "placeholder": "postgres", "required": True}
     ]},
 ]
+
+
+app = FastAPI(title="StageFlow Editor API", version="1.0.0")
 
 
 class ValidateRequest(BaseModel):
@@ -447,20 +473,16 @@ class ProjectSaveResponse(BaseModel):
 
 
 @app.post("/api/project/save-config", response_model=ProjectSaveResponse)
-def save_project_config(req: ProjectSaveRequest):
-    """Save workflow YAML to the discovered StageFlow project config.
+def save_project_config(req: ProjectSaveRequest, request: Request):
+    """Save workflow YAML to the StageFlow project config.
+
+    Uses the bound project root when the app was created with
+    create_app(project_root=...), otherwise discovers from cwd.
 
     Save gate: allowed only when current_stage is null (after init, after
     complete, or after reset). Blocked while a run is active.
     """
-    from stageflow.core.discovery import discover_project
-
-    root = discover_project()
-    if root is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No StageFlow project found. Run 'stageflow init' first.",
-        )
+    root = _get_project_root_or_raise(request)
 
     # Read current state
     current_stage = None
@@ -508,6 +530,104 @@ def save_project_config(req: ProjectSaveRequest):
             f"Current state: {'completed run' if run_status == 'completed' else 'no active run'}."
         ),
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Project-scoped endpoints (config, status, save)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/project/config")
+def get_project_config(request: Request):
+    """Load the current project's stages.yaml and return config + metadata.
+
+    Uses the bound project root when available; otherwise discovers from cwd.
+    """
+    root = _get_project_root_or_raise(request)
+
+    if not root.config_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project config not found at {root.config_path}. "
+            f"Run 'stageflow init' first or check your project setup.",
+        )
+
+    yaml_content = root.config_path.read_text(encoding="utf-8")
+
+    # Read current state for save eligibility
+    current_stage = None
+    run_status = None
+    if root.state_path.exists():
+        try:
+            state = json.loads(root.state_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, ValueError):
+            state = {}
+        current_stage = state.get("current_stage")
+        run_status = state.get("run_status")
+
+    save_allowed = current_stage is None
+
+    return {
+        "yaml": yaml_content,
+        "config_path": str(root.config_path),
+        "project_root": str(root.path),
+        "marker_type": root.marker_type,
+        "current_stage": current_stage,
+        "run_status": run_status,
+        "save_allowed": save_allowed,
+    }
+
+
+@app.get("/api/project/status")
+def get_project_status(request: Request):
+    """Return the current project run state.
+
+    Uses the bound project root when available; otherwise discovers from cwd.
+    """
+    root = _get_project_root_or_raise(request)
+
+    current_stage = None
+    run_status = None
+    final_stage = None
+    completed_at = None
+    run_id = None
+    history = []
+    variables = {}
+    retry_count = {}
+    iterations = {}
+
+    if root.state_path.exists():
+        try:
+            state = json.loads(root.state_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, ValueError):
+            state = {}
+        current_stage = state.get("current_stage")
+        run_status = state.get("run_status")
+        final_stage = state.get("final_stage")
+        completed_at = state.get("completed_at")
+        variables = state.get("variables", {})
+        run_id = variables.get("run_id")
+        history = state.get("history", [])
+        retry_count = state.get("retry_count", {})
+        iterations = state.get("iterations", {})
+
+    save_allowed = current_stage is None
+
+    return {
+        "project_root": str(root.path),
+        "marker_type": root.marker_type,
+        "current_stage": current_stage,
+        "run_status": run_status,
+        "final_stage": final_stage,
+        "completed_at": completed_at,
+        "run_id": run_id,
+        "save_allowed": save_allowed,
+        "history_count": len(history),
+        "variable_keys": list(variables.keys()),
+        "retry_count": retry_count,
+        "iterations": iterations,
+        "state_path": str(root.state_path),
+        "config_path": str(root.config_path),
+    }
 
 
 @app.delete("/api/workflows/{name}")
@@ -636,6 +756,28 @@ def resume_workflow(name: str):
 if DIST_DIR.exists():
     app.mount("/", StaticFiles(directory=str(DIST_DIR), html=True), name="static")
 
+# Module-level app defaults to no bound project root (uses discovery from cwd)
+app.state.project_root = None
+
+
+def create_app(project_root=None):
+    """Create a FastAPI editor app bound to a specific StageFlow project root.
+
+    When *project_root* (a ProjectRoot from stageflow.core.discovery) is
+    provided, all project-scoped API endpoints (config, status, save) use
+    it directly instead of discovering from the request cwd.  Use this
+    factory when the server is launched for a known project, e.g. from
+    ``stageflow editor``.
+
+    Returns a fully configured FastAPI with all editor routes registered.
+    """
+    from copy import deepcopy
+    new_app = FastAPI(title="StageFlow Editor API", version="1.0.0")
+    new_app.state.project_root = project_root
+    for route in app.routes:
+        new_app.routes.append(route)
+    return new_app
+
 
 def main():
     import argparse
@@ -643,10 +785,20 @@ def main():
     parser.add_argument("--dev", action="store_true", help="Enable CORS for Vite dev server")
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind")
     parser.add_argument("--port", type=int, default=8000, help="Port to bind")
+    parser.add_argument("--project-root", default=None, help="Path to StageFlow project root")
     args = parser.parse_args()
 
+    target_app = app
+    if args.project_root:
+        from stageflow.core.discovery import discover_project
+        root = discover_project(args.project_root)
+        if root is None:
+            print(f"Error: '{args.project_root}' is not a StageFlow project.")
+            sys.exit(1)
+        target_app = create_app(project_root=root)
+
     if args.dev:
-        app.add_middleware(
+        target_app.add_middleware(
             CORSMiddleware,
             allow_origins=["http://localhost:5173"],
             allow_credentials=True,
@@ -655,7 +807,7 @@ def main():
         )
 
     import uvicorn
-    uvicorn.run(app, host=args.host, port=args.port)
+    uvicorn.run(target_app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
