@@ -11,6 +11,7 @@ export interface StageData {
   description: string;
   on_enter: HookDef[];
   on_exit: HookDef[];
+  extra?: Record<string, unknown>;
 }
 
 export interface ConditionDef {

@@ -332,4 +332,112 @@ describe("YAML round-trip", () => {
       throw new Error("Round-trip failed: " + result.error);
     }
   });
+
+  it("preserves access.read policy through round-trip", () => {
+    const node = baseNode({
+      data: {
+        ...baseNode().data,
+        extra: {
+          access: {
+            read: { allow: ["artifacts/**", "*.md"], deny: ["*.env"] },
+          },
+        },
+      },
+    });
+    const yaml = exportToYaml([node], []);
+    const result = importFromYaml(yaml);
+    if ("error" in result) throw new Error(result.error);
+    const extra = result.nodes[0].data.extra;
+    expect(extra).toBeDefined();
+    const access = extra!.access as Record<string, unknown>;
+    expect(access).toBeDefined();
+    const readPolicy = access.read as Record<string, unknown>;
+    expect(readPolicy.allow).toEqual(["artifacts/**", "*.md"]);
+    expect(readPolicy.deny).toEqual(["*.env"]);
+  });
+
+  it("preserves access.write policy through round-trip", () => {
+    const node = baseNode({
+      data: {
+        ...baseNode().data,
+        extra: {
+          access: {
+            write: { allow: ["artifacts/**"] },
+          },
+        },
+      },
+    });
+    const yaml = exportToYaml([node], []);
+    const result = importFromYaml(yaml);
+    if ("error" in result) throw new Error(result.error);
+    const extra = result.nodes[0].data.extra;
+    expect(extra).toBeDefined();
+    expect(extra!.access).toBeDefined();
+  });
+
+  it("preserves empty access dict through round-trip", () => {
+    const node = baseNode({
+      data: {
+        ...baseNode().data,
+        extra: { access: {} },
+      },
+    });
+    const yaml = exportToYaml([node], []);
+    const result = importFromYaml(yaml);
+    if ("error" in result) throw new Error(result.error);
+    const extra = result.nodes[0].data.extra;
+    expect(extra).toBeDefined();
+    expect(extra!.access).toEqual({});
+  });
+
+  it("preserves unknown extra fields through round-trip", () => {
+    const node = baseNode({
+      data: {
+        ...baseNode().data,
+        extra: {
+          max_iterations: 3,
+          some_custom_key: "value",
+        },
+      },
+    });
+    const yaml = exportToYaml([node], []);
+    const result = importFromYaml(yaml);
+    if ("error" in result) throw new Error(result.error);
+    const extra = result.nodes[0].data.extra;
+    expect(extra).toBeDefined();
+    expect(extra!.max_iterations).toBe(3);
+    expect(extra!.some_custom_key).toBe("value");
+  });
+
+  it("stage without extra has no extra after round-trip", () => {
+    const node = baseNode();
+    const yaml = exportToYaml([node], []);
+    const result = importFromYaml(yaml);
+    if ("error" in result) throw new Error(result.error);
+    expect(result.nodes[0].data.extra).toBeUndefined();
+  });
+
+  it("preserves access alongside hooks through round-trip", () => {
+    const node = baseNode({
+      data: {
+        ...baseNode().data,
+        on_enter: [{ shell: "echo start" }],
+        on_exit: [{ python: "cleanup()" }],
+        extra: {
+          access: {
+            read: { allow: ["src/**"] },
+            write: { allow: ["artifacts/**"] },
+          },
+        },
+      },
+    });
+    const yaml = exportToYaml([node], []);
+    const result = importFromYaml(yaml);
+    if ("error" in result) throw new Error(result.error);
+    const data = result.nodes[0].data;
+    expect(data.on_enter).toEqual([{ shell: "echo start" }]);
+    expect(data.on_exit).toEqual([{ python: "cleanup()" }]);
+    expect(data.extra).toBeDefined();
+    expect(data.extra!.access).toBeDefined();
+  });
 });

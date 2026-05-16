@@ -110,7 +110,7 @@ function hooksFromYaml(raw: Record<string, string>[] | undefined): { shell?: str
 export function exportToYaml(nodes: StageNode[], edges: CondEdge[]): string {
   const stages: YamlStage[] = nodes.map((n) => {
     const d = n.data;
-    const stage: YamlStage = { name: d.name };
+    const stage: YamlStage = { name: d.name, ...(d.extra ?? {}) };
     if (d.tools.length > 0) stage.tools = d.tools;
     if (d.description) {
       stage.meta = { description: d.description };
@@ -179,6 +179,13 @@ export function importFromYaml(
     root.stages.forEach((s, i) => {
       const name = s.name ?? `stage_${i + 1}`;
       nodeNames.add(name);
+      const knownKeys = new Set(["name", "tools", "meta", "on_enter", "on_exit"]);
+      const extra: Record<string, unknown> = {};
+      for (const [key, val] of Object.entries(s)) {
+        if (!knownKeys.has(key) && val !== undefined) {
+          extra[key] = val;
+        }
+      }
       nodes.push({
         id: name,
         type: "stageNode",
@@ -189,6 +196,7 @@ export function importFromYaml(
           description: s.meta?.description ?? "",
           on_enter: hooksFromYaml(s.on_enter),
           on_exit: hooksFromYaml(s.on_exit),
+          ...(Object.keys(extra).length > 0 ? { extra } : {}),
         },
       });
     });

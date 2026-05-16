@@ -2,7 +2,32 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-131 — Reconcile guard.py and hook behavior
+> **交接原因**: task-132 — Preserve access through editor import/export
+
+---
+
+## task-132 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Added `extra` field to `StageData` interface** (types.ts) — carries unknown YAML fields that aren't part of the standard stage shape
+2. **Updated `exportToYaml`** (yaml.ts) — spreads `data.extra` into the output YAML stage dict, so fields like `access` survive serialization
+3. **Updated `importFromYaml`** (yaml.ts) — captures any YAML keys other than name/tools/meta/on_enter/on_exit into `data.extra`
+4. **Added 6 frontend round-trip tests** (yaml.test.ts):
+   - access.read policy round-trip
+   - access.write policy round-trip
+   - empty access dict round-trip
+   - unknown extra fields round-trip
+   - stage without extra stays without extra
+   - access alongside hooks round-trip
+
+### 当前状态
+- task-132 完成: editor YAML round-trip preserves access and all unknown fields
+- Frontend tests: 136 passed (was 130, +6)
+- Python tests: 865 passed, 1 skipped
+- Phase 39: tasks 39.1-39.5 complete
+
+### 下一步
+task-133: Add checklist-completion condition demo — update or add example workflow showing verify→done blocked until task_plan.md has no unchecked items.
 
 ---
 
