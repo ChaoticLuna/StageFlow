@@ -10,6 +10,47 @@ from __future__ import annotations
 from typing import List, Tuple
 
 
+def _validate_access_section(section: dict, policy_name: str, stage_label: str) -> list[str]:
+    """Validate a single access section (read or write). Returns list of errors."""
+    errors = []
+    if not isinstance(section, dict):
+        errors.append(f"{stage_label}: 'access.{policy_name}' must be a dict")
+        return errors
+    for list_key in ("allow", "deny"):
+        items = section.get(list_key)
+        if items is None:
+            continue
+        if not isinstance(items, list):
+            errors.append(
+                f"{stage_label}: 'access.{policy_name}.{list_key}' must be a list"
+            )
+            continue
+        for j, item in enumerate(items):
+            if not isinstance(item, str):
+                errors.append(
+                    f"{stage_label}: 'access.{policy_name}.{list_key}[{j}]' must be a string"
+                )
+    return errors
+
+
+def _validate_stage_access(stage: dict, i: int) -> list[str]:
+    """Validate the access policy on a stage dict. Returns list of errors."""
+    access = stage.get("access")
+    if access is None:
+        return []
+    name = stage.get("name", f"stages[{i}]")
+    label = f"stages[{i}] ('{name}')"
+    errors = []
+    if not isinstance(access, dict):
+        errors.append(f"{label}: 'access' must be a dict")
+        return errors
+    for section_key in ("read", "write"):
+        section = access.get(section_key)
+        if section is not None:
+            errors.extend(_validate_access_section(section, section_key, label))
+    return errors
+
+
 def validate_stages_config(config: dict) -> Tuple[bool, List[str]]:
     """Validate the structure of a loaded stages YAML config.
     Returns (valid, errors).
@@ -41,6 +82,7 @@ def validate_stages_config(config: dict) -> Tuple[bool, List[str]]:
             tools = stage.get("tools", [])
             if not isinstance(tools, list):
                 errors.append(f"stages[{i}] ('{name}'): 'tools' must be a list")
+            errors.extend(_validate_stage_access(stage, i))
 
     if not isinstance(transitions, list):
         errors.append("'transitions' must be a list")

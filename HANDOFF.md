@@ -2,7 +2,34 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-127 — update docs and usage examples for editor lifecycle
+> **交接原因**: task-128 — Define and validate access policy schema
+
+---
+
+## task-128 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Extended `stageflow/core/schema.py`** — added access policy validation:
+   - `_validate_stage_access()` — validates `access` field on stage dicts
+   - `_validate_access_section()` — validates `read`/`write` sub-sections (allow/deny lists)
+   - Schema rejects: non-dict access, non-dict sections, non-list allows/denies, non-string items
+   - Schema allows: missing access (backward compatible), empty access dict, empty sections
+   - Validation integrated into the main `validate_stages_config()` loop
+2. **Verified `Stage.extra` mechanism** in `registry.py` already preserves unknown fields like `access` through `__init__` and `to_dict()`
+3. **Added 23 new tests** (116 total in test_registry.py, was 93):
+   - **TestAccessPolicySchema** (20 tests): valid full policy, read-only, write-only, deny-only, empty access, empty sections, backward compat; invalid shapes (not dict, not list, non-string items); multiple errors reported; unknown fields preserved; access with hooks/max_iterations
+   - **TestStageClass** (+3 tests): access preserved in extra, round-trip to_dict, no access is fine
+
+### 当前状态
+- Phase 39: task-128 complete
+- Schema validates access policies: `access.read.allow`, `access.read.deny`, `access.write.allow`, `access.write.deny`
+- Stage.extra preserves access through load→to_dict round-trip
+- All 116 registry tests pass, mypy clean
+- Next: task-129 — core path policy evaluation
+
+### 已知问题
+- Stage guard enforces analyze stage tools strictly; PowerShell/Bash access varies by environment
+- For advancing stages: use `python -m stageflow next` (always-allowed in guard), create artifacts first if needed
 
 ---
 

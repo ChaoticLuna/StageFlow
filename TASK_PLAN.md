@@ -1,8 +1,8 @@
 # StageFlow — Task Plan
 
 > **最后更新**: 2026-05-16
-> **当前阶段**: Phase 37 — Explicit run completion semantics ✅ (all 5 tasks complete)
-> **Ralph 状态**: 活跃 — fix_plan.md 122/122 完成
+> **当前阶段**: Phase 39 — Fine-grained file access policy 🔄 (task-128 complete, task-129 next)
+> **Ralph 状态**: 活跃 — fix_plan.md 128/134 完成
 
 ---
 
@@ -133,6 +133,18 @@
 | 37.3 | Status 输出、文档、Agent 指令更新 | ✅ | task-120 |
 | 37.4 | Editor 保存门控连接完成语义 | ✅ | task-121 |
 | 37.5 | 分层验证 | ✅ | task-122 |
+
+## Phase 39: 细粒度文件访问控制 🆕
+
+| # | 任务 | 状态 | 产出 |
+|---|------|------|------|
+| 39.1 | Access policy schema 定义与验证 | ✅ | schema.py + 23 tests → task-128 |
+| 39.2 | 核心路径策略评估 | ⬜ | task-129 |
+| 39.3 | 在 stageflow hook 中强制执行 access | ⬜ | task-130 |
+| 39.4 | 统一 guard.py 与 hook 行为 | ⬜ | task-131 |
+| 39.5 | Editor 导入/导出保留 access 字段 | ⬜ | task-132 |
+| 39.6 | Checklist 完成条件演示 | ⬜ | task-133 |
+| 39.7 | 文件访问控制分层验证 | ⬜ | task-134 |
 
 ---
 

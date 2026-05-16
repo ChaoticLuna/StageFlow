@@ -376,6 +376,76 @@ Hard acceptance rules for this phase:
 - [x] **task-127**: Update docs and usage examples. Update `CLAUDE.md`, `docs/api_reference.md`, and `.ralph/AGENT.md` with the editor lifecycle and commands. Document both paths: AI-assisted generation with `stageflow generate ... --output .stageflow/config/stages.yaml`, and manual visual editing with `stageflow editor`. Include the save gate rule: edit only when no run is active; use `stageflow complete` for normal completion or `stageflow reset` to abandon before editing. Document that `stageflow editor --no-open --port <port>` is the headless/test-friendly form.
 ---
 
+## Phase 39: Fine-grained file access policy for stage tools
+
+Goal: add file-level access control to StageFlow's tool guard. Stage `tools` currently answer "which tool names may be used"; this phase adds an explicit `access` policy that answers "which project files those tools may read or write". The policy must be enforced by the real `stageflow hook` PreToolUse entrypoint, not merely documented or surfaced in the editor. This is a guard for known file-oriented tool calls, not a full OS sandbox; stages that need file locks must not allow broad `Bash(*)` / `PowerShell(*)` commands that can read or write files outside the hook's structured path fields.
+
+Non-goals for this phase: do not implement user-defined/custom hook registration yet; do not add arbitrary plugin execution on stage entry; do not change condition semantics except where tests need demo YAML updates. The future custom-hook idea may be documented as future work, but no implementation should be attempted in this phase.
+
+Hard acceptance rules for this phase:
+
+1. Keep existing `tools` semantics intact. A tool must first be allowed by the stage's `tools` list, then checked against the stage's optional `access` policy. Workflows without `access` must remain backward compatible.
+2. Add a stage-level `access` schema with at least `read` and `write` sections, each supporting `allow` and `deny` glob lists. Example:
+
+   ```yaml
+   stages:
+     - name: plan
+       tools: [Read, Write, Edit]
+       access:
+         read:
+           allow:
+             - artifacts/runs/{{var.run_id}}/pick/**
+             - artifacts/runs/{{var.run_id}}/analyze/**
+             - README.md
+           deny:
+             - .env
+             - secrets/**
+         write:
+           allow:
+             - artifacts/runs/{{var.run_id}}/plan/task_plan.md
+           deny:
+             - .stageflow/config/stages.yaml
+             - secrets/**
+   ```
+
+3. Path policies are relative to the discovered StageFlow project root. The hook must normalize relative paths, absolute paths, `..` components, Windows separators, and nested-cwd launches so paths cannot escape the project root or bypass rules.
+4. Support variable interpolation in access patterns using existing state variables, especially `{{var.run_id}}`. Interpolation must match the same run-scoped artifact behavior used by transition conditions.
+5. Deny rules must take precedence over allow rules. A path matching both `allow` and `deny` is blocked. A path outside the project root is blocked for file tools.
+6. Define default behavior explicitly:
+   - If a stage has no `access` policy, preserve current behavior for backward compatibility.
+   - If a section exists and has an `allow` list, only matching paths are allowed for that operation.
+   - If a section exists with only `deny`, everything except denied paths is allowed for that operation.
+   - If a section exists with neither `allow` nor `deny`, treat it as no additional restriction for that operation.
+7. `Read` must no longer bypass policy through `ALWAYS_ALLOW_TOOLS` when a run is active and the current stage has an `access.read` policy. It may remain allowed in bootstrap/no-stage situations only where the hook already allows bootstrap behavior. Tests must explicitly prove a denied `Read` is blocked.
+8. The first implementation must cover structured Claude Code file-writing tools: `Write`, `Edit`, `MultiEdit`, and `NotebookEdit`. It must extract their file paths from real Claude Code hook input shapes, at minimum: `Write.file_path`, `Edit.file_path`, `MultiEdit.file_path`, and `NotebookEdit.notebook_path`. "Fail closed on missing path" means only this: if the hook receives one of these structured file-tool events while a relevant `access` section exists, but the event has no extractable target path, block that tool event with a clear "missing path" reason instead of guessing or allowing. This does not mean StageFlow is an OS-level sandbox and does not block writes performed inside an explicitly allowed script/shell command.
+9. The first implementation must also cover file-reading/search tools where hook input exposes a path: `Read.file_path` must be enforced, and `Grep.path` / `Glob.path` or equivalent search-root fields must be enforced. If a search tool has no path/search-root field while the current stage has `access.read`, do not silently treat it as safe; either fail closed with a clear "missing search root" block reason, or explicitly resolve the omitted root to the discovered project root and then apply the same directory-scope policy. Tests must prove the chosen behavior.
+10. Directory/search-root access must be stricter than single-file access. A directory root is allowed only when the whole requested search scope is inside allowed read patterns and does not include denied paths. If the implementation cannot safely prove that, it must fail closed and ask for a narrower search root. Do not claim `Grep`/`Glob` are protected while allowing project-wide search in a restricted stage.
+11. Unresolved variables in access patterns, such as `{{var.run_id}}` before a run has a `run_id`, must not accidentally broaden access. A pattern containing an unresolved variable should match nothing, and the block reason should make the missing variable diagnosable.
+12. A blocked access attempt must return a PreToolUse block decision with a specific reason that includes the stage name, operation (`read` or `write`), requested path, and the policy reason. It must also log to the discovered project's `.stageflow/guard_violations.jsonl` or legacy audit directory according to project type.
+13. The implementation must use the same project-root discovery as the Git-like CLI. Launching the hook from a nested subdirectory must still enforce the ancestor project's policy.
+14. The implementation must not rely on prompt instructions for enforcement. Tests must call the hook/guard path directly and prove unauthorized access is blocked even if the tool itself is present in `tools`.
+15. Do not claim `access` controls arbitrary shell/script file IO unless that is actually implemented. If `Bash`, `PowerShell`, or another script-running tool is allowed, the file-level `access` policy does not inspect or sandbox the script's internal reads/writes in this phase; only the command allowlist/pattern can constrain that tool call. This bypass is acceptable by design for now, but documentation and examples must state it honestly and avoid broad shell permissions in stages that depend on file access locks.
+16. The visual editor may preserve and edit `access` data if straightforward, but do not let editor work become the blocker for core enforcement. At minimum, editor import/export must not delete unknown `access` fields when saving YAML. Because the current editor YAML model reconstructs stage objects, this likely requires adding an `extra`/unknown-fields preservation path rather than only adding `access` to TypeScript interfaces.
+17. Add a small demo workflow update or example showing `task_plan.md` checklist enforcement with `file_not_contains` for unchecked `- [ ]` tasks. This is separate from access control but should demonstrate how `verify -> done` can require all plan tasks to be checked off:
+
+   ```yaml
+   - file_not_contains:
+       path: artifacts/runs/{{var.run_id}}/plan/task_plan.md
+       pattern: '(?m)^\\s*-\\s\\[\\s\\]'
+   ```
+
+18. Tests must cover at least: allowed write to a run-scoped artifact; blocked write to unauthorized source file; blocked read of `.env`; `Read` not bypassing via always-allow; denied path overriding allow; missing path for a covered file tool fails closed when policy exists; `Grep`/`Glob` without an explicit search root in a restricted stage does not get project-wide access; unresolved `{{var.run_id}}` does not broaden access; allowed path with interpolated `{{var.run_id}}`; absolute path inside project; absolute path outside project; `..` traversal blocked; nested cwd uses project root; old workflows without `access` keep current behavior.
+
+- [x] **task-128**: Define and validate the `access` policy schema. Extend schema/registry handling so stage `access` data is accepted and preserved as stage extra data. Document exact semantics for `access.read.allow`, `access.read.deny`, `access.write.allow`, and `access.write.deny`, including deny precedence, interpolation, and backward compatibility. Add schema/registry tests proving valid policies load, invalid shapes fail clearly, and unknown existing stage fields are not broken.
+- [ ] **task-129**: Implement core path policy evaluation. Add a small, unit-tested helper that resolves requested paths relative to the discovered project root, rejects project escapes, interpolates `{{var.*}}` from current state, evaluates glob rules cross-platform, handles single-file paths separately from directory/search-root paths, and returns a clear allow/block reason. Include tests for Windows separators, absolute paths, `..`, deny-over-allow, allow-only, deny-only, no-policy behavior, and directory/search-root scopes that would include denied files.
+- [ ] **task-130**: Enforce `access` in the real `stageflow hook` entrypoint. Wire the path policy into `cmd_hook` for `Read`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, and known `Grep`/`Glob` path inputs. The hook must still apply stage `tools` first, then apply file access policy. `Read` must not return early from `ALWAYS_ALLOW_TOOLS` when an active stage has `access.read`; denied reads must be blocked. Covered file tools with missing path fields must fail closed when the relevant access section exists. Search tools with omitted path/search root must not receive project-wide access in a restricted stage. Add hook-level tests using simulated Claude Code PreToolUse JSON for allowed and blocked reads/writes/searches from both project root and nested cwd.
+- [ ] **task-131**: Reconcile or remove duplicate guard behavior. `stageflow/core/guard.py` currently has partial write-path protection that is not the same as the global `stageflow hook` path. Unify the behavior so programmatic `StageGuard` and CLI hook enforce the same policy, or make one delegate to the other. Preserve existing tests where behavior is still intentional, update tests where semantics change, and avoid two divergent access-control implementations.
+- [ ] **task-132**: Preserve `access` through editor import/export. The visual editor must not silently drop stage-level `access` policy fields when loading and saving YAML. If full visual controls are not implemented yet, preserve unknown stage extra fields losslessly enough that opening the editor and clicking Save does not remove access policy; merely adding `access?: ...` to a parsed type is insufficient if `exportToYaml()` still reconstructs stages without those fields. Add focused frontend tests for YAML round-trip preservation.
+- [ ] **task-133**: Add checklist-completion condition demo. Update or add an example workflow showing `verify -> done` blocked until `task_plan.md` has no unchecked `- [ ]` items, using `file_not_contains`. Add tests or a small demo script proving unchecked tasks block completion and checked tasks allow completion.
+- [ ] **task-134**: Add staged verification for file access control. Create layered tests that increase difficulty instead of one monolithic test: schema load, policy helper, StageGuard direct check, `stageflow hook` from project root, hook from nested cwd, Windows/absolute path cases, editor round-trip preservation, and old-workflow backward compatibility. Record exact commands and expected results in docs.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |

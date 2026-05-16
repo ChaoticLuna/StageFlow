@@ -549,6 +549,253 @@ class TestStageClass:
         assert "name" not in stage.extra
         assert "tools" not in stage.extra
 
+    def test_access_preserved_in_extra(self):
+        """access policy is preserved as an extra field through Stage."""
+        access = {
+            "read": {"allow": ["artifacts/**"], "deny": [".env"]},
+            "write": {"allow": ["artifacts/runs/{{var.run_id}}/**"]},
+        }
+        stage = Stage("secure", {"tools": ["Read", "Write"], "access": access})
+        assert "access" in stage.extra
+        assert stage.extra["access"] == access
+
+    def test_access_round_trip_to_dict(self):
+        """to_dict preserves access policy."""
+        access = {
+            "read": {"allow": ["artifacts/**"], "deny": [".env"]},
+            "write": {"allow": ["artifacts/runs/{{var.run_id}}/**"]},
+        }
+        stage = Stage("secure", {"tools": ["Read", "Write"], "access": access})
+        d = stage.to_dict()
+        assert "access" in d
+        assert d["access"] == access
+
+    def test_stage_without_access_extra_is_fine(self):
+        """Stage without access policy has no access in extra."""
+        stage = Stage("plain", {"tools": ["Read"]})
+        assert "access" not in stage.extra
+        d = stage.to_dict()
+        assert "access" not in d
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Access policy schema validation
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestAccessPolicySchema:
+    """Tests for access policy validation in validate_stages_config."""
+
+    @staticmethod
+    def _validate(config):
+        from stageflow.core.schema import validate_stages_config
+        return validate_stages_config(config)
+
+    # ── Valid policies ──────────────────────────────────────────────────
+
+    def test_valid_full_access_policy(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "plan",
+                "tools": ["Read", "Write"],
+                "access": {
+                    "read": {"allow": ["artifacts/**"], "deny": [".env"]},
+                    "write": {"allow": ["artifacts/runs/{{var.run_id}}/**"]},
+                },
+            }],
+        })
+        assert valid, f"Unexpected errors: {errors}"
+        assert errors == []
+
+    def test_valid_read_only_access(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "review",
+                "tools": ["Read", "Grep"],
+                "access": {"read": {"allow": ["artifacts/**", "*.md"]}},
+            }],
+        })
+        assert valid, f"Unexpected errors: {errors}"
+
+    def test_valid_write_only_access(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "implement",
+                "tools": ["Write", "Edit"],
+                "access": {"write": {"allow": ["artifacts/**"], "deny": [".stageflow/**"]}},
+            }],
+        })
+        assert valid, f"Unexpected errors: {errors}"
+
+    def test_valid_deny_only_access(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "analyze",
+                "tools": ["Read"],
+                "access": {"read": {"deny": [".env", "secrets/**"]}},
+            }],
+        })
+        assert valid, f"Unexpected errors: {errors}"
+
+    def test_valid_empty_access_dict(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "open",
+                "tools": ["Read"],
+                "access": {},
+            }],
+        })
+        assert valid, f"Unexpected errors: {errors}"
+
+    def test_valid_empty_read_write(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "open",
+                "tools": ["Read"],
+                "access": {"read": {}, "write": {}},
+            }],
+        })
+        assert valid, f"Unexpected errors: {errors}"
+
+    def test_stage_without_access_still_valid(self):
+        """Backward compatibility: stages without access are fine."""
+        valid, errors = self._validate({
+            "stages": [{"name": "legacy", "tools": ["Read", "Write"]}],
+        })
+        assert valid
+        assert errors == []
+
+    # ── Invalid access shapes ───────────────────────────────────────────
+
+    def test_access_not_dict(self):
+        valid, errors = self._validate({
+            "stages": [{"name": "bad", "tools": [], "access": "not_a_dict"}],
+        })
+        assert not valid
+        assert any("'access' must be a dict" in e for e in errors)
+
+    def test_access_read_not_dict(self):
+        valid, errors = self._validate({
+            "stages": [{"name": "bad", "tools": [], "access": {"read": "not_dict"}}],
+        })
+        assert not valid
+        assert any("'access.read' must be a dict" in e for e in errors)
+
+    def test_access_write_not_dict(self):
+        valid, errors = self._validate({
+            "stages": [{"name": "bad", "tools": [], "access": {"write": 123}}],
+        })
+        assert not valid
+        assert any("'access.write' must be a dict" in e for e in errors)
+
+    def test_access_read_allow_not_list(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "bad", "tools": [],
+                "access": {"read": {"allow": "not_a_list"}},
+            }],
+        })
+        assert not valid
+        assert any("'access.read.allow' must be a list" in e for e in errors)
+
+    def test_access_read_deny_not_list(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "bad", "tools": [],
+                "access": {"read": {"deny": 42}},
+            }],
+        })
+        assert not valid
+        assert any("'access.read.deny' must be a list" in e for e in errors)
+
+    def test_access_write_allow_not_list(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "bad", "tools": [],
+                "access": {"write": {"allow": {"not": "list"}}},
+            }],
+        })
+        assert not valid
+        assert any("'access.write.allow' must be a list" in e for e in errors)
+
+    def test_access_write_deny_not_list(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "bad", "tools": [],
+                "access": {"write": {"deny": True}},
+            }],
+        })
+        assert not valid
+        assert any("'access.write.deny' must be a list" in e for e in errors)
+
+    def test_access_allow_items_must_be_strings(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "bad", "tools": [],
+                "access": {"read": {"allow": ["ok", 123, {"nested": "bad"}]}},
+            }],
+        })
+        assert not valid
+        assert any("must be a string" in e for e in errors)
+
+    def test_access_deny_items_must_be_strings(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "bad", "tools": [],
+                "access": {"write": {"deny": [None]}},
+            }],
+        })
+        assert not valid
+        assert any("must be a string" in e for e in errors)
+
+    def test_multiple_access_errors_reported(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "bad", "tools": [],
+                "access": {
+                    "read": {"allow": "bad"},
+                    "write": {"deny": 123},
+                },
+            }],
+        })
+        assert not valid
+        assert len(errors) >= 2
+
+    def test_unknown_stage_fields_still_preserved(self):
+        """Non-access unknown fields don't cause schema errors."""
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "custom",
+                "tools": ["Read"],
+                "custom_plugin_config": {"timeout": 30},
+                "tags": ["frontend", "critical"],
+            }],
+        })
+        assert valid, f"Unexpected errors: {errors}"
+
+    # ── Regression: access + other valid fields ─────────────────────────
+
+    def test_access_with_on_enter_hooks(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "secure_plan",
+                "tools": ["Read", "Write"],
+                "access": {"read": {"allow": ["artifacts/**"]}},
+                "on_enter": [{"python": "print('entering')"}],
+            }],
+        })
+        assert valid, f"Unexpected errors: {errors}"
+
+    def test_access_with_max_iterations(self):
+        valid, errors = self._validate({
+            "stages": [{
+                "name": "retry_stage",
+                "tools": ["Read"],
+                "access": {"write": {"allow": ["artifacts/**"]}},
+                "max_iterations": 3,
+            }],
+        })
+        assert valid, f"Unexpected errors: {errors}"
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Transition class
