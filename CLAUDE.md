@@ -223,8 +223,9 @@ stageflow migrate [--force]                # 迁移 legacy 项目到新 .stagefl
 stageflow start [stage]                    # 开始新运行（默认使用 YAML 第一个阶段）
 stageflow next [target] [--force] [--dry-run]  # 推进到下一阶段（框架判定条件）
 stageflow back [target]                    # 回退到上一阶段
+stageflow complete                         # 完成当前运行（仅限终端阶段）
 stageflow jump <target> [--force --reason "..."]  # 跳转到指定阶段
-stageflow reset [--hard] [--clean-artifacts]   # 清除当前运行状态
+stageflow reset [--hard] [--clean-artifacts]   # 清除当前运行状态（放弃/重启）
 ```
 
 ### 信息查询
@@ -255,8 +256,21 @@ stageflow mcp                              # 启动 MCP Server
 | `python scripts/stage_next.py` | `stageflow next` |
 | `python scripts/stage_status.py` | `stageflow status` |
 | `python scripts/stage_reset.py` | `stageflow reset` |
-| `python scripts/stage_jump.py <target>` | `stageflow jump <target>` |
+| `python scripts/stage_jump.py <target>` | `stageflow complete                         # 完成当前运行（仅限终端阶段）
+stageflow jump <target>` |
 | `python scripts/stage_back.py` | `stageflow back` |
+
+## 运行生命周期
+
+StageFlow 运行遵循明确的生命周期：
+
+1. **stageflow init** — 创建项目元数据，无活跃运行
+2. **stageflow start** — 在 YAML 入口阶段开始新运行，创建 run_id
+3. **stageflow next** — 通过条件门控的转移推进阶段
+4. **stageflow complete** — 在终端阶段正常关闭运行，保留 current_stage: null 和完成元数据
+5. **stageflow reset** — 放弃或清除状态，不是成功的正常结束路径
+
+终端阶段是结构性的（零出站转移），不是基于名称判断的。
 
 ## 框架特性
 
@@ -290,7 +304,7 @@ stageflow mcp                              # 启动 MCP Server
 ### 运行身份与产物隔离 (Run Identity)
 - `stageflow start` 开始新运行，自动生成唯一 `run_id` (UUID4)，存储在 `variables.run_id`
 - 所有默认产物路径使用 `artifacts/runs/{{var.run_id}}/<stage>/` 隔离不同运行
-- `stageflow reset` — 清除当前运行状态（不创建新运行）
+- `stageflow reset` — 清除当前运行状态（放弃/重启）（不创建新运行）
 - `stageflow reset --clean-artifacts` — 清除状态并删除当前运行的产物目录
 - `stageflow reset --hard` — 完全清除状态文件
 - `stageflow start [stage]` — 在 reset 后开始新运行（新 `run_id`），旧产物保留在磁盘

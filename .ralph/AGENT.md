@@ -65,6 +65,9 @@ python -m stageflow next plan
 # Force advance (skip conditions)
 python -m stageflow next --force implement
 
+# Complete current run (terminal stage only)
+python -m stageflow complete
+
 # Check conditions without advancing
 python -m stageflow next --dry-run verify
 python -m stageflow check verify
@@ -72,7 +75,7 @@ python -m stageflow check verify
 # Generate Mermaid graph
 python -m stageflow graph
 
-# Reset current run (clear state, keep artifacts)
+# Reset current run (abandon/restart — NOT normal completion)
 python -m stageflow reset
 python -m stageflow reset --clean-artifacts
 python -m stageflow reset --hard

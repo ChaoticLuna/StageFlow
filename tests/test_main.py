@@ -245,7 +245,7 @@ class TestStageflowCLI:
         """--verbose with uninitialized state should not error."""
         r = _stageflow("status", "--verbose")
         assert r.returncode == 0, r.stderr
-        assert "(not initialized)" in r.stdout
+        assert "No active run" in r.stdout
 
     # ── force / hard reset paths ──────────────────────────────────────
 

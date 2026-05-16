@@ -365,6 +365,7 @@ print(sm.status()["current_stage"])         # "analyze"
 print(sm.get_var("run_id"))                 # UUID persisted in state file
 
 # Artifact cleanup (scoped to current run only)
+sm.complete()                               # Complete run at terminal stage
 sm.clean_run_artifacts()                    # Deletes artifacts/runs/<run_id>/
 
 # Reuse the same run_id after reset

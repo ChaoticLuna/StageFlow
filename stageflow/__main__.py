@@ -66,8 +66,25 @@ def cmd_status(args):
     if getattr(args, 'json', False):
         print(_json.dumps(info, indent=2, default=str))
         return
-    stage = info["current_stage"] or "(not initialized)"
-    print(f"  Current Stage : {stage}")
+
+    current = info["current_stage"]
+    run_status = info.get("run_status")
+
+    if run_status == "completed":
+        print(f"  Run Status    : completed")
+        print(f"  Final Stage   : {info.get('final_stage', 'N/A')}")
+        print(f"  Completed At  : {info.get('completed_at', 'N/A')}")
+        print(f"  Run ID        : {info.get('variables', {}).get('run_id', 'N/A')}")
+        print(f"  History       : {info['total_transitions']} transitions")
+        print()
+        print("Use 'stageflow start' to begin a new run.")
+        return 0
+
+    if current is None:
+        print("No active run. Use 'stageflow start' to begin a run.")
+        return 0
+
+    print(f"  Current Stage : {current}")
     if info["stage_info"]:
         print(f"  Description   : {info['stage_info'].get('description', 'N/A')}")
         tools = info['stage_info'].get('tools', [])

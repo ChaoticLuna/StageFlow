@@ -2,7 +2,28 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-119 — CLI complete command added
+> **交接原因**: task-120 — status output and docs updated for completion semantics
+
+---
+
+## task-120 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Updated cmd_status** — human output now distinguishes three states:
+   - Completed run: shows Run Status, Final Stage, Completed At, Run ID
+   - No active run: shows guidance to use stageflow start
+   - Active run: shows current stage, tools, available next, etc. (unchanged)
+2. **Updated CLAUDE.md** — added complete command to CLI reference, added lifecycle documentation section (init -> start -> next -> complete -> reset)
+3. **Updated docs/api_reference.md** — added complete command section, added complete() to StateMachine API table, added usage example
+4. **Updated .ralph/AGENT.md** — added complete command to Run section, updated reset comment (abandon/restart), updated lifecycle note
+5. **Fixed test** — test_status_verbose_uninitialized updated for new No active run message
+
+### 测试结果
+- test_main.py: 210/210 passed
+- Full non-editor suite: 1173 passed, 1 skipped
+
+### 下一步
+- **task-121**: Connect completion semantics to workflow editor save behavior
 
 ---
 
