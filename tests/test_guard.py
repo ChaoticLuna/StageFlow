@@ -287,6 +287,52 @@ class TestPathGuard:
         allowed, msg = guard.check("Grep", {"pattern": "TODO", "path": "stageflow"})
         assert not allowed, f"Grep outside allowed dir should be blocked: {msg}"
 
+    def test_no_active_run_falls_through_to_base_result(self, registry, temp_dir):
+        """Line 60: when current_stage is None (no state file), return base_result."""
+        self._register_secured_stage(
+            registry, "secured",
+            tools=["Read"],
+            access={"read": {"allow": ["artifacts/**"]}},
+        )
+        guard = StageGuard(
+            str(registry.config_path), str(temp_dir), registry=registry,
+        )
+        allowed, msg = guard.check("Read", {"file_path": "artifacts/x.md"})
+        assert not allowed, "No active run: is_tool_allowed should return False"
+
+    def test_stage_not_in_registry_falls_through(self, registry, temp_dir):
+        """Line 64: current_stage set to a stage not in the registry."""
+        self._register_secured_stage(
+            registry, "secured",
+            tools=["Read"],
+            access={"read": {"allow": ["artifacts/**"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("secured")
+        sm._state["current_stage"] = "ghost_stage"
+        sm._save_state()
+        guard = StageGuard(
+            str(registry.config_path), str(temp_dir), registry=registry,
+        )
+        allowed, msg = guard.check("Read", {"file_path": "artifacts/x.md"})
+        assert not allowed, f"Ghost stage not in registry should fail: {msg}"
+
+    def test_read_missing_path_with_read_policy_fails_closed(self, registry, temp_dir):
+        """Line 74: Read without file_path when read policy exists -> fail closed."""
+        self._register_secured_stage(
+            registry, "secured",
+            tools=["Read", "Grep"],
+            access={"read": {"allow": ["artifacts/**"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("secured")
+        guard = StageGuard(
+            str(registry.config_path), str(temp_dir), registry=registry,
+        )
+        allowed, msg = guard.check("Read", {"not_a_path": 1})
+        assert not allowed, f"Read without file_path should fail closed: {msg}"
+        assert "read" in msg.lower()
+
 
 class TestGuardLogViolation:
     def test_log_violation_writes_to_file(self, registry, temp_dir):

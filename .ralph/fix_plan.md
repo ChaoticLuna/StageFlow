@@ -446,6 +446,14 @@ Hard acceptance rules for this phase:
 
 ---
 
+## Phase 40: Coverage push — core modules to 100%
+
+- [x] **task-135**: Push `engine.py` coverage 99% -> 100%. Added 2 tests: status() after complete() includes run_status/final_stage/completed_at; status() on active run omits completion fields. (Lines 541/543/545)
+- [x] **task-136**: Push `guard.py` coverage 95% -> ~99%. Added 3 tests: no active run falls through to base_result (line 60), current_stage not in registry (line 64), Read without file_path fails closed when read policy exists (line 74). Line 150 (if __name__ guard) excluded as subprocess-only.
+- [x] **task-137**: Push `access_policy.py` coverage 96% -> ~98%. Added 2 tests: glob pattern with non-slash after double-star (lines 97-98), search_root with deny-only policy (line 248). Lines 60-61 (OSError/ValueError) and 289 (pattern_covers_dir edge) excluded as platform-specific or unreachable through public API.
+
+---
+
 ## 图例
 
 | 符号 | 含义 |

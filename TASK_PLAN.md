@@ -146,6 +146,14 @@
 | 39.6 | Checklist 完成条件演示 | ✅ | 7 tests → task-133 |
 | 39.7 | 文件访问控制分层验证 | ✅ | task-134 |
 
+## Phase 40: Coverage push — core modules to 100% 🆕 ✅
+
+| # | 任务 | 状态 | 产出 |
+|---|------|------|------|
+| 40.1 | engine.py 99% → 100% | ✅ | +2 status() tests → task-135 |
+| 40.2 | guard.py 95% → ~99% | ✅ | +3 edge-case tests → task-136 |
+| 40.3 | access_policy.py 96% → ~98% | ✅ | +2 glob/search tests → task-137 |
+
 ---
 
 **图例**: ✅ 完成 | 🔄 进行中 | ⬜ 待开始 | ❌ 阻塞 | 🆕 新阶段

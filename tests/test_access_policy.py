@@ -161,6 +161,12 @@ class TestGlobToRegex:
         assert re.match(r, "test.dir/file+name[v1].md")
         assert not re.match(r, "testXdir/file+name[v1].md")
 
+    def test_double_star_non_slash_next(self):
+        r = _glob_to_regex("file**name")
+        assert re.match(r, "fileABname")
+        assert re.match(r, "fileanythingname")
+        assert not re.match(r, "other.txt")
+
 
 class TestMatchGlob:
     def test_exact_match(self):
@@ -525,6 +531,13 @@ class TestCheckSearch:
         ok, reason = p.check_search("secrets", root)
         assert not ok
         assert "denied" in reason
+
+    def test_search_root_deny_only_allows_unlisted(self, temp_dir):
+        root = str(temp_dir)
+        (temp_dir / "artifacts").mkdir()
+        p = AccessPolicy({"read": {"deny": ["secrets/**"]}})
+        ok, _ = p.check_search("artifacts", root)
+        assert ok, "Search in unlisted dir should be allowed when only deny defined"
 
     def test_search_root_allowed_with_deny_elsewhere(self, temp_dir):
         root = str(temp_dir)

@@ -1587,6 +1587,26 @@ class TestComplete:
         assert sm._state["final_stage"] == "deliver"
         assert sm.current_stage is None
 
+    def test_complete_status_includes_completion_fields(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.transition_to("middle")
+        state_machine.transition_to("end")
+        state_machine.complete()
+        result = state_machine.status()
+        assert result["run_status"] == "completed"
+        assert result["final_stage"] == "end"
+        assert "completed_at" in result
+        assert result["current_stage"] is None
+        assert result["variables"]["run_id"] is not None
+
+    def test_status_uncompleted_run_omits_completion_fields(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.transition_to("middle")
+        result = state_machine.status()
+        assert "run_status" not in result
+        assert "final_stage" not in result
+        assert "completed_at" not in result
+
     def test_paused_does_not_block_complete(self, state_machine):
         """Pause prevents transitions but does not gate completion."""
         state_machine.initialize("start")
