@@ -19,8 +19,8 @@ StageFlow 是一套**声明式、可扩展的阶段化状态机框架**，用于
 
 ```
 Framework files:  18 modules (~2,500 lines)
-Test files:      22 files (~13,000 lines)
-Tests:           1304 passed, 0 failed (1197 Python + 107 editor)
+Test files:      27 files (~14,000 lines)
+Tests:           1362 passed, 0 failed (1255 Python + 107 editor), 1 skipped
 Coverage:        84% overall (core: engine 100%, schema 100%, audit 100%, registry 100%)
 mypy:            clean (17 source files, 0 issues)
 Conditions:       30 types
