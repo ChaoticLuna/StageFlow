@@ -2,7 +2,40 @@
 
 > **最后更新**: 2026-05-16
 > **当前 Agent**: Ralph (Claude Code)
-> **交接原因**: task-100 — staged verification complete, Phase 29 done
+> **交接原因**: task-118 — run completion semantics implemented
+
+---
+
+## task-118 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Added `StateMachine.complete()` method** to `engine.py`:
+   - Validates run is active (`current_stage is not None`)
+   - Validates current stage exists in registry config
+   - Validates terminal status: zero outgoing transitions (structural, not name-based)
+   - Runs terminal-stage `on_exit` hooks (consistent with normal transitions)
+   - Records completion history entry: `{from: stage, to: null, reason: "run completed"}`
+   - Persists metadata: `run_status: "completed"`, `completed_at` (ISO-8601 UTC), `final_stage`
+   - Sets `current_stage` to `null` (without deleting state file)
+   - Preserves `variables.run_id` and existing history
+   - Writes `run_completed` audit event
+2. **Updated `status()` method** to expose `run_status`, `final_stage`, `completed_at` when present in state
+3. **Added 15 tests** in `TestComplete` class (test_engine.py):
+   - Fails: no active run, non-terminal stage, stage missing from config
+   - Succeeds: terminal stage, sets current_stage=null, preserves state file/run_id/history/artifacts
+   - Records metadata (run_status, final_stage, completed_at)
+   - Runs exit hooks, logs audit event
+   - Fresh SM loads completed state correctly
+   - Works with custom stage names (no hardcoded defaults)
+   - Pause does not block completion
+
+### 测试结果
+- TestComplete: 15/15 passed
+- test_engine.py: 112/112 passed (was 97, +15)
+- Full non-editor suite: 1163 passed, 1 skipped
+
+### 下一步
+- **task-119**: Add `stageflow complete` CLI command
 
 ---
 

@@ -1424,3 +1424,176 @@ class TestResumeSemantics:
         assert sm4.current_stage == "middle"
         ok, _ = sm4.transition_to("end")
         assert ok
+
+
+# =============================================================================
+# TestComplete — run completion semantics (task-118)
+# =============================================================================
+
+class TestComplete:
+    def test_complete_fails_when_no_active_run(self, state_machine):
+        ok, msgs = state_machine.complete()
+        assert ok is False
+        assert "No active run" in msgs[0]
+
+    def test_complete_fails_from_non_terminal_stage(self, state_machine):
+        state_machine.initialize("start")
+        ok, msgs = state_machine.complete()
+        assert ok is False
+        assert "not terminal" in msgs[0]
+        assert "outgoing transitions" in msgs[0]
+
+    def test_complete_fails_when_stage_missing_from_config(self, state_machine, registry):
+        state_machine.initialize("start")
+        state_machine._state["current_stage"] = "ghost_stage"
+        state_machine._save_state()
+        ok, msgs = state_machine.complete()
+        assert ok is False
+        assert "not found in workflow config" in msgs[0]
+
+    def test_complete_succeeds_from_terminal_stage(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.transition_to("middle")
+        state_machine.transition_to("end")
+        assert state_machine.current_stage == "end"
+        ok, msgs = state_machine.complete()
+        assert ok, f"Complete should succeed from terminal stage: {msgs}"
+        assert "Run completed" in msgs[0]
+        assert state_machine.current_stage is None
+
+    def test_complete_sets_current_stage_to_null(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.transition_to("middle")
+        state_machine.transition_to("end")
+        state_machine.complete()
+        assert state_machine.current_stage is None
+
+    def test_complete_preserves_state_file(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.transition_to("middle")
+        state_machine.transition_to("end")
+        state_machine.complete()
+        assert state_machine.state_path.exists(), "State file must exist after complete"
+
+    def test_complete_preserves_run_id(self, state_machine):
+        state_machine.initialize("start")
+        run_id = state_machine.get_var("run_id")
+        state_machine.transition_to("middle")
+        state_machine.transition_to("end")
+        state_machine.complete()
+        assert state_machine.get_var("run_id") == run_id
+
+    def test_complete_preserves_history(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.transition_to("middle")
+        state_machine.transition_to("end")
+        history_len_before = len(state_machine.history)
+        state_machine.complete()
+        assert len(state_machine.history) == history_len_before + 1
+        last = state_machine.history[-1]
+        assert last["from"] == "end"
+        assert last["to"] is None
+        assert last["reason"] == "run completed"
+
+    def test_complete_records_metadata(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.transition_to("middle")
+        state_machine.transition_to("end")
+        state_machine.complete()
+        assert state_machine._state["run_status"] == "completed"
+        assert state_machine._state["final_stage"] == "end"
+        completed_at = state_machine._state["completed_at"]
+        assert completed_at is not None
+        assert "T" in completed_at  # ISO-8601 format
+
+    def test_complete_runs_exit_hooks_on_terminal_stage(self, state_machine, registry, temp_dir):
+        registry.register_stage(
+            "terminal_with_hook",
+            tools=["Read"],
+            on_exit=[{"shell": "echo 'exit hook ran'"}],
+        )
+        registry.register_transition(
+            "start", "terminal_with_hook",
+            conditions=[{"always": True}],
+        )
+        state_machine.initialize("start")
+        state_machine.transition_to("terminal_with_hook")
+        ok, _ = state_machine.complete()
+        assert ok
+        audit_path = temp_dir / ".claude" / "audit.jsonl"
+        content = audit_path.read_text(encoding="utf-8")
+        assert '"hook_type": "on_exit"' in content
+        assert '"stage": "terminal_with_hook"' in content
+
+    def test_complete_logs_run_completed_audit_event(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.transition_to("middle")
+        state_machine.transition_to("end")
+        state_machine.complete()
+        audit_path = state_machine.base_path / ".claude" / "audit.jsonl"
+        content = audit_path.read_text(encoding="utf-8")
+        assert '"event": "run_completed"' in content
+
+    def test_complete_does_not_delete_artifacts(self, state_machine):
+        state_machine.initialize("start")
+        run_id = state_machine.get_var("run_id")
+        run_dir = state_machine.base_path / "artifacts" / "runs" / run_id
+        adir = run_dir / "analyze"
+        adir.mkdir(parents=True)
+        (adir / "findings.md").write_text("test data", encoding="utf-8")
+        state_machine.transition_to("middle")
+        state_machine.transition_to("end")
+        state_machine.complete()
+        assert run_dir.exists(), "Artifacts must survive completion"
+        assert (adir / "findings.md").read_text(encoding="utf-8") == "test data"
+
+    def test_complete_fresh_sm_loads_completed_state(self, state_machine):
+        state_machine.initialize("start")
+        state_machine.transition_to("middle")
+        state_machine.transition_to("end")
+        run_id = state_machine.get_var("run_id")
+        state_machine.complete()
+
+        sm2 = StateMachine(state_machine.registry, str(state_machine.base_path))
+        assert sm2.current_stage is None
+        assert sm2._state["run_status"] == "completed"
+        assert sm2._state["final_stage"] == "end"
+        assert sm2.get_var("run_id") == run_id
+        assert sm2._state["completed_at"] is not None
+
+    def test_complete_with_custom_stage_names(self, temp_dir):
+        import yaml
+        config = {
+            "stages": [
+                {"name": "investigate", "tools": ["Read", "Grep"]},
+                {"name": "deliver", "tools": ["Read", "Write"]},
+            ],
+            "transitions": [
+                {"from": "investigate", "to": "deliver",
+                 "conditions": [{"always": True}]},
+            ],
+        }
+        config_dir = temp_dir / "custom_config"
+        config_dir.mkdir(parents=True)
+        config_path = config_dir / "stages.yaml"
+        config_path.write_text(yaml.dump(config), encoding="utf-8")
+
+        reg = StageRegistry(str(config_path))
+        sm = StateMachine(reg, str(temp_dir))
+        sm.initialize("investigate")
+        sm.transition_to("deliver")
+        ok, msgs = sm.complete()
+        assert ok, f"Complete should succeed from terminal 'deliver': {msgs}"
+        assert sm._state["final_stage"] == "deliver"
+        assert sm.current_stage is None
+
+    def test_paused_does_not_block_complete(self, state_machine):
+        """Pause prevents transitions but does not gate completion."""
+        state_machine.initialize("start")
+        state_machine.transition_to("middle")
+        state_machine.transition_to("end")
+        state_machine.pause("admin hold")
+        ok, msgs = state_machine.complete()
+        assert ok, f"Pause should not block completion: {msgs}"
+        assert state_machine.current_stage is None
+        assert state_machine._state["run_status"] == "completed"

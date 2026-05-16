@@ -381,6 +381,65 @@ class StateMachine:
         self.audit.log_stage_enter(stage)
         return True, [f"Initialized at stage: {stage}"]
 
+    def complete(self) -> Tuple[bool, List[str]]:
+        """Complete the current run if the current stage is terminal.
+
+        A stage is terminal when it has zero outgoing transitions in the
+        loaded YAML. Terminal status is structural, not name-based.
+
+        On success: runs terminal-stage exit hooks, records completion
+        metadata (run_status, completed_at, final_stage), preserves
+        run_id and history, and sets current_stage to null without
+        deleting the state file.
+        """
+        current = self.current_stage
+        if current is None:
+            return False, ["No active run to complete"]
+
+        if current not in self.registry.stage_names:
+            return False, [
+                f"Current stage '{current}' not found in workflow config. "
+                f"Cannot determine if stage is terminal."
+            ]
+
+        outgoing = self.registry.get_transitions_from(current)
+        if outgoing:
+            next_names = [t.to_stage for t in outgoing]
+            return False, [
+                f"Stage '{current}' is not terminal — it has outgoing "
+                f"transitions to: {next_names}. Use 'stageflow next' to "
+                f"advance, or 'stageflow jump <stage> --force --reason ...' "
+                f"for explicit recovery."
+            ]
+
+        final_stage = current
+        completed_at = datetime.now(timezone.utc).isoformat()
+
+        self._run_hooks(final_stage, "on_exit")
+        self.audit.log_stage_exit(final_stage)
+
+        self._state.setdefault("history", []).append({
+            "from": final_stage, "to": None, "at": completed_at,
+            "reason": "run completed",
+        })
+        self._state["run_status"] = "completed"
+        self._state["completed_at"] = completed_at
+        self._state["final_stage"] = final_stage
+        self._state["current_stage"] = None
+        self._save_state()
+
+        self.audit._write({
+            "event": "run_completed",
+            "final_stage": final_stage,
+            "run_id": self.get_var("run_id"),
+        })
+
+        return True, [
+            f"Run completed at stage '{final_stage}'. "
+            f"run_id={self.get_var('run_id')}, "
+            f"completed_at={completed_at}"
+        ]
+
     def reset(self):
         """Reset the state machine completely."""
         self._state = {
@@ -465,7 +524,7 @@ class StateMachine:
             if s:
                 stage_info = s.to_dict()
 
-        return {
+        result = {
             "current_stage": current,
             "stage_info": stage_info,
             "history": self.history,
@@ -478,6 +537,13 @@ class StateMachine:
             "registered_stages": self.registry.stage_names,
             "registered_conditions": list_conditions(),
         }
+        if "run_status" in self._state:
+            result["run_status"] = self._state["run_status"]
+        if "final_stage" in self._state:
+            result["final_stage"] = self._state["final_stage"]
+        if "completed_at" in self._state:
+            result["completed_at"] = self._state["completed_at"]
+        return result
 
     def __repr__(self):
         return f"StateMachine(stage={self.current_stage!r}, transitions={len(self.history)})"

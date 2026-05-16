@@ -1,8 +1,8 @@
 # StageFlow — Task Plan
 
 > **最后更新**: 2026-05-16
-> **当前阶段**: Phase 30 — Cleanup & minor features (task-103 complete) ✅
-> **Ralph 状态**: 活跃 — fix_plan.md 100/100 完成
+> **当前阶段**: Phase 37 — Explicit run completion semantics (task-118 complete) ✅
+> **Ralph 状态**: 活跃 — fix_plan.md 118/122 完成
 
 ---
 
@@ -123,6 +123,16 @@
 | 11.3 | VS Code 扩展 | ✅ | vscode-extension/ — status bar + quick pick → task-074 |
 | 11.4 | Linear/Notion 任务同步 | ✅ | Linear + Notion → tasks 075-076 |
 | 11.5 | 多项目共享配置 | ✅ | config extends inheritance → task-064 |
+
+## Phase 37: 显式运行完成语义 🆕
+
+| # | 任务 | 状态 | 产出 |
+|---|------|------|------|
+| 37.1 | `StateMachine.complete()` 核心实现 | ✅ | engine.py + 15 tests → task-118 |
+| 37.2 | `stageflow complete` CLI 命令 | ⬜ | task-119 |
+| 37.3 | Status 输出、文档、Agent 指令更新 | ⬜ | task-120 |
+| 37.4 | Editor 保存门控连接完成语义 | ⬜ | task-121 |
+| 37.5 | 分层验证 | ⬜ | task-122 |
 
 ---
 
