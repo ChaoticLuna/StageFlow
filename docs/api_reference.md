@@ -434,17 +434,24 @@ Tool guard for Claude Code integration. Intercepts tool calls and validates agai
 
 ### Class: `StageGuard`
 
-**`__init__(config_path: str = "stageflow/config/stages.yaml", base_path: str = ".", registry: StageRegistry = None)`**
+**`__init__(config_path: str = "stageflow/config/stages.yaml", base_path: str = ".", registry: StageRegistry = None, enforce_path_guard: bool = True)`**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `config_path` | `str` | `"stageflow/config/stages.yaml"` | Path to stages YAML |
 | `base_path` | `str` | `"."` | Project root path |
 | `registry` | `StageRegistry | None` | `None` | Pre-built registry (skips YAML load if provided) |
+| `enforce_path_guard` | `bool` | `True` | Enable file-level access policy enforcement |
 
 **`check(tool_name: str, tool_input: dict = None) -> tuple[bool, str]`**
 
 Check if a tool is allowed in the current stage. Refreshes state from disk before checking.
+
+Tool checking order:
+1. **Default read tools**: `Read`, `Grep`, `Glob` pass the tool-name gate even if omitted from `stage.tools`
+2. **Write tools**: `Write`, `Edit`, `MultiEdit`, `NotebookEdit` must be explicitly listed in `stage.tools`
+3. **File access policy**: `access.read` and `access.write` glob patterns restrict file paths
+4. **Deny overrides allow**: A path matching both `allow` and `deny` is blocked
 
 **`allowed_tools() -> list[str]`**
 

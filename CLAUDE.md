@@ -317,11 +317,53 @@ stageflow editor --no-open --port 8765        # 无头模式，指定端口（CI
 ## 框架特性
 
 ### 工具拦截
+
+#### 阶段工具白名单
+
 - 全局 Hook 入口 `stageflow hook` — 项目通过 `.claude/settings.json` 配置，无需复制 hook 脚本
 - Claude Code PreToolUse Hook 自动拦截非授权工具
 - 从当前工作目录发现项目根，支持在子目录中运行
 - 每阶段独立的工具白名单（支持通配符 `Bash(git *)`）
 - 违规日志自动记录到 `<项目根>/.stageflow/guard_violations.jsonl`
+
+#### 默认读取工具 (Phase 42)
+
+`Read`, `Grep`, `Glob` 是默认读取工具。它们不需要在每个阶段的 `tools` 列表中显式声明即可使用。
+写入工具 (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`) 必须明确列入 `stage.tools`。
+
+**默认规则**: 读取上下文工具默认开放；写入工具必须显式声明；敏感阶段通过 `access.read` 限制读取。
+
+#### 细粒度文件访问控制 (access 策略)
+
+每个阶段可以通过 `access` 字段定义文件级别的读取/写入策略：
+
+```yaml
+stages:
+  - name: plan
+    tools: [Write]              # Write 必须在此列出；Read/Grep/Glob 是默认的
+    access:
+      read:
+        allow:                  # 允许读取的路径（glob 模式）
+          - artifacts/runs/{{var.run_id}}/**/*.md
+          - README.md
+        deny:                   # 禁止读取的路径（优先级高于 allow）
+          - .env
+          - secrets/**
+      write:
+        allow:                  # 允许写入的路径
+          - artifacts/runs/{{var.run_id}}/plan/task_plan.md
+        deny:                   # 禁止写入的路径
+          - .stageflow/config/stages.yaml
+          - secrets/**
+```
+
+**策略规则**:
+- **无 `access` 字段**: 向后兼容，不限制文件访问
+- **`deny` 优先于 `allow`**: 同时匹配 allow 和 deny 的路径被阻止
+- **项目根外路径被阻止**: 对于文件工具，项目根外的路径被阻止
+- **未解析变量不扩大访问**: 包含未解析 `{{var.*}}` 的模式匹配空，不扩大访问
+- **`Bash`/`PowerShell` 不检查文件 I/O**: Access 策略只拦截结构化文件工具调用，
+  不分析 Shell 命令内部的文件操作
 
 ### 生命周期 Hook
 - `on_enter`: 进入阶段时执行的 Shell/Python 命令
@@ -376,10 +418,11 @@ npm test               # watch 模式 (vitest)
 
 1. **不能手动修改** 状态文件 — 状态由框架管理
 2. **不能跳过阶段** — 必须通过 `stageflow next` 进入下一阶段
-3. **阶段内工具受限** — 使用未授权工具会被 Hook 拦截
+3. **阶段内工具受限** — 读取工具默认开放；写入/Shell 工具必须显式声明在 `stage.tools` 中
 4. **条件由框架判断** — 模型不能自行决定"条件已满足"
 5. **失败自动回退** — verify 失败回退 implement，多次失败回退 plan
 6. **框架不会说谎** — 条件评估结果是客观证据，不可伪造
+7. **文件访问由策略控制** — 敏感阶段可通过 `access.read`/`access.write` 限制文件操作
 
 ## 目录完整结构
 

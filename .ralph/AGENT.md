@@ -16,7 +16,7 @@ pip install jsonschema
 ## Test
 
 ```bash
-# Run all tests (1311 Python + 130 editor = 1441 total)
+# Run all tests (1539 Python + 130 editor = 1669 total)
 pytest
 
 # Run with verbose output
@@ -169,16 +169,17 @@ scripts/
 
 tests/
 ├── conftest.py          # Fixtures + pytest plugin
-├── test_conditions.py   # 282 tests
-├── test_registry.py     # 93 tests
-├── test_engine.py       # 92 tests
-├── test_guard.py        # 23 tests
+├── test_conditions.py   # 291 tests
+├── test_registry.py     # 116 tests
+├── test_engine.py       # 114 tests
+├── test_guard.py        # 30 tests
 ├── test_discovery.py    # 18 tests
-├── test_main.py         # 218 tests (CLI)
+├── test_main.py         # 236 tests (CLI)
 ├── test_server.py       # 80 tests
-├── test_editor_e2e.py   # 29 tests
+├── test_editor_e2e.py   # 30 tests
+├── test_access_policy.py # 93 tests
 ├── test_e2e.py          # 25 tests
-├── ...                  # 28 test files total
+├── ...                  # 32 test files total
 
 .claude/
 ├── settings.json        # Project hook config (PreToolUse → stageflow hook)
@@ -208,6 +209,8 @@ tests/
 - 新项目使用 `.stageflow/` 作为元数据目录；旧项目使用 `stageflow/config/stages.yaml` + `.claude/current_stage.json`。
 - 使用 `stageflow migrate` 将旧项目迁移到新格式（保留原文件）。
 - The hooks system intercepts tool calls based on current stage. Run `python scripts/hooks_off.py` during active development.
+- **Default read tools (Phase 42)**: `Read`, `Grep`, and `Glob` are default read-only tools that bypass the `stage.tools` name-check when a run is active. Write tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`) remain strictly stage-gated. Sensitive stages can restrict reads via `access.read` policy.
+- **File access policy**: Stages can define `access.read` and `access.write` with `allow`/`deny` glob lists relative to project root. Deny takes precedence over allow. Supports `{{var.run_id}}` interpolation. Paths outside project root are blocked. `Bash`/`PowerShell` commands are not sandboxed by the access policy — restrict those tools in sensitive stages.
 - Run `stageflow init` to create a new project; `stageflow start` to begin a run; `stageflow next` to advance.
 - State files are managed by the framework — never edit them manually.
 - Tests use fixtures from `conftest.py`. The `stageflow_sm` fixture initializes at 'pick' stage.
