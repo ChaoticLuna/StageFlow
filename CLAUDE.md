@@ -19,9 +19,9 @@ StageFlow 是一套**声明式、可扩展的阶段化状态机框架**，用于
 
 ```
 Framework files:  18 modules (~2,500 lines)
-Test files:      27 files (~14,000 lines)
-Tests:           1506 passed, 0 failed (1355 Python + 130 editor), 1 skipped
-Coverage:        84% overall (core: engine 100%, schema 100%, audit 100%, registry 100%)
+Test files:      32 files (~16,000 lines)
+Tests:           1506 passed, 0 failed (1376 Python + 130 editor), 1 skipped
+Coverage:        98% core (engine 100%, schema 100%, audit 100%, registry 100%)
 mypy:            clean (17 source files, 0 issues)
 Conditions:       30 types
 Stages (default): 10 (pick → done)
@@ -419,30 +419,36 @@ auto_workflow/
 │   └── hooks_on.py
 ├── tests/
 │   ├── conftest.py            # Fixtures + Pytest 插件
-│   ├── test_conditions.py     # 282 tests
-│   ├── test_registry.py       # 93 tests
-│   ├── test_engine.py         # 92 tests
-│   ├── test_guard.py          # 23 tests
-│   ├── test_discovery.py      # 18 tests
-│   ├── test_edge_cases.py     # 11 tests
-│   ├── test_e2e.py            # 25 tests
-│   ├── test_extensibility.py  # 28 tests
-│   ├── test_extensibility_quick.py # 1 test
-│   ├── test_agent.py          # 35 tests
-│   ├── test_benchmark.py      # 18 tests
-│   ├── test_cache.py          # 31 tests
-│   ├── test_concurrency.py    # 21 tests
-│   ├── test_generator.py      # 50 tests
-│   ├── test_hooks_integration.py # 17 tests
-│   ├── test_hybrid.py         # 30 tests
-│   ├── test_main.py           # 218 tests
-│   ├── test_orchestrator.py   # 33 tests
-│   ├── test_perf.py           # 7 tests
-│   ├── test_editor_e2e.py     # 29 tests
+│   ├── test_conditions.py     # 291 tests
+│   ├── test_registry.py       # 116 tests
+│   ├── test_engine.py         # 114 tests
+│   ├── test_guard.py          # 30 tests
+│   ├── test_access_policy.py  # 93 tests
+│   ├── test_main.py           # 236 tests
 │   ├── test_server.py         # 80 tests
-│   ├── test_audit.py          # 18 tests
+│   ├── test_generator.py      # 50 tests
+│   ├── test_access_layered.py # 44 tests
+│   ├── test_agent.py          # 35 tests
+│   ├── test_linear.py         # 33 tests
+│   ├── test_orchestrator.py   # 33 tests
+│   ├── test_cache.py          # 31 tests
+│   ├── test_hybrid.py         # 30 tests
+│   ├── test_editor_e2e.py     # 30 tests
+│   ├── test_extensibility.py  # 28 tests
+│   ├── test_e2e.py            # 25 tests
+│   ├── test_notion.py         # 24 tests
+│   ├── test_concurrency.py    # 21 tests
+│   ├── test_staged_verification.py # 21 tests
 │   ├── test_mcp_server.py     # 19 tests
-│   └── test_stress.py         # 18 tests
+│   ├── test_discovery.py      # 18 tests
+│   ├── test_benchmark.py      # 18 tests
+│   ├── test_audit.py          # 18 tests
+│   ├── test_stress.py         # 18 tests
+│   ├── test_hooks_integration.py # 17 tests
+│   ├── test_run_demo.py       # 15 tests
+│   ├── test_edge_cases.py     # 11 tests
+│   ├── test_perf.py           # 7 tests
+│   ├── test_extensibility_quick.py # 1 test
 ├── .claude/
 │   ├── settings.json          # PreToolUse Hook 配置（指向 stageflow hook）
 │   ├── settings.local.json
