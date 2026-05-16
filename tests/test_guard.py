@@ -474,6 +474,42 @@ class TestPathGuard:
         allowed, msg = guard.check("Edit", {"file_path": "src/app.py"})
         assert not allowed, f"Edit omitted from tools should be blocked: {msg}"
 
+    def test_write_omitted_blocked_even_with_access_write_allow(self, registry, temp_dir):
+        """Write omitted from tools → blocked even when access.write would permit path."""
+        self._register_secured_stage(
+            registry, "locked", tools=["Read"],
+            access={"write": {"allow": ["artifacts/**"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("Write", {"file_path": "artifacts/output.txt"})
+        assert not allowed, f"Write omitted from tools should be blocked regardless of access.write: {msg}"
+
+    def test_multiedit_omitted_blocked_even_with_access_write_allow(self, registry, temp_dir):
+        """MultiEdit omitted from tools → blocked even when access.write would permit."""
+        self._register_secured_stage(
+            registry, "locked", tools=["Read", "Write"],
+            access={"write": {"allow": ["artifacts/**"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("MultiEdit", {"file_path": "artifacts/output.txt"})
+        assert not allowed, f"MultiEdit omitted from tools should be blocked: {msg}"
+
+    def test_notebook_edit_omitted_blocked_even_with_access_write_allow(self, registry, temp_dir):
+        """NotebookEdit omitted from tools → blocked even when access.write would permit."""
+        self._register_secured_stage(
+            registry, "locked", tools=["Read", "Write"],
+            access={"write": {"allow": ["artifacts/**"]}},
+        )
+        sm = StateMachine(registry, str(temp_dir))
+        sm.initialize("locked")
+        guard = StageGuard(str(registry.config_path), str(temp_dir), registry=registry)
+        allowed, msg = guard.check("NotebookEdit", {"notebook_path": "artifacts/notes.ipynb"})
+        assert not allowed, f"NotebookEdit omitted from tools should be blocked: {msg}"
+
 
 class TestGuardLogViolation:
     def test_log_violation_writes_to_file(self, registry, temp_dir):

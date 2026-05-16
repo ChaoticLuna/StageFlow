@@ -1549,6 +1549,62 @@ class TestHookCommand:
         assert r.returncode != 0, f"Write omitted from tools should be blocked: {r.returncode}"
         assert "block" in r.stdout
 
+    def test_edit_blocked_when_omitted_even_if_path_allowed(self, tmp_path):
+        """Edit omitted from tools → blocked even when access.write would allow."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"write": {"allow": ["artifacts/**"]}},
+            tools=["Read", "Write"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Edit", {"file_path": "artifacts/output.txt"})
+        assert r.returncode != 0, f"Edit omitted from tools should be blocked: {r.returncode}"
+        assert "block" in r.stdout
+
+    def test_multiedit_blocked_when_omitted_even_if_path_allowed(self, tmp_path):
+        """MultiEdit omitted from tools → blocked even when access.write would allow."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"write": {"allow": ["artifacts/**"]}},
+            tools=["Read", "Write", "Edit"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "MultiEdit", {"file_path": "artifacts/output.txt", "edits": []})
+        assert r.returncode != 0, f"MultiEdit omitted from tools should be blocked: {r.returncode}"
+        assert "block" in r.stdout
+
+    def test_notebook_edit_blocked_when_omitted_even_if_path_allowed(self, tmp_path):
+        """NotebookEdit omitted from tools → blocked even when access.write would allow."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"write": {"allow": ["artifacts/**"]}},
+            tools=["Read", "Write", "Edit"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "NotebookEdit", {"notebook_path": "artifacts/notes.ipynb"})
+        assert r.returncode != 0, f"NotebookEdit omitted from tools should be blocked: {r.returncode}"
+        assert "block" in r.stdout
+
+    def test_write_in_tools_still_obeys_access_write(self, tmp_path):
+        """Write in stage.tools + access.write blocks path outside allow."""
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_access_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            {"write": {"allow": ["artifacts/**"]}},
+            tools=["Read", "Write"],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
+        r = self._hook(tmp_path, "Write", {"file_path": "stageflow/core/engine.py"})
+        assert r.returncode != 0, f"Write outside access.write.allow should be blocked: {r.returncode}"
+        assert "block" in r.stdout
+
 
 class TestLegacyCompatibility:
     """CLI commands work against legacy projects (stageflow/config/stages.yaml + .claude/current_stage.json)."""

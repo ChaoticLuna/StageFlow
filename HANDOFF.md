@@ -6,6 +6,31 @@
 
 ---
 
+## task-141 会话总结 (2026-05-16)
+
+### 做了什么
+1. **Added 3 StageGuard tests** for write-tool omission with access.write:
+   - `test_write_omitted_blocked_even_with_access_write_allow`
+   - `test_multiedit_omitted_blocked_even_with_access_write_allow`
+   - `test_notebook_edit_omitted_blocked_even_with_access_write_allow`
+2. **Added 4 hook-level tests** for write-tool omission with access.write:
+   - `test_edit_blocked_when_omitted_even_if_path_allowed`
+   - `test_multiedit_blocked_when_omitted_even_if_path_allowed`
+   - `test_notebook_edit_blocked_when_omitted_even_if_path_allowed`
+   - `test_write_in_tools_still_obeys_access_write` — Write in tools but blocked by access.write.allow scope
+3. **Updated CLAUDE.md** — 1669 tests (1539 Python + 130 editor), 1 skipped
+
+### 当前状态
+- task-141 complete: +7 tests (3 guard + 4 hook)
+- Phase 42: tasks 139-141 done, 142-144 remain
+- All 1669 tests pass, 1 skipped
+- Write tools strictly stage-gated: tool-name check always enforced before access.write
+
+### 下一步
+task-142: Update docs and examples for default read tools
+
+---
+
 ## task-140 会话总结 (2026-05-16)
 
 ### 做了什么
