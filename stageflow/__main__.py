@@ -1018,7 +1018,11 @@ def _log_hook_violation(root, tool_name: str, stage: str, reason: str):
 
 
 def _print_hook_decision(decision: str, reason: str) -> None:
-    """Print Claude Code hook output with legacy fields for compatibility."""
+    """Print Claude Code hook output with legacy fields for compatibility.
+
+    Hook callers must return exit code 0 after printing this JSON. Claude Code
+    only parses stdout JSON for exit code 0; exit code 1 is non-blocking.
+    """
     permission_decision = "allow" if decision == "allow" else "deny"
     print(_json.dumps({
         "decision": decision,
@@ -1126,7 +1130,7 @@ def cmd_hook(args):
                       f"Allowed tools: {allowed_tools}")
             _print_hook_decision("block", reason)
             _log_hook_violation(root, tool_name, current_stage, reason)
-            return 1
+            return 0
     # else: empty allowed_tools with access policy → all tools allowed
     # but still check access policy below
 
@@ -1149,7 +1153,7 @@ def cmd_hook(args):
                 )
                 _print_hook_decision("block", reason)
                 _log_hook_violation(root, tool_name, current_stage, reason)
-                return 1
+                return 0
             path = _resolve_hook_path(path)
             if tool_name in ("Grep", "Glob"):
                 allowed, reason = policy.check_search(path, project_root_str, variables)
@@ -1158,7 +1162,7 @@ def cmd_hook(args):
             if not allowed:
                 _print_hook_decision("block", reason)
                 _log_hook_violation(root, tool_name, current_stage, reason)
-                return 1
+                return 0
 
     elif tool_name in _WRITE_TOOLS:
         if policy.has_write_policy:
@@ -1170,13 +1174,13 @@ def cmd_hook(args):
                 )
                 _print_hook_decision("block", reason)
                 _log_hook_violation(root, tool_name, current_stage, reason)
-                return 1
+                return 0
             path = _resolve_hook_path(path)
             allowed, reason = policy.check_write(path, project_root_str, variables)
             if not allowed:
                 _print_hook_decision("block", reason)
                 _log_hook_violation(root, tool_name, current_stage, reason)
-                return 1
+                return 0
 
     # All checks passed
     _print_hook_decision("allow", f"'{tool_name}' allowed in stage '{current_stage}'")

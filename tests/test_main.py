@@ -1134,7 +1134,7 @@ class TestHookCommand:
         self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
         subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Edit", {"file_path": "some/file.py"})
-        assert r.returncode != 0, f"Edit should be blocked in alpha, got rc={r.returncode}"
+        assert r.returncode == 0, f"Edit should emit deny JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
         data = json.loads(r.stdout)
         assert data["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
@@ -1176,7 +1176,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "locked"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {"file_path": "secrets/key.txt"})
-        assert r.returncode != 0, f"Read should be blocked by access.read.deny, rc={r.returncode}"
+        assert r.returncode == 0, f"Read deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_grep_allowed_when_omitted_from_tools(self, tmp_path):
@@ -1211,7 +1211,7 @@ class TestHookCommand:
         self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
         subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Edit", {"file_path": "some/file.py"})
-        assert r.returncode != 0
+        assert r.returncode == 0
         viol_path = tmp_path / ".stageflow" / "guard_violations.jsonl"
         assert viol_path.is_file(), f"Expected violation log at {viol_path}"
         lines = viol_path.read_text(encoding="utf-8").strip().split("\n")
@@ -1230,7 +1230,7 @@ class TestHookCommand:
         nested = tmp_path / "src" / "lib" / "deep"
         nested.mkdir(parents=True)
         r = self._hook(nested, "Edit", {"file_path": "some/file.py"})
-        assert r.returncode != 0, f"Edit should be blocked from nested dir, got rc={r.returncode}"
+        assert r.returncode == 0, f"Edit deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_hook_allows_from_nested_subdir(self, tmp_path):
@@ -1290,7 +1290,7 @@ class TestHookCommand:
         self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
         subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Bash", {"command": "npm install"})
-        assert r.returncode != 0, f"npm should be blocked in alpha, rc={r.returncode}"
+        assert r.returncode == 0, f"npm deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     # ── Always-allowed operational commands ────────────────────────────
@@ -1355,7 +1355,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {"file_path": "secret.env"})
-        assert r.returncode != 0, f"Read of secret.env should be blocked, rc={r.returncode}"
+        assert r.returncode == 0, f"Read deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_access_read_denied_overrides_allow(self, tmp_path):
@@ -1367,7 +1367,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {"file_path": "secrets/db.yaml"})
-        assert r.returncode != 0, r.stderr or "blocked"
+        assert r.returncode == 0, r.stderr or "blocked"
         assert "block" in r.stdout
 
     def test_access_read_missing_path_fails_closed(self, tmp_path):
@@ -1379,7 +1379,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {})
-        assert r.returncode != 0, f"Read without file_path should be blocked when read policy exists, rc={r.returncode}"
+        assert r.returncode == 0, f"Read deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_access_write_allowed_in_run_scope(self, tmp_path):
@@ -1403,7 +1403,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Write", {"file_path": "stageflow/core/engine.py"})
-        assert r.returncode != 0, f"Write to engine.py should be blocked, rc={r.returncode}"
+        assert r.returncode == 0, f"Write deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_access_write_missing_path_fails_closed(self, tmp_path):
@@ -1415,7 +1415,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Write", {})
-        assert r.returncode != 0, f"Write without file_path should be blocked when write policy exists, rc={r.returncode}"
+        assert r.returncode == 0, f"Write deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_access_grep_without_path_in_restricted_stage(self, tmp_path):
@@ -1427,7 +1427,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Grep", {"pattern": "TODO"})
-        assert r.returncode != 0, f"Grep without path should be blocked when read policy exists, rc={r.returncode}"
+        assert r.returncode == 0, f"Grep deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_access_grep_allowed_in_allowed_dir(self, tmp_path):
@@ -1451,7 +1451,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Glob", {"pattern": "*.key", "path": "artifacts/secrets"})
-        assert r.returncode != 0, f"Glob in denied dir should be blocked, rc={r.returncode}"
+        assert r.returncode == 0, f"Glob deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_access_path_escape_blocked(self, tmp_path):
@@ -1463,7 +1463,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {"file_path": "../../etc/passwd"})
-        assert r.returncode != 0, f"Path escape should be blocked, rc={r.returncode}"
+        assert r.returncode == 0, f"Path escape deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_access_absolute_path_outside_blocked(self, tmp_path):
@@ -1475,7 +1475,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {"file_path": "C:/Windows/System32/config/SAM"})
-        assert r.returncode != 0, f"Absolute path outside project should be blocked, rc={r.returncode}"
+        assert r.returncode == 0, f"Absolute path deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_access_from_nested_cwd(self, tmp_path):
@@ -1501,7 +1501,7 @@ class TestHookCommand:
         assert r.returncode == 0, r.stderr
         assert "allow" in r.stdout
         r = self._hook(tmp_path, "Write", {"file_path": "any_file.py"})
-        assert r.returncode != 0, "Write not in alpha's tools should still be blocked"
+        assert r.returncode == 0, "Write deny should emit JSON with rc=0"
 
     def test_access_notebook_edit_respects_write_policy(self, tmp_path):
         import subprocess, sys
@@ -1525,7 +1525,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "NotebookEdit", {"notebook_path": "scripts/bad.ipynb"})
-        assert r.returncode != 0, f"NotebookEdit outside artifacts should be blocked, rc={r.returncode}"
+        assert r.returncode == 0, f"NotebookEdit deny should emit JSON with rc=0, got rc={r.returncode}"
 
     def test_access_edit_respects_write_policy(self, tmp_path):
         import subprocess, sys
@@ -1539,7 +1539,7 @@ class TestHookCommand:
         r = self._hook(tmp_path, "Edit", {"file_path": "artifacts/file.txt"})
         assert r.returncode == 0, r.stderr
         r = self._hook(tmp_path, "Edit", {"file_path": "stageflow/core/engine.py"})
-        assert r.returncode != 0, f"Edit outside artifacts should be blocked, rc={r.returncode}"
+        assert r.returncode == 0, f"Edit deny should emit JSON with rc=0, got rc={r.returncode}"
 
     def test_access_multiedit_respects_write_policy(self, tmp_path):
         import subprocess, sys
@@ -1553,7 +1553,7 @@ class TestHookCommand:
         r = self._hook(tmp_path, "MultiEdit", {"file_path": "artifacts/file.txt", "edits": []})
         assert r.returncode == 0, r.stderr
         r = self._hook(tmp_path, "MultiEdit", {"file_path": "stageflow/core/engine.py", "edits": []})
-        assert r.returncode != 0, f"MultiEdit outside artifacts should be blocked, rc={r.returncode}"
+        assert r.returncode == 0, f"MultiEdit deny should emit JSON with rc=0, got rc={r.returncode}"
 
     def test_access_unrestricted_stage_with_read_policy(self, tmp_path):
         """Unrestricted tools (empty list) with access policy still enforces access."""
@@ -1566,7 +1566,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {"file_path": "secret.env"})
-        assert r.returncode != 0, f"Read outside artifacts should be blocked even with unrestricted tools, rc={r.returncode}"
+        assert r.returncode == 0, f"Read deny should emit JSON with rc=0, got rc={r.returncode}"
         r = self._hook(tmp_path, "Read", {"file_path": "artifacts/data.txt"})
         assert r.returncode == 0, r.stderr
 
@@ -1597,7 +1597,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {"file_path": "secret.env"})
-        assert r.returncode != 0, f"Read outside allow list should be blocked when omitted from tools, rc={r.returncode}"
+        assert r.returncode == 0, f"Read deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_read_allowed_by_access_read_allow_when_omitted(self, tmp_path):
@@ -1625,7 +1625,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Grep", {"pattern": "KEY", "path": "secrets"})
-        assert r.returncode != 0, f"Grep in denied dir should be blocked when omitted: {r.returncode}"
+        assert r.returncode == 0, f"Grep deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_grep_blocked_by_missing_search_root_when_omitted(self, tmp_path):
@@ -1639,7 +1639,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Grep", {"pattern": "TODO"})
-        assert r.returncode != 0, f"Grep without search root should fail closed: {r.returncode}"
+        assert r.returncode == 0, f"Grep deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_grep_blocked_by_dir_not_in_allow_when_omitted(self, tmp_path):
@@ -1653,7 +1653,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Grep", {"pattern": "TODO", "path": "stageflow"})
-        assert r.returncode != 0, f"Grep outside allow list should be blocked when omitted: {r.returncode}"
+        assert r.returncode == 0, f"Grep deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_glob_blocked_by_access_read_deny_when_omitted(self, tmp_path):
@@ -1667,7 +1667,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Glob", {"pattern": "**/*.key", "path": "secrets"})
-        assert r.returncode != 0, f"Glob in denied dir should be blocked when omitted: {r.returncode}"
+        assert r.returncode == 0, f"Glob deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_write_blocked_when_omitted_even_if_path_allowed(self, tmp_path):
@@ -1681,7 +1681,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Write", {"file_path": "artifacts/output.txt"})
-        assert r.returncode != 0, f"Write omitted from tools should be blocked: {r.returncode}"
+        assert r.returncode == 0, f"Write deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_edit_blocked_when_omitted_even_if_path_allowed(self, tmp_path):
@@ -1695,7 +1695,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Edit", {"file_path": "artifacts/output.txt"})
-        assert r.returncode != 0, f"Edit omitted from tools should be blocked: {r.returncode}"
+        assert r.returncode == 0, f"Edit deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_multiedit_blocked_when_omitted_even_if_path_allowed(self, tmp_path):
@@ -1709,7 +1709,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "MultiEdit", {"file_path": "artifacts/output.txt", "edits": []})
-        assert r.returncode != 0, f"MultiEdit omitted from tools should be blocked: {r.returncode}"
+        assert r.returncode == 0, f"MultiEdit deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_notebook_edit_blocked_when_omitted_even_if_path_allowed(self, tmp_path):
@@ -1723,7 +1723,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "NotebookEdit", {"notebook_path": "artifacts/notes.ipynb"})
-        assert r.returncode != 0, f"NotebookEdit omitted from tools should be blocked: {r.returncode}"
+        assert r.returncode == 0, f"NotebookEdit deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
     def test_write_in_tools_still_obeys_access_write(self, tmp_path):
@@ -1737,7 +1737,7 @@ class TestHookCommand:
         )
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Write", {"file_path": "stageflow/core/engine.py"})
-        assert r.returncode != 0, f"Write outside access.write.allow should be blocked: {r.returncode}"
+        assert r.returncode == 0, f"Write deny should emit JSON with rc=0, got rc={r.returncode}"
         assert "block" in r.stdout
 
 

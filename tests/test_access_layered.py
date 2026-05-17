@@ -390,7 +390,7 @@ class TestLayer4HookFromRoot:
             capture_output=True, cwd=str(tmp_path),
         )
         r = _hook(tmp_path, "Read", {"file_path": ".env"})
-        assert r.returncode != 0, f"Read of .env should be blocked: {r.stdout}"
+        assert r.returncode == 0, f"Read deny should emit JSON with rc=0: {r.stdout}"
         assert "block" in r.stdout
 
     def test_write_allowed_in_artifacts(self, tmp_path):
@@ -424,7 +424,7 @@ class TestLayer4HookFromRoot:
             capture_output=True, cwd=str(tmp_path),
         )
         r = _hook(tmp_path, "Write", {"file_path": "src/app.py"})
-        assert r.returncode != 0, f"Write to src should be blocked: {r.stdout}"
+        assert r.returncode == 0, f"Write deny should emit JSON with rc=0: {r.stdout}"
         assert "block" in r.stdout
 
     def test_grep_allowed_in_allowed_dir(self, tmp_path):
@@ -458,7 +458,7 @@ class TestLayer4HookFromRoot:
             capture_output=True, cwd=str(tmp_path),
         )
         r = _hook(tmp_path, "Grep", {"pattern": "TODO"})
-        assert r.returncode != 0, f"Grep without path should be blocked: {r.stdout}"
+        assert r.returncode == 0, f"Grep deny should emit JSON with rc=0: {r.stdout}"
         assert "block" in r.stdout
 
 
@@ -504,7 +504,7 @@ class TestLayer5HookNestedCwd:
         nested = tmp_path / "tests"
         nested.mkdir(parents=True)
         r = _hook(nested, "Read", {"file_path": "test_secret.py"})
-        assert r.returncode != 0, f"Read from tests/ should be blocked: {r.stdout}"
+        assert r.returncode == 0, f"Read deny should emit JSON with rc=0: {r.stdout}"
         assert "block" in r.stdout
 
 
@@ -529,7 +529,7 @@ class TestLayer6WindowsAbsolutePaths:
             capture_output=True, cwd=str(tmp_path),
         )
         r = _hook(tmp_path, "Read", {"file_path": "../../etc/passwd"})
-        assert r.returncode != 0, f"Path escape should be blocked: {r.stdout}"
+        assert r.returncode == 0, f"Path escape deny should emit JSON with rc=0: {r.stdout}"
         assert "block" in r.stdout
 
     def test_absolute_path_outside_blocked(self, tmp_path):
@@ -546,7 +546,7 @@ class TestLayer6WindowsAbsolutePaths:
             capture_output=True, cwd=str(tmp_path),
         )
         r = _hook(tmp_path, "Read", {"file_path": "C:/Windows/System32/config/SAM"})
-        assert r.returncode != 0, f"Absolute outside path should be blocked: {r.stdout}"
+        assert r.returncode == 0, f"Absolute outside path deny should emit JSON with rc=0: {r.stdout}"
         assert "block" in r.stdout
 
     def test_policy_absolute_path_escape(self, temp_dir):
@@ -676,7 +676,7 @@ class TestLayer8BackwardCompat:
             capture_output=True, cwd=str(tmp_path),
         )
         r = _hook(tmp_path, "Write", {"file_path": "any_file.py"})
-        assert r.returncode != 0, "Write not in alpha's tools should still be blocked"
+        assert r.returncode == 0, "Write deny should emit JSON with rc=0"
 
     def test_no_policy_allows_anything_when_tools_empty(self, tmp_path):
         subprocess.run(
