@@ -96,6 +96,7 @@ class TestStageflowCLI:
         assert "--bin-dir" in r.stdout
         assert "--machine" in r.stdout
         assert "--no-path" in r.stdout
+        assert "--build-editor" in r.stdout
 
     def test_register_no_path_writes_wrappers(self, tmp_path):
         bin_dir = tmp_path / "bin"

@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import json as _json
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -286,6 +288,18 @@ def cmd_editor(args):
     if root.marker_type != "new":
         print("Editor requires a new-style project (.stageflow/).", file=sys.stderr)
         print("Run 'stageflow migrate' to convert this project, then try again.", file=sys.stderr)
+        return 1
+
+    frontend_index = _editor_frontend_index()
+    if not frontend_index.exists():
+        print("Editor frontend is not built.", file=sys.stderr)
+        print(f"Expected: {frontend_index}", file=sys.stderr)
+        print("Build it from the StageFlow repository root:", file=sys.stderr)
+        print("  cd editor", file=sys.stderr)
+        print("  npm install", file=sys.stderr)
+        print("  npm run build", file=sys.stderr)
+        print("Or run:", file=sys.stderr)
+        print("  python -m stageflow register --build-editor", file=sys.stderr)
         return 1
 
     from editor.server import create_app
@@ -1225,16 +1239,58 @@ def _register_path(bin_dir: Path, machine: bool) -> tuple[int, str]:
     return 0, f"Add {bin_dir} to PATH in your shell profile if it is not already there"
 
 
+def _editor_dir() -> Path:
+    return PROJECT_ROOT / "editor"
+
+
+def _editor_frontend_index() -> Path:
+    return _editor_dir() / "dist" / "index.html"
+
+
+def _build_editor_frontend() -> int:
+    editor_dir = _editor_dir()
+    package_json = editor_dir / "package.json"
+    if not package_json.exists():
+        print(f"Editor package.json not found: {package_json}", file=sys.stderr)
+        return 1
+
+    npm = shutil.which("npm")
+    if npm is None:
+        print("npm was not found on PATH; install Node.js/npm, then retry.", file=sys.stderr)
+        return 1
+
+    print(f"Building StageFlow editor frontend in {editor_dir}", flush=True)
+    for command in (["install"], ["run", "build"]):
+        printable = "npm " + " ".join(command)
+        print(f"  {printable}", flush=True)
+        result = subprocess.run([npm, *command], cwd=editor_dir)
+        if result.returncode != 0:
+            print(f"{printable} failed with exit code {result.returncode}", file=sys.stderr)
+            return result.returncode
+
+    index = _editor_frontend_index()
+    if not index.exists():
+        print(f"Editor build finished, but {index} was not created.", file=sys.stderr)
+        return 1
+    print(f"Editor frontend built: {index}", flush=True)
+    return 0
+
+
 def cmd_register(args):
     """Create Ralph-style wrapper commands for global StageFlow usage."""
     bin_dir = Path(args.bin_dir).expanduser() if args.bin_dir else _default_bin_dir()
     wrappers = _write_stageflow_wrappers(bin_dir, sys.executable)
 
-    print("Registered StageFlow wrappers:")
-    print(f"  Python : {sys.executable}")
-    print(f"  Bin dir: {bin_dir}")
+    print("Registered StageFlow wrappers:", flush=True)
+    print(f"  Python : {sys.executable}", flush=True)
+    print(f"  Bin dir: {bin_dir}", flush=True)
     for path in wrappers:
-        print(f"  - {path}")
+        print(f"  - {path}", flush=True)
+
+    if args.build_editor:
+        rc = _build_editor_frontend()
+        if rc != 0:
+            return rc
 
     if args.no_path:
         print("PATH registration skipped (--no-path).")
@@ -1336,6 +1392,7 @@ Examples:
     p.add_argument("--bin-dir", help="Directory for wrapper scripts (default: ~/.local/bin)")
     p.add_argument("--machine", action="store_true", help="Add bin dir to system PATH on Windows")
     p.add_argument("--no-path", action="store_true", help="Create wrappers without modifying PATH")
+    p.add_argument("--build-editor", action="store_true", help="Run npm install and npm run build for the visual editor")
 
     p = sub.add_parser("mcp", help="Start MCP server (stdio transport)")
 

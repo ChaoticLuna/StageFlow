@@ -54,6 +54,8 @@ target/
 # Python packaging outputs
 build/
 dist/
+!editor/dist/
+!editor/dist/**
 
 # Local container/extension build outputs
 Dockerfile

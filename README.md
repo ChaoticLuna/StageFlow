@@ -9,15 +9,20 @@ This README focuses on local source installation and global command registration
 From the repository root:
 
 ```powershell
+python -c "import sys; print(sys.executable)"
 python -m pip install -e .
 python -m stageflow register
 ```
+
+The first command shows which Python will own this installation. `register`
+then creates wrappers that keep using that same Python.
 
 Restart your terminal, then verify:
 
 ```powershell
 stageflow --help
 stageflow init
+stageflow editor
 ```
 
 `pip install -e .` installs StageFlow into the Python environment that runs the
@@ -114,12 +119,17 @@ Options:
 
 ```powershell
 python -m stageflow register
+python -m stageflow register --build-editor
 python -m stageflow register --machine
 python -m stageflow register --bin-dir D:\Tool\bin
 python -m stageflow register --no-path
 ```
 
 - `register`: create wrappers and add the bin directory to the user PATH.
+- `--build-editor`: also run `npm install` and `npm run build` in `editor/`.
+  This is optional for normal source installs because the repository includes
+  `editor/dist`, but it is useful after changing frontend source files or if the
+  built editor files were deleted.
 - `--machine`: add the bin directory to the system PATH on Windows. This usually
   requires an elevated administrator terminal.
 - `--bin-dir`: write wrappers to a specific command directory.
@@ -156,3 +166,8 @@ Open the visual editor:
 stageflow editor
 ```
 
+If the editor reports that the frontend is not built, run:
+
+```powershell
+python -m stageflow register --build-editor
+```
