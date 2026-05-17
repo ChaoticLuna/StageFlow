@@ -17,6 +17,15 @@ python -m stageflow register
 The first command shows which Python will own this installation. `register`
 then creates wrappers that keep using that same Python.
 
+Some agent runtimes, including Claude Code in some Windows setups, may not
+inherit the same user PATH as your normal terminal. If Claude Code cannot find
+`stageflow`, run the registration from an elevated Administrator PowerShell and
+write the wrapper directory to the system PATH:
+
+```powershell
+python -m stageflow register --machine
+```
+
 Restart your terminal, then verify:
 
 ```powershell
