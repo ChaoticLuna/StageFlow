@@ -425,11 +425,41 @@ def cmd_list(args):
             print(f"  - {e}")
 
 
-STAGEFLOW_CLAUDE_HOOK = {
-    "command": "stageflow hook",
-    "matcher": "",
-    "timeout": 10,
-}
+STAGEFLOW_CLAUDE_HOOK_COMMAND = "stageflow hook"
+
+
+def _stageflow_claude_pre_tool_hook() -> dict:
+    """Return the current Claude Code hook shape.
+
+    Claude Code's current settings schema nests command hooks under a
+    per-event matcher entry.  Use "*" instead of "" for match-all because some
+    real Windows/Claude Code setups have treated the empty matcher as inert.
+    """
+    return {
+        "matcher": "*",
+        "hooks": [
+            {
+                "type": "command",
+                "command": STAGEFLOW_CLAUDE_HOOK_COMMAND,
+                "timeout": 10,
+            }
+        ],
+    }
+
+
+def _entry_has_stageflow_hook(entry) -> bool:
+    """Detect both old flat and current nested StageFlow hook entries."""
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("command") == STAGEFLOW_CLAUDE_HOOK_COMMAND:
+        return True
+    nested = entry.get("hooks")
+    if isinstance(nested, list):
+        return any(
+            isinstance(h, dict) and h.get("command") == STAGEFLOW_CLAUDE_HOOK_COMMAND
+            for h in nested
+        )
+    return False
 
 
 def _merge_claude_settings(settings_path: Path) -> tuple[bool, str]:
@@ -460,12 +490,24 @@ def _merge_claude_settings(settings_path: Path) -> tuple[bool, str]:
     if not isinstance(pre_tool, list):
         return False, f"Refusing to modify {settings_path}: hooks.PreToolUse must be a list."
 
+    canonical = _stageflow_claude_pre_tool_hook()
+    new_pre_tool = []
+    found = False
+    changed = False
     for entry in pre_tool:
-        if isinstance(entry, dict) and entry.get("command") == STAGEFLOW_CLAUDE_HOOK["command"]:
-            settings_path.write_text(_json.dumps(settings, indent=2) + "\n", encoding="utf-8")
-            return True, "Claude settings already include StageFlow hook"
+        if _entry_has_stageflow_hook(entry):
+            if not found:
+                new_pre_tool.append(canonical)
+                found = True
+            changed = True
+        else:
+            new_pre_tool.append(entry)
+    if not found:
+        new_pre_tool.append(canonical)
+        changed = True
 
-    pre_tool.append(dict(STAGEFLOW_CLAUDE_HOOK))
+    if changed:
+        hooks["PreToolUse"] = new_pre_tool
     settings_path.write_text(_json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     return True, "Claude settings updated with StageFlow hook"
 
@@ -489,6 +531,13 @@ def cmd_init(args):
     stageflow_dir = target / ".stageflow"
     if stageflow_dir.is_dir() and not getattr(args, 'force', False):
         print(f"StageFlow project already initialized at {target}")
+        (target / "artifacts" / "runs").mkdir(parents=True, exist_ok=True)
+        settings_path = target / ".claude" / "settings.json"
+        ok, message = _merge_claude_settings(settings_path)
+        if not ok:
+            print(message, file=sys.stderr)
+            return 1
+        print(message)
         return 0
 
     stageflow_dir.mkdir(parents=True, exist_ok=True)
@@ -968,6 +1017,20 @@ def _log_hook_violation(root, tool_name: str, stage: str, reason: str):
         f.write(_json.dumps(entry) + "\n")
 
 
+def _print_hook_decision(decision: str, reason: str) -> None:
+    """Print Claude Code hook output with legacy fields for compatibility."""
+    permission_decision = "allow" if decision == "allow" else "deny"
+    print(_json.dumps({
+        "decision": decision,
+        "reason": reason,
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": permission_decision,
+            "permissionDecisionReason": reason,
+        },
+    }))
+
+
 def cmd_hook(args):
     """Claude Code PreToolUse hook entrypoint. Discovers project root from cwd
     and enforces stage tool allowlist and file access policy.
@@ -978,7 +1041,7 @@ def cmd_hook(args):
     try:
         input_data = _json.loads(sys.stdin.read())
     except (_json.JSONDecodeError, IOError):
-        print(_json.dumps({"decision": "allow", "reason": "hook input parse error — allowing"}))
+        _print_hook_decision("allow", "hook input parse error - allowing")
         return 0
 
     tool_name = input_data.get("tool_name", "")
@@ -990,16 +1053,14 @@ def cmd_hook(args):
         stripped = _strip_cd_prefix(cmd)
         for prefix in ALWAYS_ALLOW_COMMANDS:
             if stripped.startswith(prefix):
-                print(_json.dumps({"decision": "allow",
-                                   "reason": f"Bash({cmd[:60]}) is always allowed"}))
+                _print_hook_decision("allow", f"Bash({cmd[:60]}) is always allowed")
                 return 0
 
     # Discover project root (before always-allow so we can apply access policy)
     from stageflow.core.discovery import discover_project
     root = discover_project()
     if root is None:
-        print(_json.dumps({"decision": "allow",
-                           "reason": "not a StageFlow project — allowing"}))
+        _print_hook_decision("allow", "not a StageFlow project - allowing")
         return 0
 
     # Load registry and state from discovered root
@@ -1008,26 +1069,22 @@ def cmd_hook(args):
         reg = StageRegistry(str(root.config_path))
         sm = StateMachine(reg, str(root.path), state_file=rel_state)
     except Exception:
-        print(_json.dumps({"decision": "allow",
-                           "reason": "config load error — allowing"}))
+        _print_hook_decision("allow", "config load error - allowing")
         return 0
 
     current_stage = sm.current_stage
     if current_stage is None:
-        print(_json.dumps({"decision": "allow",
-                           "reason": "no stage set (bootstrap mode)"}))
+        _print_hook_decision("allow", "no stage set (bootstrap mode)")
         return 0
 
     stage = reg.get_stage(current_stage)
     if stage is None:
-        print(_json.dumps({"decision": "allow",
-                           "reason": f"stage '{current_stage}' not found — allowing"}))
+        _print_hook_decision("allow", f"stage '{current_stage}' not found - allowing")
         return 0
 
     # ── Non-file tools: always allowed, no access policy needed ──
     if tool_name in _NON_FILE_ALWAYS_ALLOW:
-        print(_json.dumps({"decision": "allow",
-                           "reason": f"{tool_name} is always allowed"}))
+        _print_hook_decision("allow", f"{tool_name} is always allowed")
         return 0
 
     # ── Build access policy from stage extras ──
@@ -1037,8 +1094,7 @@ def cmd_hook(args):
     # ── Unrestricted stage with no access policy: allow everything ──
     allowed_tools = stage.tools
     if not allowed_tools and not policy.has_policy:
-        print(_json.dumps({"decision": "allow",
-                           "reason": f"stage '{current_stage}' has unrestricted tools"}))
+        _print_hook_decision("allow", f"stage '{current_stage}' has unrestricted tools")
         return 0
 
     # ── Tool allowlist check ──
@@ -1068,7 +1124,7 @@ def cmd_hook(args):
         if not tool_ok:
             reason = (f"Tool '{tool_name}' is NOT allowed in stage '{current_stage}'. "
                       f"Allowed tools: {allowed_tools}")
-            print(_json.dumps({"decision": "block", "reason": reason}))
+            _print_hook_decision("block", reason)
             _log_hook_violation(root, tool_name, current_stage, reason)
             return 1
     # else: empty allowed_tools with access policy → all tools allowed
@@ -1091,7 +1147,7 @@ def cmd_hook(args):
                     f"access.read: '{tool_name}' requires a file path or "
                     f"search root when stage '{current_stage}' has a read policy"
                 )
-                print(_json.dumps({"decision": "block", "reason": reason}))
+                _print_hook_decision("block", reason)
                 _log_hook_violation(root, tool_name, current_stage, reason)
                 return 1
             path = _resolve_hook_path(path)
@@ -1100,7 +1156,7 @@ def cmd_hook(args):
             else:
                 allowed, reason = policy.check_read(path, project_root_str, variables)
             if not allowed:
-                print(_json.dumps({"decision": "block", "reason": reason}))
+                _print_hook_decision("block", reason)
                 _log_hook_violation(root, tool_name, current_stage, reason)
                 return 1
 
@@ -1112,19 +1168,18 @@ def cmd_hook(args):
                     f"access.write: '{tool_name}' requires a file_path when "
                     f"stage '{current_stage}' has a write policy"
                 )
-                print(_json.dumps({"decision": "block", "reason": reason}))
+                _print_hook_decision("block", reason)
                 _log_hook_violation(root, tool_name, current_stage, reason)
                 return 1
             path = _resolve_hook_path(path)
             allowed, reason = policy.check_write(path, project_root_str, variables)
             if not allowed:
-                print(_json.dumps({"decision": "block", "reason": reason}))
+                _print_hook_decision("block", reason)
                 _log_hook_violation(root, tool_name, current_stage, reason)
                 return 1
 
     # All checks passed
-    print(_json.dumps({"decision": "allow",
-                       "reason": f"'{tool_name}' allowed in stage '{current_stage}'"}))
+    _print_hook_decision("allow", f"'{tool_name}' allowed in stage '{current_stage}'")
     return 0
 
 

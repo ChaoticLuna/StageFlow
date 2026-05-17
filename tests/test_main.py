@@ -601,6 +601,29 @@ class TestNewInitAndStart:
     """Tests for the new stageflow init (project bootstrap) and stageflow start."""
 
     @staticmethod
+    def _stageflow_hook_entry():
+        return {
+            "matcher": "*",
+            "hooks": [
+                {"type": "command", "command": "stageflow hook", "timeout": 10}
+            ],
+        }
+
+    @staticmethod
+    def _is_stageflow_hook_entry(entry):
+        return (
+            isinstance(entry, dict)
+            and entry.get("matcher") == "*"
+            and isinstance(entry.get("hooks"), list)
+            and any(
+                isinstance(h, dict)
+                and h.get("type") == "command"
+                and h.get("command") == "stageflow hook"
+                for h in entry["hooks"]
+            )
+        )
+
+    @staticmethod
     def _run(cwd, *args):
         import subprocess, sys
         return subprocess.run(
@@ -641,7 +664,7 @@ class TestNewInitAndStart:
         ]
         pre = data["hooks"]["PreToolUse"]
         assert {"matcher": "Bash(*)", "command": "echo existing", "timeout": 5} in pre
-        assert {"matcher": "", "command": "stageflow hook", "timeout": 10} in pre
+        assert self._stageflow_hook_entry() in pre
 
     def test_init_does_not_duplicate_stageflow_hook(self, tmp_path):
         import json
@@ -652,9 +675,28 @@ class TestNewInitAndStart:
         data = json.loads(settings_path.read_text(encoding="utf-8"))
         hooks = [
             h for h in data["hooks"]["PreToolUse"]
-            if h.get("command") == "stageflow hook"
+            if self._is_stageflow_hook_entry(h)
         ]
         assert len(hooks) == 1
+
+    def test_init_normalizes_existing_stageflow_hook(self, tmp_path):
+        import json
+        settings_path = tmp_path / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True)
+        settings_path.write_text(json.dumps({
+            "hooks": {
+                "PreToolUse": [
+                    {"matcher": "", "hooks": [{"type": "command", "command": "stageflow hook"}]},
+                    {"matcher": "", "command": "stageflow hook", "timeout": 10},
+                ]
+            }
+        }), encoding="utf-8")
+
+        r = self._run(tmp_path, "init")
+        assert r.returncode == 0, r.stderr
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+        pre = data["hooks"]["PreToolUse"]
+        assert pre == [self._stageflow_hook_entry()]
 
     def test_init_refuses_invalid_claude_settings(self, tmp_path):
         settings_path = tmp_path / ".claude" / "settings.json"
@@ -683,7 +725,7 @@ class TestNewInitAndStart:
         data = json.loads(settings_path.read_text(encoding="utf-8"))
         pre = data["hooks"]["PreToolUse"]
         assert {"matcher": "Bash(*)", "command": "echo existing"} in pre
-        assert {"matcher": "", "command": "stageflow hook", "timeout": 10} in pre
+        assert self._stageflow_hook_entry() in pre
 
     def test_init_idempotent(self, tmp_path):
         r1 = self._run(tmp_path, "init")
@@ -1087,13 +1129,16 @@ class TestHookCommand:
     # ── Block/allow based on stage ─────────────────────────────────────
 
     def test_blocks_edit_in_alpha_stage(self, tmp_path):
-        import subprocess, sys
+        import json, subprocess, sys
         subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
         self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
         subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Edit", {"file_path": "some/file.py"})
         assert r.returncode != 0, f"Edit should be blocked in alpha, got rc={r.returncode}"
         assert "block" in r.stdout
+        data = json.loads(r.stdout)
+        assert data["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+        assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_allows_grep_in_alpha_stage(self, tmp_path):
         import subprocess, sys
@@ -2607,6 +2652,7 @@ class TestAIWorkflowE2E:
         # Blocking returns exit code 1 — check stdout for the decision
         result = json.loads(r.stdout)
         assert result["decision"] == "block", f"Expected block, got {result}"
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_hook_allows_edit_in_implement_stage(self, tmp_path):
         """Hook should allow Edit in implement stage."""

@@ -17,6 +17,7 @@ demo/
 # Python build/test artifacts
 .coverage
 .pytest_cache/
+.pytest_tmp*/
 .mypy_cache/
 *.egg-info/
 

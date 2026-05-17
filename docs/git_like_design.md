@@ -180,9 +180,14 @@ Both project types use `<root>/artifacts/runs/<run_id>/...`. The `{{var.run_id}}
   "hooks": {
     "PreToolUse": [
       {
-        "command": "stageflow hook",
-        "matcher": "",
-        "timeout": 10
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "stageflow hook",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }
