@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "stageflow"
 version = "0.2.0"
 description = "Declarative extensible state machine for AI-driven workflows"
-readme = "CLAUDE.md"
+readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
@@ -50,6 +50,9 @@ stageflow = "stageflow.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["stageflow*"]
+
+[tool.setuptools.package-data]
+stageflow = ["config/*.yaml", "generator/templates/*.yaml"]
 
 [tool.mypy]
 python_version = "3.10"

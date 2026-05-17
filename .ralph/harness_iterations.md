@@ -1,9 +1,0 @@
-- [2026-05-10 19:56] Loop 1: 搜索发现 2026 harness engineering 范式验证了 StageFlow 架构（HASS pattern, DAG dependency graphs）。实施 max_iterations 每阶段硬上限（+6 tests），防止无限循环。618 tests pass。
-- [2026-05-10 20:03] Loop 2: MCP Server best practices 调研（FastMCP 成为标准，Streamable HTTP 替代 SSE）。发现并修复 bug：PUT/DELETE workflow 后 engine cache 未失效导致 stale config（+1 test）。619 tests pass。
-- [2026-05-10 20:08] Loop 3: FastMCP 部署模式调研（Streamable HTTP default, uvicorn, 环境感知部署）。增强 status API 返回 stage_info (tools/max_iterations), available_next, total_transitions。619 tests pass。
-- [2026-05-10 20:20] Loop 4: 修复 3 个 bug — (1) clear_cache() 全局重绑定导致 cache 测试导入引用过期，改用 .clear() (2) evaluate_all 缓存 key 在条件评估前后变化（any_of 内部 setdefault 污染条件 dict 导致 key 漂移），改为评估前计算一次 key 供存储重用 (3) test_concurrency 后向 transition 错误使用 transition_to 而非 force_transition_to。修复 8 个 pre-existing 测试失败。服务端过滤 _ 前缀内部条件避免 test-only 条件泄漏。671 tests pass。
-- [2026-05-10 20:42] Loop 5: Harness engineering 调研（7层架构、4象限矩阵、artifact contracts）。新增 shell_test stdout_matches op（正则匹配命令输出）实现 artifact contract 验证模式（+3 tests）。674 tests pass。
-- [2026-05-10 20:47] Loop 6: 新增 shell_test lt 和 eq 数值比较 ops（+4 tests）。修复 editor/server.py CONDITION_DEFS 中 shell_test ops 与实际代码不一致。修复 test_no_duplicate_history_entries 时间戳冲突导致的 flaky 测试。678 tests pass。
-- [2026-05-10 20:53] Loop 7: 审计所有 27 个 CONDITION_DEFS 与 conditions.py handler 一致性。修复 env_var (not_equals/not_exists→not_empty)、git_status (dirty/branch_equals→files_changed)、compare_files (移除 size_equal/checksum_equal)、json_field (补充 gt/lt/in/matches)、yaml_field (移除 not_equals)、command_exists (补充 exists/version ops)。678 tests pass。
-- [2026-05-10 20:58] Loop 8: 状态机条件评估最佳实践调研（最小五态模型、ARF 可靠性框架、幂等性保障、密封层级模式匹配）。发现可改进项：transition_reason 字段（结构化 trace）、idempotency key、hierarchical FSM 防状态爆炸、http_status body_contains。时间不足未实现。
-- [2026-05-10 21:00] 21:00 截止。task-025-LOOP 标记完成。8 iterations today, 678 tests passing, 0 failing.

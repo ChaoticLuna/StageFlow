@@ -90,6 +90,26 @@ class TestStageflowCLI:
         r = _stageflow("reset", "--help")
         assert r.returncode == 0, r.stderr
 
+    def test_register_help(self):
+        r = _stageflow("register", "--help")
+        assert r.returncode == 0, r.stderr
+        assert "--bin-dir" in r.stdout
+        assert "--machine" in r.stdout
+        assert "--no-path" in r.stdout
+
+    def test_register_no_path_writes_wrappers(self, tmp_path):
+        bin_dir = tmp_path / "bin"
+        r = _stageflow("register", "--bin-dir", str(bin_dir), "--no-path")
+        assert r.returncode == 0, r.stderr
+        assert "Registered StageFlow wrappers" in r.stdout
+        shell_wrapper = bin_dir / "stageflow"
+        assert shell_wrapper.exists()
+        assert "-m stageflow" in shell_wrapper.read_text(encoding="utf-8")
+        if sys.platform.startswith("win"):
+            cmd_wrapper = bin_dir / "stageflow.cmd"
+            assert cmd_wrapper.exists()
+            assert "-m stageflow" in cmd_wrapper.read_text(encoding="utf-8")
+
     def test_status_json_output(self):
         _stageflow("reset")
         _stageflow("start", "pick")
@@ -594,6 +614,75 @@ class TestNewInitAndStart:
         assert (tmp_path / ".claude" / "settings.json").is_file()
         assert (tmp_path / "artifacts" / "runs").is_dir()
         assert not (tmp_path / ".stageflow" / "current_stage.json").exists()
+
+    def test_init_merges_existing_claude_settings(self, tmp_path):
+        import json
+        settings_path = tmp_path / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True)
+        settings_path.write_text(json.dumps({
+            "permissionMode": "default",
+            "hooks": {
+                "PreToolUse": [
+                    {"matcher": "Bash(*)", "command": "echo existing", "timeout": 5}
+                ],
+                "PostToolUse": [
+                    {"matcher": "Write", "command": "echo post"}
+                ],
+            },
+        }), encoding="utf-8")
+
+        r = self._run(tmp_path, "init")
+        assert r.returncode == 0, r.stderr
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+        assert data["permissionMode"] == "default"
+        assert data["hooks"]["PostToolUse"] == [
+            {"matcher": "Write", "command": "echo post"}
+        ]
+        pre = data["hooks"]["PreToolUse"]
+        assert {"matcher": "Bash(*)", "command": "echo existing", "timeout": 5} in pre
+        assert {"matcher": "", "command": "stageflow hook", "timeout": 10} in pre
+
+    def test_init_does_not_duplicate_stageflow_hook(self, tmp_path):
+        import json
+        self._run(tmp_path, "init")
+        r = self._run(tmp_path, "init", "--force")
+        assert r.returncode == 0, r.stderr
+        settings_path = tmp_path / ".claude" / "settings.json"
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+        hooks = [
+            h for h in data["hooks"]["PreToolUse"]
+            if h.get("command") == "stageflow hook"
+        ]
+        assert len(hooks) == 1
+
+    def test_init_refuses_invalid_claude_settings(self, tmp_path):
+        settings_path = tmp_path / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True)
+        settings_path.write_text("{ invalid json", encoding="utf-8")
+
+        r = self._run(tmp_path, "init")
+        assert r.returncode == 1
+        assert "Refusing to overwrite invalid JSON" in r.stderr
+        assert settings_path.read_text(encoding="utf-8") == "{ invalid json"
+
+    def test_init_merges_claude_settings_with_utf8_bom(self, tmp_path):
+        import json
+        settings_path = tmp_path / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True)
+        settings_path.write_text(json.dumps({
+            "hooks": {
+                "PreToolUse": [
+                    {"matcher": "Bash(*)", "command": "echo existing"}
+                ]
+            }
+        }), encoding="utf-8-sig")
+
+        r = self._run(tmp_path, "init")
+        assert r.returncode == 0, r.stderr
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+        pre = data["hooks"]["PreToolUse"]
+        assert {"matcher": "Bash(*)", "command": "echo existing"} in pre
+        assert {"matcher": "", "command": "stageflow hook", "timeout": 10} in pre
 
     def test_init_idempotent(self, tmp_path):
         r1 = self._run(tmp_path, "init")

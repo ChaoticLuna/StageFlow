@@ -324,7 +324,7 @@ class TestLayer5_MultiRepoIsolation:
         assert b_data.get("run_status") is None
 
     def test_source_checkout_not_affected(self, tmp_path):
-        """Prove the auto_workflow source checkout is not modified."""
+        """Prove the StageFlow source checkout is not modified."""
         repo = tmp_path / "isolated_repo"
         repo.mkdir()
         cfg = repo / ".stageflow" / "config"

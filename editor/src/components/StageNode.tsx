@@ -1,11 +1,9 @@
 import { Handle, Position, type NodeProps } from "reactflow";
 import type { StageData } from "../types";
 
-const TERMINAL_STAGES = new Set(["done", "complete", "finished", "end"]);
-
 export default function StageNode({ data, selected }: NodeProps<StageData>) {
   const toolCount = data.tools.length;
-  const isTerminal = TERMINAL_STAGES.has(data.name);
+  const isTerminal = data.isTerminal === true;
   const unlimitedTools = data.tools.length === 0 && !isTerminal;
 
   return (

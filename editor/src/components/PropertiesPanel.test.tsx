@@ -38,14 +38,24 @@ describe("PropertiesPanel", () => {
       expect(screen.getByText("implement")).toBeDefined();
     });
 
-    it("shows (terminal) suffix for terminal stage names", () => {
+    it("shows (terminal) suffix when marked terminal by graph structure", () => {
+      render(
+        <PropertiesPanel
+          node={makeNode({ data: { name: "deliver", tools: [], description: "", on_enter: [], on_exit: [], isTerminal: true } })}
+          onNodeUpdate={vi.fn()}
+        />
+      );
+      expect(screen.getByText("deliver (terminal)")).toBeDefined();
+    });
+
+    it("does not treat terminal-looking names as terminal without graph structure", () => {
       render(
         <PropertiesPanel
           node={makeNode({ data: { name: "done", tools: [], description: "", on_enter: [], on_exit: [] } })}
           onNodeUpdate={vi.fn()}
         />
       );
-      expect(screen.getByText("done (terminal)")).toBeDefined();
+      expect(screen.queryByText("done (terminal)")).toBeNull();
     });
 
     it("does not show (terminal) suffix for non-terminal names", () => {

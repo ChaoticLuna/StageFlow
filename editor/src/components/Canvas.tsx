@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -19,8 +19,6 @@ import { exportToYaml, importFromYaml } from "../utils/yaml";
 import type { StageNode as StageNodeType, EdgeData, StageData } from "../types";
 
 const nodeTypes = { stageNode: StageNode };
-
-const TERMINAL_STAGES = new Set(["done", "complete", "finished", "end"]);
 
 export interface CanvasHandle {
   updateNodeData: (nodeId: string, data: StageData) => void;
@@ -89,6 +87,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedEdge, setSelectedEdge] = useState<Edge<EdgeData> | null>(null);
+  const [highlightedEdgeId, setHighlightedEdgeId] = useState<string | null>(null);
   const [mermaidOpen, setMermaidOpen] = useState(false);
   const [undoToast, setUndoToast] = useState(false);
   const reactFlow = useReactFlow();
@@ -146,6 +145,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       _nodeCounter = result.nodes.length;
       setNodes(result.nodes);
       setEdges(result.edges);
+      setHighlightedEdgeId(null);
+      setSelectedEdge(null);
       return true;
     },
     exportToYaml() {
@@ -157,18 +158,54 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     () =>
       edges.map((e) => ({
         ...e,
+        selected: e.id === highlightedEdgeId,
+        animated: e.id === highlightedEdgeId ? true : e.animated,
+        style: {
+          ...e.style,
+          ...(e.id === highlightedEdgeId
+            ? { stroke: "#4f8fe8", strokeWidth: 3 }
+            : {}),
+        },
         label: formatConditionSummary(e.data?.conditions ?? []),
-        labelStyle: { fill: "var(--text-secondary, #555)", fontSize: 10, fontWeight: 500 },
+        labelStyle: {
+          fill: e.id === highlightedEdgeId ? "#4f8fe8" : "var(--text-secondary, #555)",
+          fontSize: 10,
+          fontWeight: e.id === highlightedEdgeId ? 700 : 500,
+        },
         labelBgStyle: { fill: "var(--bg-toolbar, #fff)", fillOpacity: 0.9 },
         labelBgPadding: [4, 3] as [number, number],
         labelBgBorderRadius: 3,
       })),
-    [edges]
+    [edges, highlightedEdgeId]
   );
+
+  useEffect(() => {
+    if (highlightedEdgeId && !edges.some((e) => e.id === highlightedEdgeId)) {
+      setHighlightedEdgeId(null);
+      setSelectedEdge(null);
+    }
+  }, [edges, highlightedEdgeId]);
 
   const stageNames = useMemo(
     () => nodes.map((n) => n.data?.name ?? n.id),
     [nodes]
+  );
+
+  const terminalNodeIds = useMemo(() => {
+    const sources = new Set(edges.map((e) => e.source));
+    return new Set(nodes.filter((n) => !sources.has(n.id)).map((n) => n.id));
+  }, [nodes, edges]);
+
+  const displayNodes = useMemo(
+    () =>
+      nodes.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          isTerminal: terminalNodeIds.has(n.id),
+        },
+      })),
+    [nodes, terminalNodeIds]
   );
 
   const handleEdgeUpdate = useCallback(
@@ -178,6 +215,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         eds.map((e) => (e.id === edgeId ? { ...e, data: { ...data } } : e))
       );
       setSelectedEdge(null);
+      setHighlightedEdgeId(null);
     },
     [setEdges, pushUndo]
   );
@@ -196,18 +234,31 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   );
 
   const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: Node) => onNodeSelect(node as StageNodeType),
+    (_: React.MouseEvent, node: Node) => {
+      setHighlightedEdgeId(null);
+      onNodeSelect(node as StageNodeType);
+    },
     [onNodeSelect]
   );
 
   const onEdgeClick = useCallback(
-    (_: React.MouseEvent, edge: Edge) => setSelectedEdge(edge as Edge<EdgeData>),
-    []
+    (event: React.MouseEvent, edge: Edge) => {
+      event.stopPropagation();
+      onNodeSelect(null);
+      if (highlightedEdgeId === edge.id) {
+        setSelectedEdge(edge as Edge<EdgeData>);
+        return;
+      }
+      setHighlightedEdgeId(edge.id);
+      setSelectedEdge(null);
+    },
+    [highlightedEdgeId, onNodeSelect]
   );
 
   const onPaneClick = useCallback(() => {
     onNodeSelect(null);
     setSelectedEdge(null);
+    setHighlightedEdgeId(null);
   }, [onNodeSelect]);
 
   const addStage = useCallback(() => {
@@ -270,6 +321,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         _nodeCounter = result.nodes.length;
         onNodeSelect(null);
         setSelectedEdge(null);
+        setHighlightedEdgeId(null);
       };
       reader.readAsText(file);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -398,8 +450,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     navigator.clipboard.writeText(mermaidCode).catch(() => {});
   }, [mermaidCode]);
 
-  const activeNodes = nodes.filter((n) => !TERMINAL_STAGES.has(n.data?.name ?? ""));
-  const terminalNodes = nodes.filter((n) => TERMINAL_STAGES.has(n.data?.name ?? ""));
+  const activeNodes = nodes.filter((n) => !terminalNodeIds.has(n.id));
+  const terminalNodes = nodes.filter((n) => terminalNodeIds.has(n.id));
 
   return (
     <div className="canvas-wrapper" onKeyDown={onKeyDown} tabIndex={0}>
@@ -435,7 +487,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         </span>
       </div>
       <ReactFlow
-        nodes={nodes}
+        nodes={displayNodes}
         edges={labeledEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -451,8 +503,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         <Controls />
         <MiniMap
           nodeColor={(node) => {
-            const name = node.data?.name ?? "";
-            return TERMINAL_STAGES.has(name) ? "#607d8b" : "#1565c0";
+            return node.data?.isTerminal === true ? "#607d8b" : "#1565c0";
           }}
         />
       </ReactFlow>

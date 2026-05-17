@@ -7,7 +7,7 @@
 
 ## 1. Core Principle
 
-StageFlow must behave like Git: one global install, many local projects. After `pip install -e D:\Tool\auto_workflow`, the user can run `stageflow init` in any directory to bootstrap a project, then `stageflow status`, `stageflow next`, `stageflow reset`, etc. from anywhere inside that project tree. All state, config, and artifacts belong to the discovered project root — never to the package source checkout.
+StageFlow must behave like Git: one global install, many local projects. After `pip install -e D:\Tool\stageflow`, the user can run `stageflow init` in any directory to bootstrap a project, then `stageflow status`, `stageflow next`, `stageflow reset`, etc. from anywhere inside that project tree. All state, config, and artifacts belong to the discovered project root — never to the package source checkout.
 
 ---
 
@@ -259,9 +259,9 @@ If both `.stageflow/` AND `stageflow/config/stages.yaml` exist, the new-style `.
 ### 9.1 Package Source Isolation
 
 Tests must prove that running StageFlow commands from a temp directory does not mutate:
-- `D:\Tool\auto_workflow\.claude\current_stage.json`
-- `D:\Tool\auto_workflow\.stageflow\` (if it exists)
-- `D:\Tool\auto_workflow\stageflow\config\stages.yaml`
+- `D:\Tool\stageflow\.claude\current_stage.json`
+- `D:\Tool\stageflow\.stageflow\` (if it exists)
+- `D:\Tool\stageflow\stageflow\config\stages.yaml`
 
 ### 9.2 Test Strategy
 

@@ -226,10 +226,16 @@ class TestGenerate:
 
 
 class TestTemplates:
-    def test_all_four_registered(self):
+    def test_all_templates_registered(self):
         templates = list_templates()
         names = {t.name for t in templates}
-        assert names == {"GENERIC", "CI_CD", "CODE_REVIEW", "DATA_PIPELINE"}
+        assert names == {
+            "GENERIC",
+            "AGENTIC_CODING",
+            "CI_CD",
+            "CODE_REVIEW",
+            "DATA_PIPELINE",
+        }
 
     def test_get_template_ci_cd(self):
         t = get_template("CI_CD")
@@ -248,6 +254,12 @@ class TestTemplates:
     def test_get_template_generic(self):
         t = get_template("GENERIC")
         assert isinstance(t, PromptTemplate)
+
+    def test_get_template_agentic_coding(self):
+        t = get_template("AGENTIC_CODING")
+        assert "coding" in t.label.lower()
+        assert "issue_context.md" in t.example_yaml
+        assert ".stageflow/**" in t.example_yaml
 
     def test_get_template_case_insensitive(self):
         t = get_template("ci_cd")
@@ -290,6 +302,12 @@ class TestTemplates:
         gen = WorkflowGenerator()
         valid, _ = gen.validate(t.example_yaml)
         assert valid is True
+
+    def test_agentic_coding_example_is_valid_yaml(self):
+        t = get_template("AGENTIC_CODING")
+        gen = WorkflowGenerator()
+        valid, errors = gen.validate(t.example_yaml)
+        assert valid is True, errors
 
 
 class TestAnthropicAdapter:

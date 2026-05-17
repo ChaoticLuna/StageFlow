@@ -6,8 +6,6 @@ interface PropertiesPanelProps {
   onNodeUpdate: (nodeId: string, data: StageData) => void;
 }
 
-const TERMINAL_STAGES = new Set(["done", "complete", "finished", "end"]);
-
 export default function PropertiesPanel({ node, onNodeUpdate }: PropertiesPanelProps) {
   if (!node) {
     return (
@@ -27,7 +25,7 @@ export default function PropertiesPanel({ node, onNodeUpdate }: PropertiesPanelP
 
 function NodeEditor({ node, onNodeUpdate }: PropertiesPanelProps & { node: StageNode }) {
   const data = node.data;
-  const isTerminal = TERMINAL_STAGES.has(data.name);
+  const isTerminal = data.isTerminal === true;
 
   const update = useCallback(
     (patch: Partial<StageData>) => {

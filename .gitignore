@@ -1,32 +1,18 @@
-# Ralph generated files (inside .ralph/ subfolder)
-.ralph/.call_count
-.ralph/.last_reset
-.ralph/.exit_signals
-.ralph/status.json
-.ralph/.ralph_session
-.ralph/.ralph_session_history
-.ralph/.claude_session_id
-.ralph/.response_analysis
-.ralph/.circuit_breaker_state
-.ralph/.circuit_breaker_history
-.ralph/.last_output_length
-.ralph/.loop_start_sha
-.ralph/.token_count
-.ralph/progress.json
+# Local agent/runtime configuration
+.ralph/
+.ralphrc
+.claude/
+.stageflow/
+CLAUDE.md
+HANDOFF.md
+REQUIREMENTS.md
+TASK_PLAN.md
 
-# Ralph logs and generated docs
-.ralph/logs/*
-!.ralph/logs/.gitkeep
-.ralph/docs/generated/*
-!.ralph/docs/generated/.gitkeep
+# StageFlow run artifacts
+artifacts/
 
-# Claude/StageFlow runtime state
-.claude/audit.jsonl
-.claude/current_stage.json
-.claude/guard_violations.jsonl
-.claude/benchmark_report.md
-.claude/settings.local.json
-.claude/settings.local.bak.json
+# Local scratch/demo projects
+demo/
 
 # Python build/test artifacts
 .coverage
@@ -44,6 +30,7 @@ Thumbs.db
 # Temporary files
 *.tmp
 .temp/
+.tmp/
 
 # Node modules (if using Node.js projects)
 node_modules/
@@ -61,8 +48,15 @@ target/
 *.swp
 *.swo
 
-# StageFlow run artifacts (generated at runtime)
-artifacts/runs/
-
 # Ralph backup directories (created by migration)
 .ralph_backup_*
+
+# Python packaging outputs
+build/
+dist/
+
+# Local container/extension build outputs
+Dockerfile
+.dockerignore
+.github/
+vscode-extension/out/

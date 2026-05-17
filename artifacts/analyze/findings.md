@@ -1,2 +1,0 @@
-## Root Cause
-Test artifact.

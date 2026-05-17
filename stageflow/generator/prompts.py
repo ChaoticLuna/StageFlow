@@ -12,6 +12,7 @@ Usage:
 
 from __future__ import annotations
 
+from importlib import resources
 from typing import Dict, List
 
 TEMPLATES: Dict[str, "PromptTemplate"] = {}
@@ -80,6 +81,16 @@ def list_templates() -> List[PromptTemplate]:
     return list(TEMPLATES.values())
 
 
+def _load_example_yaml(filename: str) -> str:
+    """Load a packaged YAML example for prompt templates."""
+    return (
+        resources.files("stageflow.generator")
+        .joinpath("templates", filename)
+        .read_text(encoding="utf-8")
+        .strip()
+    )
+
+
 # ── Template Definitions ────────────────────────────────────────────────
 
 register_template(
@@ -126,6 +137,32 @@ transitions:
     conditions:
       - git_status: {op: dirty}""",
     example_desc="Example — a simple 4-stage issue resolution workflow:",
+)
+
+register_template(
+    name="AGENTIC_CODING",
+    label="Agentic Coding Workflow",
+    role=(
+        "You are a StageFlow workflow designer for guarded AI coding agents. "
+        "Design workflows that separate task selection, root-cause analysis, "
+        "planning, implementation, and verification."
+    ),
+    guide="""## Agentic Coding Guidance
+- Model the default discipline as pick -> analyze -> plan -> implement -> verify -> terminal.
+- The pick stage should produce `artifacts/runs/{{var.run_id}}/pick/issue_context.md`.
+- The analyze stage should produce `artifacts/runs/{{var.run_id}}/analyze/findings.md` with Root Cause, Impact, and Affected Files sections.
+- The plan stage should produce `artifacts/runs/{{var.run_id}}/plan/task_plan.md` with checklist items.
+- Use run-scoped artifacts with `{{var.run_id}}`; never gate on stale global artifact paths.
+- Keep ordinary project reads open. Deny only especially sensitive paths such as `.env`, `secrets/**`, private keys, and tokens.
+- Any stage with Write/Edit/MultiEdit must define `access.write`.
+- Deny agent writes to `.stageflow/**`, `.claude/**`, `.env`, `secrets/**`, private keys, and token files.
+- Use `file_exists`, `file_contains`, `file_not_contains`, and `shell_test` to prove stage outputs.
+- Terminal status is structural: the final stage has no outgoing transitions. Do not rely on the name `done`.""",
+    example_yaml=_load_example_yaml("agentic_coding.yaml"),
+    example_desc=(
+        "Example - a guarded AI coding workflow with pick/analyze artifacts, "
+        "checklist completion, test evidence, and protected runtime files:"
+    ),
 )
 
 register_template(

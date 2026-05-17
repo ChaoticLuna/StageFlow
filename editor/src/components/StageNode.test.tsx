@@ -57,9 +57,15 @@ describe("StageNode", () => {
     expect(screen.getByText("all tools")).toBeDefined();
   });
 
-  it("shows terminal badge for terminal stage names", () => {
-    renderStageNode({ name: "done", tools: [] });
+  it("shows terminal badge when marked terminal by graph structure", () => {
+    renderStageNode({ name: "deliver", tools: [], isTerminal: true });
     expect(screen.getByText("terminal")).toBeDefined();
+  });
+
+  it("does not treat terminal-looking names as terminal without graph structure", () => {
+    renderStageNode({ name: "done", tools: [] });
+    expect(screen.queryByText("terminal")).toBeNull();
+    expect(screen.getByText("all tools")).toBeDefined();
   });
 
   it("shows hook badges when hooks are present", () => {

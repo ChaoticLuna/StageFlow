@@ -1,0 +1,4 @@
+interface:
+  display_name: "StageFlow Workflow Design"
+  short_description: "Design guarded StageFlow YAML workflows"
+  default_prompt: "Use $stageflow-workflow-design to generate a StageFlow stages.yaml with safe read/write policies."

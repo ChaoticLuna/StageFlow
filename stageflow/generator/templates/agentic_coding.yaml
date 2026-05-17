@@ -1,0 +1,219 @@
+# StageFlow template: guarded AI coding workflow.
+# Designed around the pick -> analyze -> plan discipline used by HybridWorkflow.
+#
+# Notes:
+# - Read is open by default except especially sensitive files.
+# - Write-capable stages use access.write rules.
+# - Runtime/config files are denied during normal agent work.
+# - Terminal status is structural: the final "closed" stage has no outgoing transitions.
+
+stages:
+  - name: pick
+    tools:
+      - WebSearch
+      - WebFetch
+      - Write
+      - TaskCreate
+      - TaskUpdate
+      - AskUserQuestion
+    access:
+      read:
+        deny:
+          - .env
+          - secrets/**
+          - "**/*.pem"
+          - "**/*token*"
+      write:
+        allow:
+          - artifacts/runs/{{var.run_id}}/pick/**
+        deny:
+          - .stageflow/**
+          - .claude/**
+          - .env
+          - secrets/**
+    meta:
+      description: "Select or confirm the task, gather context, and write issue_context.md"
+
+  - name: analyze
+    tools:
+      - WebSearch
+      - WebFetch
+      - Bash(git *)
+      - Bash(python *)
+      - Write
+      - TaskCreate
+      - TaskUpdate
+      - AskUserQuestion
+    access:
+      read:
+        deny:
+          - .env
+          - secrets/**
+          - "**/*.pem"
+          - "**/*token*"
+      write:
+        allow:
+          - artifacts/runs/{{var.run_id}}/analyze/**
+        deny:
+          - .stageflow/**
+          - .claude/**
+          - .env
+          - secrets/**
+    meta:
+      description: "Analyze root cause, impact scope, and affected files; write findings.md"
+
+  - name: plan
+    tools:
+      - Write
+      - Edit
+      - Bash(git *)
+      - Bash(python *)
+      - TaskCreate
+      - TaskUpdate
+      - AskUserQuestion
+    access:
+      read:
+        deny:
+          - .env
+          - secrets/**
+          - "**/*.pem"
+          - "**/*token*"
+      write:
+        allow:
+          - artifacts/runs/{{var.run_id}}/plan/**
+        deny:
+          - .stageflow/**
+          - .claude/**
+          - .env
+          - secrets/**
+    meta:
+      description: "Write task_plan.md with checklist, implementation notes, and rollback strategy"
+
+  - name: implement
+    tools:
+      - Write
+      - Edit
+      - MultiEdit
+      - Bash(git *)
+      - Bash(python *)
+      - Bash(pytest *)
+      - Bash(npm *)
+      - Bash(cargo *)
+      - Bash(go *)
+      - TaskCreate
+      - TaskUpdate
+    access:
+      read:
+        deny:
+          - .env
+          - secrets/**
+          - "**/*.pem"
+          - "**/*token*"
+      write:
+        allow:
+          - "**"
+        deny:
+          - .stageflow/**
+          - .claude/**
+          - .env
+          - secrets/**
+          - "**/*.pem"
+          - "**/*token*"
+    meta:
+      description: "Apply the planned code changes and mark completed checklist items"
+
+  - name: verify
+    tools:
+      - WebFetch
+      - Bash(git *)
+      - Bash(python *)
+      - Bash(pytest *)
+      - Bash(npm test*)
+      - Bash(cargo test*)
+      - Bash(go test*)
+      - Write
+      - TaskCreate
+      - TaskUpdate
+    access:
+      read:
+        deny:
+          - .env
+          - secrets/**
+          - "**/*.pem"
+          - "**/*token*"
+      write:
+        allow:
+          - artifacts/runs/{{var.run_id}}/verify/**
+        deny:
+          - .stageflow/**
+          - .claude/**
+          - .env
+          - secrets/**
+    meta:
+      description: "Run tests, collect evidence, and write test_results.md"
+
+  - name: closed
+    tools:
+      - Read
+    access:
+      read:
+        deny:
+          - .env
+          - secrets/**
+          - "**/*.pem"
+          - "**/*token*"
+    meta:
+      description: "Terminal stage; run stageflow complete after reaching this stage"
+
+transitions:
+  - from: pick
+    to: analyze
+    description: "Task context has been captured"
+    conditions:
+      - file_exists: artifacts/runs/{{var.run_id}}/pick/issue_context.md
+      - file_contains:
+          path: artifacts/runs/{{var.run_id}}/pick/issue_context.md
+          pattern: "## (Task|Issue|Context)"
+    on_fail: pick
+
+  - from: analyze
+    to: plan
+    description: "Root cause analysis is complete"
+    conditions:
+      - file_exists: artifacts/runs/{{var.run_id}}/analyze/findings.md
+      - file_contains:
+          path: artifacts/runs/{{var.run_id}}/analyze/findings.md
+          pattern: "## (Root Cause|Analysis|Impact|Affected Files)"
+    on_fail: analyze
+
+  - from: plan
+    to: implement
+    description: "Task plan has actionable unchecked checklist items"
+    conditions:
+      - file_exists: artifacts/runs/{{var.run_id}}/plan/task_plan.md
+      - file_contains:
+          path: artifacts/runs/{{var.run_id}}/plan/task_plan.md
+          pattern: "- \\[ \\]"
+    on_fail: plan
+
+  - from: implement
+    to: verify
+    description: "Implementation changed the working tree"
+    conditions:
+      - shell_test:
+          command: "git diff --name-only HEAD"
+          op: stdout_not_empty
+    on_fail: implement
+
+  - from: verify
+    to: closed
+    description: "Tests passed and the checklist is complete"
+    conditions:
+      - file_exists: artifacts/runs/{{var.run_id}}/verify/test_results.md
+      - file_contains:
+          path: artifacts/runs/{{var.run_id}}/verify/test_results.md
+          pattern: "(PASS|PASSED|All tests passed|passed)"
+      - file_not_contains:
+          path: artifacts/runs/{{var.run_id}}/plan/task_plan.md
+          pattern: "- \\[ \\]"
+    on_fail: implement
