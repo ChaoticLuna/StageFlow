@@ -1092,6 +1092,12 @@ class TestHookCommand:
         )
 
     @staticmethod
+    def _permission_decision(result):
+        import json
+        data = json.loads(result.stdout)
+        return data["hookSpecificOutput"]["permissionDecision"]
+
+    @staticmethod
     def _make_stages_yaml(yaml_path, stages=None, transitions=None):
         import yaml
         config = {
@@ -1135,7 +1141,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Edit", {"file_path": "some/file.py"})
         assert r.returncode == 0, f"Edit should emit deny JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
         data = json.loads(r.stdout)
         assert data["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
         assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -1177,7 +1183,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "locked"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {"file_path": "secrets/key.txt"})
         assert r.returncode == 0, f"Read deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_grep_allowed_when_omitted_from_tools(self, tmp_path):
         """Grep is a default read tool — allowed even when omitted from stage.tools."""
@@ -1231,7 +1237,7 @@ class TestHookCommand:
         nested.mkdir(parents=True)
         r = self._hook(nested, "Edit", {"file_path": "some/file.py"})
         assert r.returncode == 0, f"Edit deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_hook_allows_from_nested_subdir(self, tmp_path):
         import subprocess, sys
@@ -1291,7 +1297,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Bash", {"command": "npm install"})
         assert r.returncode == 0, f"npm deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     # ── Always-allowed operational commands ────────────────────────────
 
@@ -1326,7 +1332,94 @@ class TestHookCommand:
 
         r = self._hook(tmp_path, "Bash", {"command": "stageflow-malicious next"})
         assert r.returncode == 0
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
+
+    def test_safe_readonly_shell_commands_allowed_without_bash_tool(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            stages=[{"name": "locked", "tools": ["Read"], "meta": {"description": "No Bash"}}],
+            transitions=[],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "locked"], capture_output=True, cwd=str(tmp_path))
+
+        for command in [
+            "ls",
+            "cat README.md",
+            "head -n 20 README.md",
+            "tail README.md",
+            "pwd",
+            "echo hello",
+            "which python",
+            "where stageflow",
+            "git status",
+            "git diff -- src/app.py",
+            "git log --oneline -5",
+            "git --no-pager diff",
+        ]:
+            r = self._hook(tmp_path, "Bash", {"command": command})
+            assert r.returncode == 0, r.stderr
+            assert self._permission_decision(r) == "allow", command
+
+    def test_safe_readonly_powershell_commands_allowed_without_powershell_tool(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            stages=[{"name": "locked", "tools": ["Read"], "meta": {"description": "No PowerShell"}}],
+            transitions=[],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "locked"], capture_output=True, cwd=str(tmp_path))
+
+        for command in ["Get-ChildItem", "Get-Content README.md", "Get-Command stageflow"]:
+            r = self._hook(tmp_path, "PowerShell", {"command": command})
+            assert r.returncode == 0, r.stderr
+            assert self._permission_decision(r) == "allow", command
+
+    def test_safe_readonly_shell_commands_reject_control_syntax(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            stages=[{"name": "locked", "tools": ["Read"], "meta": {"description": "No Bash"}}],
+            transitions=[],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "locked"], capture_output=True, cwd=str(tmp_path))
+
+        for command in [
+            "cat README.md > out.txt",
+            "echo secret > .env",
+            "ls && rm -rf .",
+            "git diff | cat",
+            "echo $(cat .env)",
+            "cat README.md; rm README.md",
+        ]:
+            r = self._hook(tmp_path, "Bash", {"command": command})
+            assert r.returncode == 0
+            assert self._permission_decision(r) == "deny", command
+
+    def test_unsafe_shell_commands_still_blocked_without_bash_tool(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(
+            tmp_path / ".stageflow" / "config" / "stages.yaml",
+            stages=[{"name": "locked", "tools": ["Read"], "meta": {"description": "No Bash"}}],
+            transitions=[],
+        )
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "locked"], capture_output=True, cwd=str(tmp_path))
+
+        for command in [
+            "mkdir out",
+            "rm -rf out",
+            "git add .",
+            "git commit -m x",
+            "pip install fastapi",
+            "python -c \"open('x.txt', 'w').write('x')\"",
+        ]:
+            r = self._hook(tmp_path, "Bash", {"command": command})
+            assert r.returncode == 0
+            assert self._permission_decision(r) == "deny", command
 
     # ── Unrestricted stage (empty tools) ───────────────────────────────
 
@@ -1380,7 +1473,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {"file_path": "secret.env"})
         assert r.returncode == 0, f"Read deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_access_read_denied_overrides_allow(self, tmp_path):
         import subprocess, sys
@@ -1392,7 +1485,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {"file_path": "secrets/db.yaml"})
         assert r.returncode == 0, r.stderr or "blocked"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_access_read_missing_path_fails_closed(self, tmp_path):
         import subprocess, sys
@@ -1404,7 +1497,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {})
         assert r.returncode == 0, f"Read deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_access_write_allowed_in_run_scope(self, tmp_path):
         import subprocess, sys
@@ -1428,7 +1521,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Write", {"file_path": "stageflow/core/engine.py"})
         assert r.returncode == 0, f"Write deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_access_write_missing_path_fails_closed(self, tmp_path):
         import subprocess, sys
@@ -1440,7 +1533,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Write", {})
         assert r.returncode == 0, f"Write deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_access_grep_without_path_in_restricted_stage(self, tmp_path):
         import subprocess, sys
@@ -1452,7 +1545,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Grep", {"pattern": "TODO"})
         assert r.returncode == 0, f"Grep deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_access_grep_allowed_in_allowed_dir(self, tmp_path):
         import subprocess, sys
@@ -1476,7 +1569,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Glob", {"pattern": "*.key", "path": "artifacts/secrets"})
         assert r.returncode == 0, f"Glob deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_access_path_escape_blocked(self, tmp_path):
         import subprocess, sys
@@ -1488,7 +1581,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {"file_path": "../../etc/passwd"})
         assert r.returncode == 0, f"Path escape deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_access_absolute_path_outside_blocked(self, tmp_path):
         import subprocess, sys
@@ -1500,7 +1593,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {"file_path": "C:/Windows/System32/config/SAM"})
         assert r.returncode == 0, f"Absolute path deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_access_from_nested_cwd(self, tmp_path):
         import subprocess, sys
@@ -1622,7 +1715,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Read", {"file_path": "secret.env"})
         assert r.returncode == 0, f"Read deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_read_allowed_by_access_read_allow_when_omitted(self, tmp_path):
         """Read omitted from tools, access.read.allow → allowed inside allow list."""
@@ -1650,7 +1743,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Grep", {"pattern": "KEY", "path": "secrets"})
         assert r.returncode == 0, f"Grep deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_grep_blocked_by_missing_search_root_when_omitted(self, tmp_path):
         """Grep omitted from tools, access.read policy, no path → fail closed."""
@@ -1664,7 +1757,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Grep", {"pattern": "TODO"})
         assert r.returncode == 0, f"Grep deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_grep_blocked_by_dir_not_in_allow_when_omitted(self, tmp_path):
         """Grep omitted from tools, access.read.allow restricts → dir outside blocked."""
@@ -1678,7 +1771,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Grep", {"pattern": "TODO", "path": "stageflow"})
         assert r.returncode == 0, f"Grep deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_glob_blocked_by_access_read_deny_when_omitted(self, tmp_path):
         """Glob omitted from tools, access.read.deny → blocked for denied path."""
@@ -1692,7 +1785,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Glob", {"pattern": "**/*.key", "path": "secrets"})
         assert r.returncode == 0, f"Glob deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_write_blocked_when_omitted_even_if_path_allowed(self, tmp_path):
         """Write omitted from tools → blocked even when access.write would allow."""
@@ -1706,7 +1799,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Write", {"file_path": "artifacts/output.txt"})
         assert r.returncode == 0, f"Write deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_edit_blocked_when_omitted_even_if_path_allowed(self, tmp_path):
         """Edit omitted from tools → blocked even when access.write would allow."""
@@ -1720,7 +1813,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Edit", {"file_path": "artifacts/output.txt"})
         assert r.returncode == 0, f"Edit deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_multiedit_blocked_when_omitted_even_if_path_allowed(self, tmp_path):
         """MultiEdit omitted from tools → blocked even when access.write would allow."""
@@ -1734,7 +1827,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "MultiEdit", {"file_path": "artifacts/output.txt", "edits": []})
         assert r.returncode == 0, f"MultiEdit deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_notebook_edit_blocked_when_omitted_even_if_path_allowed(self, tmp_path):
         """NotebookEdit omitted from tools → blocked even when access.write would allow."""
@@ -1748,7 +1841,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "NotebookEdit", {"notebook_path": "artifacts/notes.ipynb"})
         assert r.returncode == 0, f"NotebookEdit deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
     def test_write_in_tools_still_obeys_access_write(self, tmp_path):
         """Write in stage.tools + access.write blocks path outside allow."""
@@ -1762,7 +1855,7 @@ class TestHookCommand:
         subprocess.run([sys.executable, "-m", "stageflow", "start", "secured"], capture_output=True, cwd=str(tmp_path))
         r = self._hook(tmp_path, "Write", {"file_path": "stageflow/core/engine.py"})
         assert r.returncode == 0, f"Write deny should emit JSON with rc=0, got rc={r.returncode}"
-        assert "block" in r.stdout
+        assert self._permission_decision(r) == "deny"
 
 
 class TestLegacyCompatibility:
@@ -2663,7 +2756,8 @@ class TestAIWorkflowE2E:
         r = self._run_hook(tmp_path, hook_input)
         assert r.returncode == 0, r.stderr
         result = json.loads(r.stdout)
-        assert result["decision"] == "allow", f"Expected allow, got {result}"
+        assert result["hookSpecificOutput"]["permissionDecision"] == "allow", \
+            f"Expected allow, got {result}"
 
     def test_hook_blocks_disallowed_tool_in_investigate(self, tmp_path):
         """Hook should block Edit in investigate stage (only Read/Grep/Glob/WebSearch allowed)."""
@@ -2673,9 +2767,8 @@ class TestAIWorkflowE2E:
 
         hook_input = json.dumps({"tool_name": "Edit", "tool_input": {}})
         r = self._run_hook(tmp_path, hook_input)
-        # Blocking returns exit code 1 — check stdout for the decision
+        # Blocking emits deny JSON with exit code 0 so Claude Code parses stdout.
         result = json.loads(r.stdout)
-        assert result["decision"] == "block", f"Expected block, got {result}"
         assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_hook_allows_edit_in_implement_stage(self, tmp_path):
@@ -2688,7 +2781,8 @@ class TestAIWorkflowE2E:
         r = self._run_hook(tmp_path, hook_input)
         assert r.returncode == 0, r.stderr
         result = json.loads(r.stdout)
-        assert result["decision"] == "allow", f"Expected allow, got {result}"
+        assert result["hookSpecificOutput"]["permissionDecision"] == "allow", \
+            f"Expected allow, got {result}"
 
     def test_hook_from_nested_subdir_uses_discovered_root(self, tmp_path):
         """Hook run from nested subdir should enforce the discovered project's rules."""
@@ -2703,7 +2797,7 @@ class TestAIWorkflowE2E:
         hook_input = json.dumps({"tool_name": "Edit", "tool_input": {}})
         r = self._run_hook(nested, hook_input)
         result = json.loads(r.stdout)
-        assert result["decision"] == "block", \
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny", \
             f"Expected block from nested dir, got {result}"
 
         # Read should be allowed
@@ -2711,7 +2805,7 @@ class TestAIWorkflowE2E:
         r2 = self._run_hook(nested, hook_input2)
         assert r2.returncode == 0, r2.stderr
         result2 = json.loads(r2.stdout)
-        assert result2["decision"] == "allow", \
+        assert result2["hookSpecificOutput"]["permissionDecision"] == "allow", \
             f"Expected allow from nested dir, got {result2}"
 
     def test_hook_allows_everything_in_deliver_stage(self, tmp_path):
@@ -2725,7 +2819,7 @@ class TestAIWorkflowE2E:
             r = self._run_hook(tmp_path, hook_input)
             assert r.returncode == 0, r.stderr
             result = json.loads(r.stdout)
-            assert result["decision"] == "allow", \
+            assert result["hookSpecificOutput"]["permissionDecision"] == "allow", \
                 f"Expected allow for {tool} in deliver, got {result}"
 
     def test_hook_violation_logged(self, tmp_path):

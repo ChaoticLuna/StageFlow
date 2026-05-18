@@ -39,6 +39,11 @@ def _hook(cwd, tool_name, tool_input=None):
     )
 
 
+def _permission_decision(result):
+    data = json.loads(result.stdout)
+    return data["hookSpecificOutput"]["permissionDecision"]
+
+
 def _write_access_config(path, access_config, tools=None, transitions=None,
                          extra_top=None):
     """Write a minimal stages.yaml with one *secured* stage carrying an access policy."""
@@ -459,7 +464,7 @@ class TestLayer4HookFromRoot:
         )
         r = _hook(tmp_path, "Grep", {"pattern": "TODO"})
         assert r.returncode == 0, f"Grep deny should emit JSON with rc=0: {r.stdout}"
-        assert "block" in r.stdout
+        assert _permission_decision(r) == "deny"
 
 
 # =============================================================================
@@ -547,7 +552,7 @@ class TestLayer6WindowsAbsolutePaths:
         )
         r = _hook(tmp_path, "Read", {"file_path": "C:/Windows/System32/config/SAM"})
         assert r.returncode == 0, f"Absolute outside path deny should emit JSON with rc=0: {r.stdout}"
-        assert "block" in r.stdout
+        assert _permission_decision(r) == "deny"
 
     def test_policy_absolute_path_escape(self, temp_dir):
         from stageflow.core.access_policy import AccessPolicy

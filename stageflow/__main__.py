@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json as _json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -974,8 +975,40 @@ ALWAYS_ALLOW_COMMANDS = [
     "python scripts/stage_reset.py",
     "python scripts/stage_jump.py",
     "python scripts/stage_back.py",
-    "python -c",
 ]
+
+SAFE_READONLY_COMMANDS = {
+    "cat",
+    "dir",
+    "echo",
+    "get-childitem",
+    "get-command",
+    "get-content",
+    "head",
+    "ls",
+    "pwd",
+    "tail",
+    "where",
+    "where.exe",
+    "which",
+}
+
+SAFE_READONLY_GIT_SUBCOMMANDS = {"diff", "log", "status"}
+
+_SHELL_CONTROL_TOKENS = (
+    "&&",
+    "||",
+    ">>",
+    ">",
+    "<",
+    "|",
+    ";",
+    "&",
+    "`",
+    "$",
+    "\n",
+    "\r",
+)
 
 
 def _strip_cd_prefix(cmd: str) -> str:
@@ -991,6 +1024,53 @@ def _match_bash_pattern(pattern: str, cmd: str) -> bool:
     stripped = _strip_cd_prefix(cmd)
     regex = "^" + re.escape(pattern).replace(r"\*", ".*").replace(r"\?", ".")
     return bool(re.search(regex, stripped))
+
+
+def _split_shell_command(cmd: str) -> list[str]:
+    try:
+        return shlex.split(cmd, posix=False)
+    except ValueError:
+        return []
+
+
+def _shell_token_name(token: str) -> str:
+    return token.strip().strip("\"'").lower()
+
+
+def _has_shell_control_syntax(cmd: str) -> bool:
+    return any(token in cmd for token in _SHELL_CONTROL_TOKENS)
+
+
+def _is_safe_readonly_command(cmd: str) -> bool:
+    """Return True for simple shell commands that cannot write by themselves.
+
+    This is intentionally narrow.  Any shell control syntax is rejected so a
+    harmless-looking command cannot smuggle a write through redirection, pipes,
+    chaining, or command substitution.
+    """
+    stripped = _strip_cd_prefix(cmd).strip()
+    if not stripped or _has_shell_control_syntax(stripped):
+        return False
+
+    parts = _split_shell_command(stripped)
+    if not parts:
+        return False
+
+    command = _shell_token_name(parts[0])
+    if command in SAFE_READONLY_COMMANDS:
+        return True
+
+    if command == "git":
+        if len(parts) < 2:
+            return False
+        subcommand_index = 1
+        if _shell_token_name(parts[1]) == "--no-pager":
+            subcommand_index = 2
+        if len(parts) <= subcommand_index:
+            return False
+        return _shell_token_name(parts[subcommand_index]) in SAFE_READONLY_GIT_SUBCOMMANDS
+
+    return False
 
 
 def _extract_file_path(tool_name: str, tool_input: dict) -> str | None:
@@ -1020,15 +1100,15 @@ def _log_hook_violation(root, tool_name: str, stage: str, reason: str):
 
 
 def _print_hook_decision(decision: str, reason: str) -> None:
-    """Print Claude Code hook output with legacy fields for compatibility.
+    """Print Claude Code PreToolUse output.
 
     Hook callers must return exit code 0 after printing this JSON. Claude Code
     only parses stdout JSON for exit code 0; exit code 1 is non-blocking.
+    Recent Claude Code versions strictly validate this schema, so do not add
+    non-schema top-level fields.
     """
     permission_decision = "allow" if decision == "allow" else "deny"
     print(_json.dumps({
-        "decision": decision,
-        "reason": reason,
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": permission_decision,
@@ -1061,8 +1141,11 @@ def cmd_hook(args):
             if stripped.startswith(prefix):
                 _print_hook_decision("allow", f"Bash({cmd[:60]}) is always allowed")
                 return 0
+        if _is_safe_readonly_command(cmd):
+            _print_hook_decision("allow", f"{tool_name}({cmd[:60]}) is safe read-only")
+            return 0
 
-    # Discover project root (before always-allow so we can apply access policy)
+    # Discover project root after global operational/read-only shell bypasses.
     from stageflow.core.discovery import discover_project
     root = discover_project()
     if root is None:
