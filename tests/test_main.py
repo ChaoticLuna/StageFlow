@@ -1304,6 +1304,30 @@ class TestHookCommand:
         assert r.returncode == 0, r.stderr
         assert "allow" in r.stdout
 
+    def test_always_allows_registered_stageflow_command(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
+
+        r = self._hook(tmp_path, "Bash", {"command": "stageflow next"})
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+        r = self._hook(tmp_path, "PowerShell", {"command": "stageflow.cmd status"})
+        assert r.returncode == 0, r.stderr
+        assert "allow" in r.stdout
+
+    def test_stageflow_prefix_does_not_allow_other_commands(self, tmp_path):
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))
+        self._make_stages_yaml(tmp_path / ".stageflow" / "config" / "stages.yaml")
+        subprocess.run([sys.executable, "-m", "stageflow", "start", "alpha"], capture_output=True, cwd=str(tmp_path))
+
+        r = self._hook(tmp_path, "Bash", {"command": "stageflow-malicious next"})
+        assert r.returncode == 0
+        assert "block" in r.stdout
+
     # ── Unrestricted stage (empty tools) ───────────────────────────────
 
     def test_allows_anything_in_unrestricted_stage(self, tmp_path):

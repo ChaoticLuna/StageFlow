@@ -966,6 +966,8 @@ _READ_TOOLS = {"Read", "Grep", "Glob"}
 _WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 
 ALWAYS_ALLOW_COMMANDS = [
+    "stageflow ",
+    "stageflow.cmd ",
     "python -m stageflow",
     "python scripts/stage_next.py",
     "python scripts/stage_status.py",
