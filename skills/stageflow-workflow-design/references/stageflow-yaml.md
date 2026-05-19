@@ -93,9 +93,8 @@ tools:
   - Edit
   - MultiEdit
   - NotebookEdit
-  - Bash(git *)
-  - Bash(python *)
   - Bash(pytest *)
+  - Bash(python -m pytest *)
   - Bash(npm test*)
 ```
 
@@ -104,8 +103,11 @@ Guidelines:
 - Read-only stages usually need no write tools.
 - `Read`, `Grep`, and `Glob` are normally default-open. Unless the user explicitly says the AI must not inspect something, ordinary project files should be readable.
 - Stages with `Write`, `Edit`, `MultiEdit`, or `NotebookEdit` should also define `access.write`.
-- Prefer command-scoped Bash patterns like `Bash(python *)`, not broad `Bash(*)`.
-- Keep `tools: []` rare. In StageFlow semantics it can mean unrestricted tools, depending on the hook path. Prefer explicit tools.
+- `access.write` does not restrict `Bash` or `PowerShell`; shell commands can write files outside the file-tool policy. Do not add `Bash(*)`, `PowerShell(*)`, `Bash(git *)`, or `Bash(python *)` for convenience.
+- Prefer narrow command-scoped shell patterns for the exact operation needed, such as `Bash(pytest *)`, `Bash(python -m pytest *)`, `Bash(npm test*)`, or `Bash(gh pr view *)`.
+- StageFlow globally allows simple read-only shell commands: `ls`, `dir`, `cat`, `head`, `tail`, `pwd`, `echo` without shell control syntax, `which`, `where`, `Get-ChildItem`, `Get-Content`, `Get-Command`, `git status`, `git diff`, and `git log`. Do not add YAML permissions merely for these.
+- The global read-only bypass rejects shell control syntax such as `>`, `>>`, `<`, `|`, `;`, `&&`, `||`, `&`, backticks, `$`, and command substitution.
+- Avoid `tools: []` unless deliberately unrestricted. In the Claude hook path, an empty tool list can allow all tools; with an access policy it still skips the tool-name gate and only file-tool access checks remain. Prefer explicit safe tools for terminal stages, such as `tools: [Read]`.
 
 ## Access Policy
 
@@ -139,6 +141,8 @@ access:
       - .claude/**
 ```
 
+Remember that `access.write` only applies to file tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`). It does not constrain writes performed through `Bash` or `PowerShell`.
+
 For planning/documentation stages, prefer artifact-only writes:
 
 ```yaml
@@ -164,12 +168,21 @@ access:
 
 ## Conditions
 
-Prefer conditions that prove the expected work happened:
+Prefer conditions that prove the expected work happened. Use `file_contains` when the next stage requires an unfinished checklist to exist:
 
 ```yaml
 conditions:
   - file_exists: artifacts/runs/{{var.run_id}}/plan/task_plan.md
   - file_contains:
+      path: artifacts/runs/{{var.run_id}}/plan/task_plan.md
+      pattern: "- \\[ \\]"
+```
+
+Use `file_not_contains` when the next stage requires the checklist to be complete:
+
+```yaml
+conditions:
+  - file_not_contains:
       path: artifacts/runs/{{var.run_id}}/plan/task_plan.md
       pattern: "- \\[ \\]"
 ```
@@ -203,7 +216,9 @@ Avoid relying only on `always: true` unless the transition is intentionally manu
 stages:
   - name: inspect
     tools:
-      - WebSearch
+      - Read
+      - Grep
+      - Glob
     access:
       read:
         deny:
@@ -214,7 +229,6 @@ stages:
 
   - name: fix
     tools:
-      - WebSearch
       - Write
       - Edit
     access:
@@ -236,9 +250,11 @@ stages:
 
   - name: verify
     tools:
-      - WebSearch
-      - Bash(python *)
+      - Read
+      - Grep
+      - Glob
       - Bash(pytest *)
+      - Bash(python -m pytest *)
     access:
       read:
         deny:
@@ -286,7 +302,6 @@ stages:
       - Glob
       - Write
       - Edit
-      - Bash(python *)
     access:
       write:
         allow:
@@ -304,8 +319,8 @@ stages:
       - Read
       - Grep
       - Glob
-      - Bash(python *)
       - Bash(pytest *)
+      - Bash(python -m pytest *)
 
 transitions:
   - from: plan
@@ -333,8 +348,10 @@ Never ask an LLM to manually write runtime files:
 ```text
 .stageflow/current_stage.json
 .claude/current_stage.json
-.stageflow/audit.jsonl
 .stageflow/guard_violations.jsonl
+.claude/guard_violations.jsonl
+.claude/audit.jsonl
+.stageflow/audit.jsonl
 ```
 
 Avoid direct LLM writes to config while a run is active:
@@ -349,5 +366,5 @@ Allowed config update moments:
 - Before `stageflow start`
 - After `stageflow complete`
 - After `stageflow reset`
-- Through `stageflow editor` save
-- Through explicit user-approved migration/generate flow
+- Through `stageflow editor` save when `current_stage` is `null`
+- Through explicit user-approved migration/generate flow when no run is active, or after the user explicitly accepts the risk

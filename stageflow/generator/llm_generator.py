@@ -39,16 +39,16 @@ CONDITION_REFERENCE = """## Built-in Condition Types (27)
 | file_not_contains | File does NOT contain pattern | path (string), pattern (regex) |
 | json_field | Check JSON field | path (string), field (string), op (exists/not_empty/equals/not_equals), value? |
 | yaml_field | Check YAML field | path (string), field (string), op (exists/not_empty/equals/not_equals), value? |
-| shell_test | Run shell command | command (string), op (exit_zero/exit_nonzero/output_contains/output_empty), expected? |
+| shell_test | Run shell command | command (string), op (exit_zero/stdout_contains/stdout_not_empty/stdout_matches/gt/lt/eq), value?, stream? |
 | python_expr | Evaluate Python expression | expr (string, must return bool) |
-| env_var | Check environment variable | name (string), op (equals/not_equals/exists/not_exists), value? |
+| env_var | Check environment variable | name (string), op (equals/exists/not_empty), value? |
 | all_of | All sub-conditions must pass | conditions (list of condition dicts) |
 | any_of | Any sub-condition can pass | conditions (list of condition dicts) |
 | not | Negate a sub-condition | condition (single condition dict) |
-| git_status | Check git working tree | op (clean/dirty/branch/branch_equals), value? |
-| http_status | Check HTTP endpoint | url (string), method (GET/POST/HEAD), expected_status (int), timeout (int) |
+| git_status | Check git working tree | op (clean/files_changed/branch/has_commits), value? |
+| http_status | Check HTTP endpoint | url (string), method (GET/POST/HEAD), op? (status/body_contains/header_equals), expected? (int), timeout? |
 | time_range | Current time within range | after (HH:MM), before (HH:MM) |
-| compare_files | Compare two files | path1 (string), path2 (string), op (identical/different/size_equal/checksum_equal) |
+| compare_files | Compare two files | path1 (string), path2 (string), op (identical/different) |
 | json_schema | Validate JSON against schema | path (string), schema_path (string) |
 | hash_file | Check file hash | path (string), expected (string), algo (sha256/md5/sha1) |
 | file_age | Check file modification time | path (string), max_age (seconds) |
@@ -76,9 +76,9 @@ Output ONLY the YAML, enclosed in ```yaml ... ``` fences. Do not include any oth
 ```yaml
 stages:
   - name: stage_id          # required: unique stage identifier (snake_case)
-    tools:                  # optional: Claude Code tool names (empty = all allowed)
+    tools:                  # optional: Claude Code tool names; avoid [] unless deliberately unrestricted
       - Read
-      - Bash(git *)
+      - Bash(pytest *)
     meta:
       description: "..."    # optional: human-readable description
     on_enter:               # optional: lifecycle hooks
@@ -103,10 +103,11 @@ transitions:
 1. Every stage MUST have a unique `name`.
 2. Every transition MUST reference existing stages for `from`, `to`, and `on_fail`.
 3. Only use condition types from the reference above.
-4. Terminal stages (like "done", "complete", "finished", "end") should have empty tools.
-5. Prefer specific tools over wildcards. Use `Bash(git *)` for git operations, not `Bash(*)`.
+4. Terminal status is structural: a terminal stage has no outgoing transitions. Use explicit safe tools such as `Read`; avoid `tools: []` unless deliberately unrestricted.
+5. Prefer specific tools over wildcards. Do not use `Bash(*)`, `PowerShell(*)`, `Bash(git *)`, or `Bash(python *)` for convenience because shell commands bypass `access.write`. Use narrow commands such as `Bash(pytest *)`, `Bash(python -m pytest *)`, `Bash(npm test*)`, or `Bash(gh pr view *)`.
 6. The first stage in the list is the starting point.
 7. Provide at least one transition path from start to a terminal stage.
+8. Any stage with Write/Edit/MultiEdit/NotebookEdit should define `access.write`.
 
 {condition_reference}
 """

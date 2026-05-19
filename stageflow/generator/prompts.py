@@ -100,10 +100,12 @@ register_template(
     guide="""## Guidance
 - Create 3-7 stages that model the described process.
 - Use descriptive snake_case stage names.
-- Provide a clear linear path from the first stage to a terminal stage ("done").
+- Provide a clear linear path from the first stage to a structural terminal stage (a stage with no outgoing transitions).
 - Include rollback paths (on_fail) for stages that produce artifacts.
-- Use appropriate Claude Code tools for each stage (Read, Write, Edit, Grep, Bash, etc.).
-- Use conditions like `file_exists`, `file_contains`, and `shell_test` to gate transitions.""",
+- Use appropriate Claude Code tools for each stage. Avoid `tools: []` unless deliberately unrestricted; prefer explicit safe tools for terminal stages.
+- Use `access.write` for stages that include Write/Edit/MultiEdit/NotebookEdit.
+- Avoid broad shell permissions. Bash/PowerShell can write outside `access.write`; prefer narrow commands such as `Bash(pytest *)`, `Bash(python -m pytest *)`, or `Bash(npm test*)`.
+- Use conditions like `file_exists`, `file_contains`, `file_not_contains`, `git_status`, and `shell_test` to gate transitions.""",
     example_yaml="""stages:
   - name: analyze
     tools: [Read, Grep, Glob, WebSearch]
@@ -111,14 +113,29 @@ register_template(
       description: "Analyze the issue and identify root cause"
   - name: plan
     tools: [Read, Write, Edit]
+    access:
+      write:
+        allow:
+          - artifacts/runs/{{var.run_id}}/plan/**
     meta:
       description: "Design the fix and write a task plan"
   - name: implement
-    tools: [Read, Edit, Write, Bash(git *)]
+    tools: [Read, Edit, Write]
+    access:
+      write:
+        allow:
+          - src/**
+          - tests/**
+          - artifacts/runs/{{var.run_id}}/implement/**
+        deny:
+          - .stageflow/**
+          - .claude/**
+          - .env
+          - secrets/**
     meta:
       description: "Implement the code changes"
   - name: done
-    tools: []
+    tools: [Read]
     meta:
       description: "Workflow complete"
 transitions:
@@ -135,7 +152,7 @@ transitions:
   - from: implement
     to: done
     conditions:
-      - git_status: {op: dirty}""",
+      - git_status: {op: files_changed}""",
     example_desc="Example — a simple 4-stage issue resolution workflow:",
 )
 
@@ -154,8 +171,10 @@ register_template(
 - The plan stage should produce `artifacts/runs/{{var.run_id}}/plan/task_plan.md` with checklist items.
 - Use run-scoped artifacts with `{{var.run_id}}`; never gate on stale global artifact paths.
 - Keep ordinary project reads open. Deny only especially sensitive paths such as `.env`, `secrets/**`, private keys, and tokens.
-- Any stage with Write/Edit/MultiEdit must define `access.write`.
+- Any stage with Write/Edit/MultiEdit/NotebookEdit must define `access.write`.
 - Deny agent writes to `.stageflow/**`, `.claude/**`, `.env`, `secrets/**`, private keys, and token files.
+- Bash and PowerShell are not constrained by `access.write`; avoid broad shell patterns and use narrow test/status commands only.
+- Prefer explicit safe tools for terminal stages; avoid `tools: []` unless deliberately unrestricted.
 - Use `file_exists`, `file_contains`, `file_not_contains`, and `shell_test` to prove stage outputs.
 - Terminal status is structural: the final stage has no outgoing transitions. Do not rely on the name `done`.""",
     example_yaml=_load_example_yaml("agentic_coding.yaml"),
@@ -177,15 +196,15 @@ register_template(
 - Use `http_status` to verify deployments (health check endpoints).
 - Use `time_range` to restrict deployments to business hours.
 - Include rollback paths (on_fail) for deploy stages.
-- Use `Bash(npm *)`, `Bash(docker *)`, `Bash(kubectl *)` for tool-specific commands.
+- Use narrow command patterns for shell tools, such as `Bash(npm test*)`, `Bash(npm run build*)`, `Bash(docker build *)`, `Bash(kubectl apply *)`, and `Bash(helm upgrade *)`.
 - Use `file_size` to verify artifact sizes are reasonable.""",
     example_yaml="""stages:
   - name: checkout
-    tools: [Bash(git *)]
+    tools: [Bash(git fetch *), Bash(git checkout *)]
     meta:
       description: "Check out the repository"
   - name: lint
-    tools: [Bash(npm *), Bash(eslint *), Read]
+    tools: [Bash(npm run lint*), Bash(eslint *), Read]
     meta:
       description: "Run linters and static analysis"
   - name: test
@@ -193,19 +212,23 @@ register_template(
     meta:
       description: "Run the test suite"
   - name: build
-    tools: [Bash(npm *), Bash(docker *), Write]
+    tools: [Bash(npm run build*), Bash(docker build *), Write]
+    access:
+      write:
+        allow: [dist/**, build/**, artifacts/build/**]
+        deny: [.stageflow/**, .claude/**, .env, secrets/**]
     meta:
       description: "Build artifacts and container images"
   - name: deploy
-    tools: [Bash(kubectl *), Bash(helm *), Bash(docker *)]
+    tools: [Bash(kubectl apply *), Bash(helm upgrade *), Bash(docker push *)]
     meta:
       description: "Deploy to staging/production"
   - name: verify
-    tools: [Bash(curl *), Read, WebFetch]
+    tools: [Read, WebFetch]
     meta:
       description: "Verify deployment health"
   - name: done
-    tools: []
+    tools: [Read]
     meta:
       description: "Pipeline complete"
 transitions:
@@ -236,7 +259,7 @@ transitions:
   - from: verify
     to: done
     conditions:
-      - http_status: {url: "https://api.example.com/health", expected_status: 200}""",
+      - http_status: {url: "https://api.example.com/health", expected: 200}""",
     example_desc="Example — a 7-stage CI/CD pipeline with deploy time gates:",
 )
 
@@ -257,30 +280,38 @@ register_template(
 - Use `command_exists` to verify required tools (gh, git).""",
     example_yaml="""stages:
   - name: submit
-    tools: [Bash(git *), Bash(gh *), Write, Edit]
+    tools: [Bash(git push *), Bash(gh pr create *), Write, Edit]
+    access:
+      write:
+        allow: [artifacts/review/**]
+        deny: [.stageflow/**, .claude/**, .env, secrets/**]
     meta:
       description: "Submit code for review (push branch, create PR)"
   - name: review
-    tools: [Read, Grep, Glob, Bash(git *), Bash(gh *)]
+    tools: [Read, Grep, Glob, Bash(gh pr view *), Bash(gh pr checks *)]
     meta:
       description: "Review the code changes"
   - name: revise
-    tools: [Edit, Write, Bash(git *)]
+    tools: [Edit, Write]
+    access:
+      write:
+        allow: [src/**, tests/**, artifacts/review/**]
+        deny: [.stageflow/**, .claude/**, .env, secrets/**]
     meta:
       description: "Address review feedback"
   - name: approve
-    tools: [Bash(gh *), Bash(git *)]
+    tools: [Bash(gh pr review *), Bash(gh pr merge *)]
     meta:
       description: "Approve and merge the PR"
   - name: done
-    tools: []
+    tools: [Read]
     meta:
       description: "Review complete, PR merged"
 transitions:
   - from: submit
     to: review
     conditions:
-      - shell_test: {command: "gh pr view --json state", op: output_contains, expected: "OPEN"}
+      - shell_test: {command: "gh pr view --json state", op: stdout_contains, value: "OPEN"}
       - all_of:
           conditions:
             - glob_count: {pattern: "**/*.py", max: 20}
@@ -289,7 +320,7 @@ transitions:
     to: approve
     conditions:
       - file_exists: artifacts/review/approval.md
-      - diff_contains: {pattern: 'eval(', op: not_contains}
+      - diff_contains: {pattern: 'eval\\(', op: not_contains}
     on_fail: revise
   - from: review
     to: revise
@@ -298,7 +329,7 @@ transitions:
   - from: revise
     to: review
     conditions:
-      - git_status: {op: dirty}
+      - git_status: {op: files_changed}
   - from: approve
     to: done
     conditions:
@@ -324,27 +355,39 @@ register_template(
 - Include validation → transform retry loops for data quality issues.""",
     example_yaml="""stages:
   - name: extract
-    tools: [Read, Bash(python *), Bash(curl *)]
+    tools: [Read, WebFetch, Bash(python scripts/extract.py *)]
     meta:
       description: "Extract data from source systems"
   - name: transform
-    tools: [Bash(python *), Bash(spark-submit *), Write]
+    tools: [Bash(python scripts/transform.py *), Bash(spark-submit jobs/transform.py *), Write]
+    access:
+      write:
+        allow: [data/processed/**, artifacts/pipeline/**]
+        deny: [.stageflow/**, .claude/**, .env, secrets/**]
     meta:
       description: "Transform and clean the data"
   - name: validate
-    tools: [Read, Bash(python *), Grep]
+    tools: [Read, Bash(python -m pytest tests/data*), Grep]
     meta:
       description: "Validate data quality and integrity"
   - name: load
-    tools: [Bash(python *), Bash(dbt *), Write]
+    tools: [Bash(python scripts/load.py *), Bash(dbt run *), Write]
+    access:
+      write:
+        allow: [artifacts/pipeline/**]
+        deny: [.stageflow/**, .claude/**, .env, secrets/**]
     meta:
       description: "Load data into the warehouse"
   - name: report
-    tools: [Write, Bash(python *)]
+    tools: [Write, Bash(python scripts/report.py *)]
+    access:
+      write:
+        allow: [artifacts/pipeline_report.md, artifacts/pipeline/**]
+        deny: [.stageflow/**, .claude/**, .env, secrets/**]
     meta:
       description: "Generate pipeline run report"
   - name: done
-    tools: []
+    tools: [Read]
     meta:
       description: "Pipeline complete"
 transitions:

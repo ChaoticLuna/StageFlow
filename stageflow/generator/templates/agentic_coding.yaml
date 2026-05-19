@@ -4,12 +4,16 @@
 # Notes:
 # - Read is open by default except especially sensitive files.
 # - Write-capable stages use access.write rules.
+# - Shell tools are narrow because Bash/PowerShell bypass access.write.
 # - Runtime/config files are denied during normal agent work.
 # - Terminal status is structural: the final "closed" stage has no outgoing transitions.
 
 stages:
   - name: pick
     tools:
+      - Read
+      - Grep
+      - Glob
       - WebSearch
       - WebFetch
       - Write
@@ -36,10 +40,11 @@ stages:
 
   - name: analyze
     tools:
+      - Read
+      - Grep
+      - Glob
       - WebSearch
       - WebFetch
-      - Bash(git *)
-      - Bash(python *)
       - Write
       - TaskCreate
       - TaskUpdate
@@ -64,10 +69,11 @@ stages:
 
   - name: plan
     tools:
+      - Read
+      - Grep
+      - Glob
       - Write
       - Edit
-      - Bash(git *)
-      - Bash(python *)
       - TaskCreate
       - TaskUpdate
       - AskUserQuestion
@@ -94,12 +100,11 @@ stages:
       - Write
       - Edit
       - MultiEdit
-      - Bash(git *)
-      - Bash(python *)
       - Bash(pytest *)
-      - Bash(npm *)
-      - Bash(cargo *)
-      - Bash(go *)
+      - Bash(python -m pytest *)
+      - Bash(npm test*)
+      - Bash(cargo test*)
+      - Bash(go test*)
       - TaskCreate
       - TaskUpdate
     access:
@@ -124,10 +129,12 @@ stages:
 
   - name: verify
     tools:
+      - Read
+      - Grep
+      - Glob
       - WebFetch
-      - Bash(git *)
-      - Bash(python *)
       - Bash(pytest *)
+      - Bash(python -m pytest *)
       - Bash(npm test*)
       - Bash(cargo test*)
       - Bash(go test*)
