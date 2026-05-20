@@ -1117,6 +1117,28 @@ class TestHookCommand:
 
     # ── Always-allowed tools ──────────────────────────────────────────
 
+    def test_interactive_hook_invocation_returns_without_reading(self, monkeypatch, capsys):
+        """Manual `stageflow hook` should not wait forever for stdin."""
+        import json
+        import stageflow.__main__ as cli
+
+        class InteractiveStdin:
+            def isatty(self):
+                return True
+
+            def read(self):
+                raise AssertionError("interactive hook should not read stdin")
+
+        monkeypatch.setattr(cli.sys, "stdin", InteractiveStdin())
+
+        result = cli.cmd_hook(None)
+
+        assert result == 0
+        data = json.loads(capsys.readouterr().out)
+        output = data["hookSpecificOutput"]
+        assert output["permissionDecision"] == "allow"
+        assert "interactive hook invocation" in output["permissionDecisionReason"]
+
     def test_always_allows_read(self, tmp_path):
         import subprocess, sys
         subprocess.run([sys.executable, "-m", "stageflow", "init"], capture_output=True, cwd=str(tmp_path))

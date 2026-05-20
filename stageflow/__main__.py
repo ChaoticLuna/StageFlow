@@ -1124,6 +1124,10 @@ def cmd_hook(args):
     """
     import json as _json
 
+    if sys.stdin.isatty():
+        _print_hook_decision("allow", "interactive hook invocation has no JSON input - allowing")
+        return 0
+
     try:
         input_data = _json.loads(sys.stdin.read())
     except (_json.JSONDecodeError, IOError):
@@ -1518,7 +1522,7 @@ Examples:
     p.add_argument("--prompt-only", action="store_true", help="Print the LLM prompt instead of generating")
     p.add_argument("--list-templates", action="store_true", help="List available templates and exit")
 
-    p = sub.add_parser("hook", help="Claude Code PreToolUse hook entrypoint")
+    p = sub.add_parser("hook", help="Internal Claude Code PreToolUse hook; expects JSON on stdin")
 
     p = sub.add_parser("migrate", help="Convert legacy project to new-style (.stageflow/)")
     p.add_argument("path", nargs="?", help="Target directory (default: discovered project root)")

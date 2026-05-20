@@ -15,6 +15,7 @@ artifacts/
 demo/
 
 # Python build/test artifacts
+.venv/
 .coverage
 .pytest_cache/
 .pytest_tmp*/

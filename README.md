@@ -1,75 +1,21 @@
 # StageFlow
 
-StageFlow is a declarative workflow/state-machine CLI for AI-assisted project work.
+StageFlow is a workflow/state-machine CLI for AI-assisted project work.
+The current version relies on Claude Code hooks for stage-based tool and file
+access enforcement.
 
-This README focuses on local source installation and global command registration.
+Install StageFlow from this repository once, then use the global `stageflow`
+command inside other project repositories that you want StageFlow to manage.
 
 ## Quick Install
 
-From the repository root:
+Prerequisite: install Python 3.10 or newer first. Python 3.13 is recommended.
+
+Run these commands from this StageFlow repository root, for example
+`D:\Tool\stageflow`:
 
 ```powershell
-python -c "import sys; print(sys.executable)"
-python -m pip install -e .
-python -m stageflow register
-```
-
-The first command shows which Python will own this installation. `register`
-then creates wrappers that keep using that same Python.
-
-Some agent runtimes, including Claude Code in some Windows setups, may not
-inherit the same user PATH as your normal terminal. If Claude Code cannot find
-`stageflow`, run the registration from an elevated Administrator PowerShell and
-write the wrapper directory to the system PATH:
-
-```powershell
-python -m stageflow register --machine
-```
-
-Restart your terminal, then verify:
-
-```powershell
-stageflow --help
-stageflow init
-stageflow editor
-```
-
-`pip install -e .` installs StageFlow into the Python environment that runs the
-command. The `-e` flag means "editable": Python imports the live source checkout
-instead of copying the package. Code changes in this repository are picked up
-without reinstalling, unless packaging metadata changes.
-
-## Which Python Is Used?
-
-The Python in this command decides everything:
-
-```powershell
-python -m pip install -e .
-```
-
-If `python` resolves to Anaconda, StageFlow is installed into Anaconda. If it
-resolves to a python.org install or a virtual environment, StageFlow is installed
-there instead.
-
-Check before installing:
-
-```powershell
-python -c "import sys; print(sys.executable)"
-```
-
-After installing:
-
-```powershell
-python -m pip show stageflow
-python -c "import stageflow, sys; print(sys.executable); print(stageflow.__file__)"
-```
-
-## Recommended Stable Setup
-
-For the fewest environment surprises, use a dedicated virtual environment based
-on a normal python.org Python install:
-
-```powershell
+py -0p
 py -3.13 -m venv .venv
 .\.venv\Scripts\activate
 python -m pip install -U pip
@@ -77,38 +23,33 @@ python -m pip install -e .
 python -m stageflow register
 ```
 
-Then restart the terminal and run:
+If Python 3.13 is not installed, replace `3.13` with any installed Python
+3.10+ version shown by `py -0p`, for example:
 
 ```powershell
+py -3.12 -m venv .venv
+```
+
+If the Windows Python launcher already defaults to a Python 3.10+ interpreter,
+this is also fine:
+
+```powershell
+py -m venv .venv
+```
+
+Avoid using Python 2. If `python --version` or `py -0p` only shows Python 2,
+install Python 3 first.
+
+Restart your terminal, then verify:
+
+```powershell
+where.exe stageflow
 stageflow --help
 ```
 
-## Anaconda And Special Environments
+## Command Registration
 
-Anaconda can work, but it may behave differently from a standard Python install.
-In particular, some tools that touch `tkinter`/Tcl/Tk may hit environment-specific
-issues, especially when multiple Tk instances are created in one process.
-
-If you see intermittent Tcl/Tk errors such as:
-
-```text
-Can't find a usable tk.tcl
-Can't find a usable init.tcl
-invalid command name tcl_findLibrary
-```
-
-prefer a clean python.org Python or venv, then reinstall and re-register:
-
-```powershell
-py -3.13 -m venv .venv
-.\.venv\Scripts\activate
-python -m pip install -e .
-python -m stageflow register
-```
-
-## Global Command Registration
-
-`stageflow register` creates lightweight wrapper commands, Ralph-style:
+`python -m stageflow register` creates lightweight wrapper commands such as:
 
 ```text
 ~/.local/bin/stageflow
@@ -118,65 +59,61 @@ python -m stageflow register
 Those wrappers call the exact Python used during registration:
 
 ```text
-<that-python> -m stageflow
+<venv-python> -m stageflow
 ```
 
-So if you register from a venv, `stageflow` will use that venv. If you register
-from Anaconda, `stageflow` will use Anaconda.
+After registering from `.venv`, `stageflow` keeps using that `.venv` even when
+you run it from other repositories.
 
-Options:
+Some agent runtimes, including Claude Code on some Windows setups, may not see
+the same user PATH as your normal terminal. In an elevated Administrator
+PowerShell, activate the same `.venv` and register the wrapper directory to the
+system PATH:
 
 ```powershell
-python -m stageflow register
-python -m stageflow register --build-editor
+cd D:\Tool\stageflow
+.\.venv\Scripts\activate
 python -m stageflow register --machine
-python -m stageflow register --bin-dir D:\Tool\bin
-python -m stageflow register --no-path
 ```
 
-- `register`: create wrappers and add the bin directory to the user PATH.
-- `--build-editor`: also run `npm install` and `npm run build` in `editor/`.
-  This is optional for normal source installs because the repository includes
-  `editor/dist`, but it is useful after changing frontend source files or if the
-  built editor files were deleted.
-- `--machine`: add the bin directory to the system PATH on Windows. This usually
-  requires an elevated administrator terminal.
-- `--bin-dir`: write wrappers to a specific command directory.
-- `--no-path`: create wrappers but do not modify PATH.
+## Using StageFlow In A Project
 
-Do not commit a generated `stageflow.exe` to the repository. It is created by
-the local Python installer for one machine/environment. The portable approach is
-to install the package, then run `python -m stageflow register` on each machine.
-
-## Basic Usage
-
-Create a StageFlow project in the current directory:
+Run these commands in the project repository you want StageFlow to manage, not
+inside this StageFlow source repository.
 
 ```powershell
+cd D:\Path\To\YourProject
 stageflow init
-```
-
-Start a run:
-
-```powershell
 stageflow start
-```
-
-Inspect and advance:
-
-```powershell
 stageflow status
 stageflow next
-```
-
-Open the visual editor:
-
-```powershell
 stageflow editor
 ```
 
-If the editor reports that the frontend is not built, run:
+`stageflow init` creates StageFlow files for that target project. Do not run it
+inside the StageFlow source checkout unless you intentionally want StageFlow to
+manage its own repository.
+
+## Registration Options
+
+Run these after activating the `.venv` created in this repository.
 
 ```powershell
+python -m stageflow register
+python -m stageflow register --machine
+python -m stageflow register --bin-dir D:\Tool\bin
+python -m stageflow register --no-path
 python -m stageflow register --build-editor
 ```
+
+- `register`: create wrappers and add the wrapper directory to the user PATH.
+- `--machine`: add the wrapper directory to the system PATH on Windows.
+- `--bin-dir`: write wrappers to a specific command directory.
+- `--no-path`: create wrappers but do not modify PATH.
+- `--build-editor`: also run `npm install` and `npm run build` in `editor/`.
+  This is only needed after changing frontend source files or if `editor/dist`
+  was deleted.
+
+Do not commit generated `stageflow.exe` files. They are local to one
+machine/environment. Install the package and run `python -m stageflow register`
+on each machine instead.
